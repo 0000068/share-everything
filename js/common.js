@@ -18,7 +18,7 @@ const MOBILE_PARTICLE_BREAKPOINT = 768;
 const MOBILE_PARTICLE_COUNT = 48;
 const DESKTOP_PARTICLE_COUNT = 350;
 const MOBILE_SCROLL_PARTICLE_PAUSE_MS = 180;
-const mobileReducedMotionQuery =
+const reducedMotionQuery =
   typeof window.matchMedia === "function"
     ? window.matchMedia("(prefers-reduced-motion: reduce)")
     : null;
@@ -39,8 +39,12 @@ function getParticleCountForViewport() {
   return isMobileParticleViewport() ? MOBILE_PARTICLE_COUNT : DESKTOP_PARTICLE_COUNT;
 }
 
+function shouldReduceMotion() {
+  return Boolean(reducedMotionQuery?.matches);
+}
+
 function shouldReduceMobileParticles() {
-  return isMobileParticleViewport() && Boolean(mobileReducedMotionQuery?.matches);
+  return isMobileParticleViewport() && shouldReduceMotion();
 }
 
 function resize() {
@@ -223,7 +227,7 @@ function bootstrapParticles(force = false) {
   }
 
   drawParticlesFrame(false);
-  if (shouldReduceMobileParticles() || particlesPausedForScroll) {
+  if (shouldReduceMotion() || particlesPausedForScroll) {
     return true;
   }
 
@@ -316,9 +320,7 @@ window.addEventListener("touchcancel", () => (targetSpeedMultiplier = 1), {
   passive: true,
 });
 
-function handleMobileReducedMotionChange() {
-  if (!isMobileParticleViewport()) return;
-
+function handleReducedMotionChange() {
   stopParticles();
   clearParticleBootstrapTimer();
   if (!document.hidden) {
@@ -326,11 +328,11 @@ function handleMobileReducedMotionChange() {
   }
 }
 
-if (mobileReducedMotionQuery) {
-  if (typeof mobileReducedMotionQuery.addEventListener === "function") {
-    mobileReducedMotionQuery.addEventListener("change", handleMobileReducedMotionChange);
+if (reducedMotionQuery) {
+  if (typeof reducedMotionQuery.addEventListener === "function") {
+    reducedMotionQuery.addEventListener("change", handleReducedMotionChange);
   } else {
-    mobileReducedMotionQuery.addListener?.(handleMobileReducedMotionChange);
+    reducedMotionQuery.addListener?.(handleReducedMotionChange);
   }
 }
 

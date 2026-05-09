@@ -8,9 +8,19 @@ const {
   serializePublicError,
 } = require("../server/public-content");
 
-const IMAGE_PROXY_TIMEOUT_MS = 10_000;
-const IMAGE_PROXY_MAX_BYTES = 8 * 1024 * 1024;
-const IMAGE_PROXY_MAX_REDIRECTS = 4;
+function readPositiveEnvNumber(key, fallback) {
+  const value = Number(process.env[key]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function readNonNegativeEnvInteger(key, fallback) {
+  const value = Number(process.env[key]);
+  return Number.isFinite(value) && value >= 0 ? Math.trunc(value) : fallback;
+}
+
+const IMAGE_PROXY_TIMEOUT_MS = readPositiveEnvNumber("IMAGE_PROXY_TIMEOUT_MS", 10_000);
+const IMAGE_PROXY_MAX_BYTES = readPositiveEnvNumber("IMAGE_PROXY_MAX_BYTES", 8 * 1024 * 1024);
+const IMAGE_PROXY_MAX_REDIRECTS = readNonNegativeEnvInteger("IMAGE_PROXY_MAX_REDIRECTS", 4);
 const IMAGE_PROXY_CACHE_CONTROL = "public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400";
 const BLOCKED_IMAGE_CONTENT_TYPES = new Set(["image/svg+xml"]);
 const IMAGE_PROXY_REQUEST_HEADERS = Object.freeze({

@@ -845,67 +845,59 @@
     return `<nav class="post-table-of-contents" aria-label="Table of contents"><p class="post-block-label">Table of contents</p><ol class="post-table-of-contents-list">${itemsHtml}</ol></nav>${childrenHtml}`;
   }
 
-  function renderBlock(block, options = {}) {
-    const childrenHtml = renderBlocks(block.children || [], options);
-    const baseOrigin = options.baseOrigin;
-
-    switch (block.type) {
-      case "container":
-      case "synced_block":
-        return childrenHtml;
-      case "heading_1":
-        return renderHeadingBlock("h2", block, childrenHtml);
-      case "heading_2":
-        return renderHeadingBlock("h3", block, childrenHtml);
-      case "heading_3":
-        return renderHeadingBlock("h4", block, childrenHtml);
-      case "paragraph":
-        return block.text ? `<p>${block.text}</p>${childrenHtml}` : childrenHtml;
-      case "code":
-        return `<pre><code class="language-${escapeHtml(block.language)}">${escapeHtml(block.text)}</code></pre>${childrenHtml}`;
-      case "quote":
-        return `<blockquote>${block.text || ""}${childrenHtml}</blockquote>`;
-      case "divider":
-        return `<hr>${childrenHtml}`;
-      case "image": {
+  function createBlockRenderers() {
+    const renderers = {
+      container: (block, { childrenHtml }) => childrenHtml,
+      synced_block: (block, { childrenHtml }) => childrenHtml,
+      heading_1: (block, { childrenHtml }) => renderHeadingBlock("h2", block, childrenHtml),
+      heading_2: (block, { childrenHtml }) => renderHeadingBlock("h3", block, childrenHtml),
+      heading_3: (block, { childrenHtml }) => renderHeadingBlock("h4", block, childrenHtml),
+      paragraph: (block, { childrenHtml }) => (block.text ? `<p>${block.text}</p>${childrenHtml}` : childrenHtml),
+      code: (block, { childrenHtml }) => `<pre><code class="language-${escapeHtml(block.language)}">${escapeHtml(block.text)}</code></pre>${childrenHtml}`,
+      quote: (block, { childrenHtml }) => `<blockquote>${block.text || ""}${childrenHtml}</blockquote>`,
+      divider: (block, { childrenHtml }) => `<hr>${childrenHtml}`,
+      image: (block, { baseOrigin, childrenHtml, options }) => {
         const safeImageUrl = resolveProxiedDisplayImageUrl(block.url, baseOrigin);
         if (!safeImageUrl) return childrenHtml;
         const captionHtml = renderFigureCaption(block.captionHtml, block.caption, "post-figure-caption");
         return `<figure class="post-figure post-figure-image"><img class="post-figure-media" src="${escapeHtml(safeImageUrl)}" alt="${escapeHtml(block.caption)}" ${getPostImageLoadingAttributes(options)}>${captionHtml}</figure>${childrenHtml}`;
-      }
-      case "callout": {
+      },
+      callout: (block, { childrenHtml }) => {
         const iconHtml = block.icon
           ? `<div class="post-callout-icon" aria-hidden="true">${escapeHtml(block.icon)}</div>`
           : "";
         return `<aside class="post-callout" role="note">${iconHtml}<div class="post-callout-body">${block.text || ""}${childrenHtml}</div></aside>`;
-      }
-      case "toggle":
-        return `<details class="post-toggle"><summary>${block.text || ""}</summary>${childrenHtml}</details>`;
-      case "to_do":
-        return `<div class="post-todo${block.checked ? " checked" : ""}"><span class="post-todo-box" aria-hidden="true">${block.checked ? "&#10003;" : ""}</span><div class="post-todo-content"><div class="post-todo-text">${block.text || ""}</div>${childrenHtml}</div></div>`;
-      case "equation":
-        return `<figure class="post-equation"><figcaption class="post-block-label">Equation</figcaption><div class="post-equation-expression" role="math" aria-label="Equation"><code>${escapeHtml(block.expression || "")}</code></div></figure>${childrenHtml}`;
-      case "bookmark":
-        return renderBookmarkBlock(block, childrenHtml, baseOrigin);
-      case "resource":
-        if (block.resourceType === "embed") {
-          return renderEmbedBlock(block, childrenHtml, baseOrigin);
-        }
-        return renderResourceBlock(block, childrenHtml, baseOrigin);
-      case "table":
-        return renderTableBlock(block, childrenHtml);
-      case "table_row":
-        return `<div class="post-table-wrapper" role="region" aria-label="Content table row" tabindex="0"><table class="post-table"><caption class="visually-hidden">Content table row</caption><tbody>${renderTableRow(block)}</tbody></table></div>${childrenHtml}`;
-      case "table_of_contents":
-        return renderTableOfContentsBlock(block, childrenHtml, options);
-      case "child_page":
-      case "child_database":
-        return renderChildReferenceBlock(block, childrenHtml);
-      case "unsupported":
-        return renderUnsupportedBlock(block, childrenHtml, baseOrigin);
-      default:
-        return childrenHtml;
-    }
+      },
+      toggle: (block, { childrenHtml }) => `<details class="post-toggle"><summary>${block.text || ""}</summary>${childrenHtml}</details>`,
+      to_do: (block, { childrenHtml }) => `<div class="post-todo${block.checked ? " checked" : ""}"><span class="post-todo-box" aria-hidden="true">${block.checked ? "&#10003;" : ""}</span><div class="post-todo-content"><div class="post-todo-text">${block.text || ""}</div>${childrenHtml}</div></div>`,
+      equation: (block, { childrenHtml }) => `<figure class="post-equation"><figcaption class="post-block-label">Equation</figcaption><div class="post-equation-expression" role="math" aria-label="Equation"><code>${escapeHtml(block.expression || "")}</code></div></figure>${childrenHtml}`,
+      bookmark: (block, { baseOrigin, childrenHtml }) => renderBookmarkBlock(block, childrenHtml, baseOrigin),
+      resource: (block, { baseOrigin, childrenHtml }) => (
+        block.resourceType === "embed"
+          ? renderEmbedBlock(block, childrenHtml, baseOrigin)
+          : renderResourceBlock(block, childrenHtml, baseOrigin)
+      ),
+      table: (block, { childrenHtml }) => renderTableBlock(block, childrenHtml),
+      table_row: (block, { childrenHtml }) => `<div class="post-table-wrapper" role="region" aria-label="Content table row" tabindex="0"><table class="post-table"><caption class="visually-hidden">Content table row</caption><tbody>${renderTableRow(block)}</tbody></table></div>${childrenHtml}`,
+      table_of_contents: (block, { childrenHtml, options }) => renderTableOfContentsBlock(block, childrenHtml, options),
+      child_page: (block, { childrenHtml }) => renderChildReferenceBlock(block, childrenHtml),
+      child_database: (block, { childrenHtml }) => renderChildReferenceBlock(block, childrenHtml),
+      unsupported: (block, { baseOrigin, childrenHtml }) => renderUnsupportedBlock(block, childrenHtml, baseOrigin),
+    };
+
+    return Object.freeze(renderers);
+  }
+
+  const blockRenderers = createBlockRenderers();
+
+  function renderBlock(block, options = {}) {
+    const childrenHtml = renderBlocks(block.children || [], options);
+    const baseOrigin = options.baseOrigin;
+    const renderer = blockRenderers[block.type];
+
+    return typeof renderer === "function"
+      ? renderer(block, { baseOrigin, childrenHtml, options })
+      : childrenHtml;
   }
 
   function renderPostTags(tags) {

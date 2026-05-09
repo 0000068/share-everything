@@ -15,6 +15,7 @@
     const POST_REQUEST_KEY_PREFIX = "notion_page_";
     const POST_SUMMARY_CACHE_TTL = 1000 * 60 * 30;
     const POSTS_RESPONSE_CACHE_TTL = 1000 * 20;
+    const POST_SUMMARY_MEMORY_CACHE_LIMIT = 200;
     const POST_SUMMARY_SESSION_MAX_TITLE_LENGTH = 160;
     const POST_SUMMARY_SESSION_MAX_EXCERPT_LENGTH = 320;
     const POST_SUMMARY_SESSION_MAX_CATEGORY_LENGTH = 48;
@@ -324,12 +325,29 @@
       };
     }
 
+    function rememberPostSummaryInMemory(summary, timestamp = Date.now()) {
+      if (!summary?.id) return null;
+
+      postSummaryMemoryCache.delete(summary.id);
+      postSummaryTimestampCache.delete(summary.id);
+      postSummaryMemoryCache.set(summary.id, summary);
+      postSummaryTimestampCache.set(summary.id, timestamp);
+
+      while (postSummaryMemoryCache.size > POST_SUMMARY_MEMORY_CACHE_LIMIT) {
+        const oldestId = postSummaryMemoryCache.keys().next().value;
+        if (!oldestId) break;
+        postSummaryMemoryCache.delete(oldestId);
+        postSummaryTimestampCache.delete(oldestId);
+      }
+
+      return summary;
+    }
+
     function storePostSummary(post, timestamp = Date.now()) {
       const summary = normalizePostSummary(post);
       if (!summary) return null;
 
-      postSummaryMemoryCache.set(summary.id, summary);
-      postSummaryTimestampCache.set(summary.id, timestamp);
+      rememberPostSummaryInMemory(summary, timestamp);
       writeSessionCache(getPostSummaryCacheKey(summary.id), summary, timestamp);
       return summary;
     }
@@ -346,6 +364,7 @@
       if (postSummaryMemoryCache.has(pageId) && postSummaryTimestampCache.has(pageId)) {
         const summary = postSummaryMemoryCache.get(pageId);
         const timestamp = postSummaryTimestampCache.get(pageId);
+        rememberPostSummaryInMemory(summary, timestamp);
         return {
           summary,
           timestamp,
@@ -353,14 +372,16 @@
         };
       }
 
+      postSummaryMemoryCache.delete(pageId);
+      postSummaryTimestampCache.delete(pageId);
+
       const cached = readSessionCache(getPostSummaryCacheKey(pageId));
       if (!cached) return null;
 
       const summary = normalizePostSummary(cached.data);
       if (!summary) return null;
 
-      postSummaryMemoryCache.set(pageId, summary);
-      postSummaryTimestampCache.set(pageId, cached.timestamp);
+      rememberPostSummaryInMemory(summary, cached.timestamp);
       return {
         summary,
         timestamp: cached.timestamp,

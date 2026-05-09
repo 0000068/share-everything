@@ -710,9 +710,6 @@
     display: none;
   }
 
-  body[data-page="post"] .fab-bookmark {
-    display: none !important;
-  }
 }
 
 @media (max-width: 540px) {

@@ -1,7 +1,7 @@
 # Share Everything Site Architecture
 
-> Version: v2.7
-> Updated: 2026-04-27
+> Version: v2.8
+> Updated: 2026-05-09
 
 ## 1. Overview
 
@@ -32,7 +32,25 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v2.7 Highlights
+## 2. Version v2.8 Highlights
+
+v2.8 is a code-quality and maintainability release that closes out the review backlog tracked in v2.7 while keeping the public runtime behavior unchanged.
+
+- Shared `notion-content.js` block rendering now goes through a `createBlockRenderers()` registry instead of a central switch, so new block types can be added without editing a shared control flow.
+- Browser-side `notion-api.js` post-summary memory cache is now a bounded LRU of up to 200 entries through `rememberPostSummaryInMemory()`, keeping long-lived SPA sessions from accumulating unbounded summary state.
+- `api/image.js` timeout, size limit, and redirect hop count now accept `IMAGE_PROXY_TIMEOUT_MS`, `IMAGE_PROXY_MAX_BYTES`, and `IMAGE_PROXY_MAX_REDIRECTS` env overrides while preserving the existing defaults.
+- `api/post.js` head metadata, CSP meta, and post content replacements now all use a `didMatch` closure flag so template-replacement detection no longer depends on string equality and is safe even when the replacement value matches the original.
+- `server/notion-server.js` `buildPublicAccessPolicyFromDatabase()` drops its unused `database` parameter; database-wide public mode stays the single long-term policy.
+- `scripts/smoke-check.mjs` is split into a thin entrypoint plus focused modules under `scripts/smoke-check/` (`harness`, `blog-page`, `image-proxy`, `notion-api-client`, `public-content-notion`, `routing-vercel`).
+- `scripts/local-server.mjs` gains full MIME coverage for `.webp`, `.jpg`, `.jpeg`, `.ico`, `.xml`, and `.mjs` so local dev matches production content types more closely.
+- `css/post-page.css` drops the `body[data-page="post"] .fab-bookmark { display: none !important; }` override; JavaScript is now the single source of truth for floating bookmark visibility, and `js/post-page.js` continues to hide the fab on mobile in favor of the top-bar bookmark action.
+- `js/common.js` particle runtime now honors `prefers-reduced-motion: reduce` globally via `shouldReduceMotion()` instead of only on mobile viewports, aligning with WCAG 2.3.3.
+- `js/post-page.js` demotes the "NotionAPI is unavailable" fallback log from `console.error` to `console.warn`, reflecting that it is a supported SSR fallback path rather than an error.
+- `vercel.json` intent around `/api/*` cache headers is documented directly in §5: do not add a catch-all `Cache-Control` there, since each handler owns its own policy (e.g. `/api/image` edge caching).
+- Kiro steering file `.kiro/steering/git-rules.md` mirrors the release commit convention from §13 as always-on workspace steering.
+- Removed the stray empty `new/` directory from the repository root.
+
+### v2.7 Highlights
 
 v2.7 restores and locks the v2.5-compatible database-wide public content behavior, and fixes the two review findings around SVG image proxying and unbounded public list filters.
 
@@ -138,9 +156,9 @@ Read-only public APIs reject non-`GET` methods with `405` and `Cache-Control: no
 | Public API errors | `no-store` |
 | Disabled `/api/notion` | `no-store` |
 
-`vercel.json` does not set an API-wide `Cache-Control`; individual handlers own their cache policy so `/api/image` can stay edge-cacheable while data and SSR routes stay non-cacheable.
+`vercel.json` does not set an API-wide `Cache-Control`; individual handlers own their cache policy so `/api/image` can stay edge-cacheable while data and SSR routes stay non-cacheable. Do not add a catch-all `/api/*` `Cache-Control` header in `vercel.json`.
 
-Client-side `notion-api.js` keeps a short bounded in-memory post-list response cache for fast repeated listing transitions. It also keeps post summaries in memory plus `sessionStorage` for bookmark hydration; the memory summary maps are page-lifetime caches and are tracked as a small future hardening item below.
+Client-side `notion-api.js` keeps a short bounded in-memory post-list response cache for fast repeated listing transitions. It also keeps up to 200 post summaries in memory plus `sessionStorage` for bookmark hydration.
 
 ## 6. Security
 
@@ -195,6 +213,13 @@ Client-side `notion-api.js` keeps a short bounded in-memory post-list response c
 `-- scripts/
     |-- local-server.mjs
     |-- smoke-check.mjs
+    |-- smoke-check/
+    |   |-- blog-page.mjs
+    |   |-- harness.mjs
+    |   |-- image-proxy.mjs
+    |   |-- notion-api-client.mjs
+    |   |-- public-content-notion.mjs
+    |   `-- routing-vercel.mjs
     `-- fixtures/
         `-- notion-block-fixtures.mjs
 ```
@@ -265,7 +290,9 @@ globals listed above.
 `spa-router.js` MUST be loaded **last** among the runtime scripts because it initializes
 link interception immediately on load and depends on all preceding globals.
 
-`spa-router.js` keeps canonical URLs in the address bar, but can load `/post.html?id=...` as a compatibility fallback when a server returns `404` for `/posts/:id`. On local dev origins such as `127.0.0.1` and `localhost`, it loads that static post template first because the local static server does not rewrite `/posts/:id`. Route changes use the v1.6-style whole-page opacity/transform cadence with a short 200ms visual exit cue, then suppress nested first-load animations after the swap so the transition reads as one calm page movement. If a route remains in its exit state too long, the router falls back to a local-compatible full navigation instead of leaving the page transparent or non-clickable.
+`spa-router.js` keeps canonical URLs in the address bar, but can load `/post.html?id=...` as a compatibility fallback when a server returns `404` for `/posts/:id`. On local dev origins such as `127.0.0.1` and `localhost`, it loads that static post template first because the local static server does not rewrite `/posts/:id`. Route changes use the v1.6-style whole-page opacity/transform cadence with a short 200ms visual exit cue, then suppress nested first-load animations after the swap so the transition reads as one calm page movement. Same-path hash-only changes are intentionally passed through to native browser handling; `blog-page.js` owns the `hashchange` flow for `/blog.html#bookmarks`. If a route remains in its exit state too long, the router falls back to a local-compatible full navigation instead of leaving the page transparent or non-clickable.
+
+`notion-content.js` renders Notion blocks through a `block.type` -> renderer registry built by `createBlockRenderers()`. New block types should be added as focused renderer entries so SSR and browser rendering stay aligned without expanding a central switch.
 
 ## 9. Image Loading Strategy
 
@@ -344,6 +371,9 @@ Optional:
 | `PUBLIC_POST_CACHE_TTL_MS` | `60000` | Single post cache TTL |
 | `NOTION_REQUEST_TIMEOUT_MS` | `12000` | Server-side Notion request timeout |
 | `NOTION_BLOCK_CHILD_CONCURRENCY` | `4` | Concurrent child block fetches |
+| `IMAGE_PROXY_TIMEOUT_MS` | `10000` | Remote image proxy request timeout |
+| `IMAGE_PROXY_MAX_BYTES` | `8388608` | Remote image proxy response size limit |
+| `IMAGE_PROXY_MAX_REDIRECTS` | `4` | Remote image proxy redirect hop limit |
 | `EXPOSE_PUBLIC_ERROR_DETAILS` | `false` | Expose upstream error detail for local debugging only |
 
 The server exposes the entire configured Notion database. This is the deliberate long-term project policy and matches v2.5 behavior. Keep drafts in a separate Notion database; `Status`, `Public`, and similar public/published fields are ignored by the runtime.
@@ -354,10 +384,20 @@ The server exposes the entire configured Notion database. This is the deliberate
 - The package version uses matching semver with patch zero, for example `v2.3` maps to `2.3.0`.
 - Keep release commits linear and chronological on `main`; the newest version should sit directly above the previous version.
 - When packaging a release, avoid leaving intermediate `fix:`, `docs:`, or `chore:` commits above the version commit unless the user explicitly asks for split commits.
+- Kiro steering mirrors these rules in `.kiro/steering/git-rules.md`.
 
 ## 14. Checks
 
-`scripts/smoke-check.mjs` currently covers:
+`scripts/smoke-check.mjs` is the single `npm.cmd run check` entrypoint. Shared harness utilities and heavier domain checks live in focused modules under `scripts/smoke-check/`:
+
+- `harness.mjs` for VM/module loading helpers, fake DOM primitives, and common assertions.
+- `blog-page.mjs` for blog listing, filtering, bookmark hash, and pagination behavior.
+- `notion-api-client.mjs` for browser-side Notion client summary caching and session fallback behavior.
+- `image-proxy.mjs` for `/api/image` SSRF, MIME, size, redirect, and method checks.
+- `public-content-notion.mjs` for public error mapping and server-side Notion data behavior.
+- `routing-vercel.mjs` for disabled legacy proxy, sitemap, and Vercel header rules.
+
+The smoke suite currently covers:
 
 - HTML entry structure and CSP consistency.
 - Shared runtime script declarations.
@@ -383,8 +423,7 @@ The server exposes the entire configured Notion database. This is the deliberate
 
 ## 15. Known Optimization Backlog
 
-- Add conservative length caps for public `category` and `search` query inputs before they enter local search and filtered-query cache keys.
-- Bound the browser-side post summary memory maps in `notion-api.js` with a small LRU while keeping the existing `sessionStorage` compaction behavior.
+- No open structural optimization backlog items are currently tracked here.
 
 ## 16. Latest Verification
 

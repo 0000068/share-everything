@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.7.0-00e5ff?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/version-2.8.0-00e5ff?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/deploy-Vercel-000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel" />
   <img src="https://img.shields.io/badge/CMS-Notion-000?style=flat-square&logo=notion&logoColor=white" alt="Notion" />
@@ -187,12 +187,15 @@ NOTION_TOKEN=ntn_xxxxxxxxxxxxxxxxxxxx
 NOTION_DATABASE_ID=你的数据库ID
 
 # 可选
-SITE_URL=https://你的域名
+SITE_URL=https://your-domain.example
 DATABASE_METADATA_TTL_MS=300000
 PUBLIC_PAGE_SUMMARY_CACHE_TTL_MS=120000
 PUBLIC_POST_CACHE_TTL_MS=60000
 NOTION_REQUEST_TIMEOUT_MS=12000
 NOTION_BLOCK_CHILD_CONCURRENCY=4
+IMAGE_PROXY_TIMEOUT_MS=10000
+IMAGE_PROXY_MAX_BYTES=8388608
+IMAGE_PROXY_MAX_REDIRECTS=4
 # 默认保持 v2.5 行为：整个配置的 Notion 数据库都作为公开内容读取。
 # 请把草稿放到另一个数据库；公开/发布字段会被忽略。
 ```
@@ -253,6 +256,9 @@ npm run check
 | `PUBLIC_POST_CACHE_TTL_MS` | ❌ | `60000` | 单篇文章缓存时间 (ms) |
 | `NOTION_REQUEST_TIMEOUT_MS` | ❌ | `12000` | Notion API 超时 (ms) |
 | `NOTION_BLOCK_CHILD_CONCURRENCY` | ❌ | `4` | 块子元素并发获取数 |
+| `IMAGE_PROXY_TIMEOUT_MS` | ❌ | `10000` | 图片代理上游请求超时 (ms) |
+| `IMAGE_PROXY_MAX_BYTES` | ❌ | `8388608` | 图片代理最大响应体字节数 |
+| `IMAGE_PROXY_MAX_REDIRECTS` | ❌ | `4` | 图片代理最大重定向跳数 |
 | `EXPOSE_PUBLIC_ERROR_DETAILS` | ❌ | `false` | 是否在 API 响应中暴露详细错误 |
 
 ---

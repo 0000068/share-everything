@@ -1,566 +1,34 @@
-import assert from "node:assert/strict";
-import { Buffer } from "node:buffer";
-import { EventEmitter } from "node:events";
-import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
-import vm from "node:vm";
 import { notionBlockFixtures } from "./fixtures/notion-block-fixtures.mjs";
-
-const root = new URL("../", import.meta.url);
-const FIXTURE_BASE_ORIGIN = "https://example.com";
-
-function read(relativePath) {
-  return readFileSync(new URL(relativePath, root), "utf8");
-}
-
-function checkSyntax(relativePath) {
-  new vm.Script(read(relativePath), {
-    filename: relativePath,
-  });
-}
-
-function loadCommonJsModule(relativePath, exportedNames = [], sandboxOverrides = {}) {
-  const filename = fileURLToPath(new URL(relativePath, root));
-  const module = { exports: {} };
-  const appendedExports = exportedNames.length > 0
-    ? `\nmodule.exports.__test = { ${exportedNames.join(", ")} };`
-    : "";
-
-  vm.runInNewContext(`${read(relativePath)}${appendedExports}`, {
-    module,
-    exports: module.exports,
-    require: createRequire(new URL(relativePath, root)),
-    __dirname: fileURLToPath(new URL(".", new URL(relativePath, root))),
-    __filename: filename,
-    process,
-    console,
-    Buffer,
-    AbortController,
-    URL,
-    URLSearchParams,
-    fetch,
-    setTimeout,
-    clearTimeout,
-    ...sandboxOverrides,
-  }, {
-    filename,
-  });
-
-  return module.exports;
-}
-
-function withEnvOverrides(overrides, callback) {
-  const entries = Object.entries(overrides);
-  const previousValues = new Map(
-    entries.map(([key]) => [key, Object.prototype.hasOwnProperty.call(process.env, key) ? process.env[key] : undefined]),
-  );
-
-  try {
-    entries.forEach(([key, value]) => {
-      if (value == null) {
-        delete process.env[key];
-        return;
-      }
-
-      process.env[key] = String(value);
-    });
-
-    return callback();
-  } finally {
-    previousValues.forEach((value, key) => {
-      if (value === undefined) {
-        delete process.env[key];
-        return;
-      }
-
-      process.env[key] = value;
-    });
-  }
-}
-
-function createClassList(initialTokens = []) {
-  const tokens = new Set(initialTokens);
-
-  return {
-    add: (...nextTokens) => nextTokens.forEach((token) => tokens.add(token)),
-    remove: (...nextTokens) => nextTokens.forEach((token) => tokens.delete(token)),
-    toggle(token, force) {
-      if (force === true) {
-        tokens.add(token);
-        return true;
-      }
-      if (force === false) {
-        tokens.delete(token);
-        return false;
-      }
-      if (tokens.has(token)) {
-        tokens.delete(token);
-        return false;
-      }
-      tokens.add(token);
-      return true;
-    },
-    contains: (token) => tokens.has(token),
-  };
-}
-
-class FakeElement {
-  constructor() {
-    this.listeners = new Map();
-    this.children = [];
-    this.style = {};
-    this.dataset = {};
-    this.attributes = {};
-    this.classList = createClassList();
-    this.innerHTML = "";
-    this.textContent = "";
-    this.value = "";
-  }
-
-  addEventListener(type, handler) {
-    this.listeners.set(type, handler);
-  }
-
-  removeEventListener(type, handler) {
-    if (this.listeners.get(type) === handler) {
-      this.listeners.delete(type);
-    }
-  }
-
-  dispatch(type, event = {}) {
-    const handler = this.listeners.get(type);
-    if (typeof handler === "function") {
-      return handler(event);
-    }
-
-    return undefined;
-  }
-
-  setAttribute(name, value) {
-    this.attributes[name] = String(value);
-  }
-
-  getAttribute(name) {
-    return this.attributes[name] || null;
-  }
-
-  appendChild(child) {
-    this.children.push(child);
-    return child;
-  }
-
-  replaceChildren(...children) {
-    this.children = children;
-  }
-
-  querySelector() {
-    return null;
-  }
-
-  querySelectorAll() {
-    return [];
-  }
-
-  contains() {
-    return true;
-  }
-}
-
-function createStorageMock(initialEntries = {}) {
-  const store = new Map(Object.entries(initialEntries));
-
-  return {
-    getItem(key) {
-      return store.has(key) ? store.get(key) : null;
-    },
-    setItem(key, value) {
-      store.set(key, String(value));
-    },
-    removeItem(key) {
-      store.delete(key);
-    },
-    clear() {
-      store.clear();
-    },
-    key(index) {
-      return Array.from(store.keys())[index] || null;
-    },
-    get length() {
-      return store.size;
-    },
-  };
-}
-
-function createQuotaLimitedStorageMock({ initialEntries = {}, maxChars = 1024 } = {}) {
-  const storage = createStorageMock(initialEntries);
-
-  return {
-    getItem(key) {
-      return storage.getItem(key);
-    },
-    setItem(key, value) {
-      const serializedValue = String(value);
-      const nextEntries = [];
-      for (let index = 0; index < storage.length; index += 1) {
-        const existingKey = storage.key(index);
-        if (existingKey == null || existingKey === key) continue;
-        nextEntries.push([existingKey, storage.getItem(existingKey) || ""]);
-      }
-      nextEntries.push([String(key), serializedValue]);
-
-      const totalChars = nextEntries.reduce(
-        (sum, [entryKey, entryValue]) => sum + String(entryKey).length + String(entryValue).length,
-        0,
-      );
-      if (totalChars > maxChars) {
-        const error = new Error("Quota exceeded");
-        error.name = "QuotaExceededError";
-        throw error;
-      }
-
-      storage.setItem(key, serializedValue);
-    },
-    removeItem(key) {
-      storage.removeItem(key);
-    },
-    clear() {
-      storage.clear();
-    },
-    key(index) {
-      return storage.key(index);
-    },
-    get length() {
-      return storage.length;
-    },
-  };
-}
-
-function createHeadersMock(initialEntries = {}) {
-  const headers = new Map(
-    Object.entries(initialEntries).map(([key, value]) => [String(key).toLowerCase(), String(value)]),
-  );
-
-  return {
-    get(name) {
-      return headers.get(String(name).toLowerCase()) || null;
-    },
-  };
-}
-
-const publicImageDnsLookup = async () => [{ address: "93.184.216.34", family: 4 }];
-
-function createImageRequestMock({
-  status = 200,
-  headers = {},
-  body = Buffer.alloc(0),
-  onRequest = () => {},
-} = {}) {
-  return (url, options = {}, callback) => {
-    onRequest(url, options);
-
-    const response = new EventEmitter();
-    response.statusCode = status;
-    response.headers = headers;
-    response.resume = () => {};
-    response.destroy = (error) => {
-      if (error) {
-        setTimeout(() => response.emit("error", error), 0);
-      }
-    };
-
-    const request = new EventEmitter();
-    request.end = () => {
-      setTimeout(() => {
-        callback(response);
-        setTimeout(() => {
-          if (body?.byteLength) {
-            response.emit("data", body);
-          }
-          response.emit("end");
-        }, 0);
-      }, 0);
-    };
-    request.destroy = (error) => {
-      setTimeout(() => request.emit("error", error || new Error("request destroyed")), 0);
-    };
-
-    return request;
-  };
-}
-
-function createJsonResponse(payload, { status = 200, headers = {} } = {}) {
-  const serializedPayload = typeof payload === "string"
-    ? payload
-    : JSON.stringify(payload);
-
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    headers: createHeadersMock(headers),
-    async json() {
-      return typeof payload === "string"
-        ? JSON.parse(payload)
-        : payload;
-    },
-    async text() {
-      return serializedPayload;
-    },
-  };
-}
-
-function createApiResponseRecorder() {
-  return {
-    statusCode: 200,
-    headers: new Map(),
-    jsonBody: null,
-    textBody: null,
-    ended: false,
-    setHeader(name, value) {
-      this.headers.set(String(name).toLowerCase(), String(value));
-      return this;
-    },
-    getHeader(name) {
-      return this.headers.get(String(name).toLowerCase());
-    },
-    status(code) {
-      this.statusCode = code;
-      return this;
-    },
-    json(payload) {
-      this.jsonBody = payload;
-      this.ended = true;
-      return payload;
-    },
-    send(payload) {
-      this.textBody = payload;
-      this.ended = true;
-      return payload;
-    },
-    end(payload = "") {
-      this.textBody = payload;
-      this.ended = true;
-      return payload;
-    },
-  };
-}
-
-function loadBrowserScript(relativePath, overrides = {}) {
-  const filename = fileURLToPath(new URL(relativePath, root));
-  const windowObject = {
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    requestAnimationFrame: (callback) => {
-      callback();
-      return 1;
-    },
-    cancelAnimationFrame: () => {},
-    setTimeout,
-    clearTimeout,
-    fetch: overrides.fetch || globalThis.fetch,
-    AbortController: overrides.AbortController || AbortController,
-    ...overrides.window,
-  };
-  const documentObject = {
-    getElementById: () => null,
-    querySelector: () => null,
-    querySelectorAll: () => [],
-    createElement: () => new FakeElement(),
-    ...overrides.document,
-  };
-  const localStorage = overrides.localStorage || createStorageMock();
-  const sessionStorage = overrides.sessionStorage || createStorageMock();
-
-  const sandbox = {
-    window: windowObject,
-    document: documentObject,
-    localStorage,
-    sessionStorage,
-    history: windowObject.history,
-    location: windowObject.location,
-    console,
-    JSON,
-    Date,
-    URL,
-    URLSearchParams,
-    Promise,
-    AbortController: overrides.AbortController || AbortController,
-    fetch: overrides.fetch || globalThis.fetch,
-    setTimeout,
-    clearTimeout,
-    requestAnimationFrame: windowObject.requestAnimationFrame,
-    cancelAnimationFrame: windowObject.cancelAnimationFrame,
-    ...overrides.globals,
-  };
-
-  sandbox.globalThis = sandbox;
-  windowObject.window = windowObject;
-  windowObject.document = documentObject;
-
-  vm.runInNewContext(read(relativePath), sandbox, {
-    filename,
-  });
-
-  return {
-    window: windowObject,
-    document: documentObject,
-    localStorage,
-    sessionStorage,
-  };
-}
-
-function expectIncludes(source, needle, message) {
-  assert.ok(source.includes(needle), message);
-}
-
-function expectNotIncludes(source, needle, message) {
-  assert.ok(!source.includes(needle), message);
-}
-
-function extractContentSecurityPolicyMetaContent(htmlSource) {
-  const match = String(htmlSource || "").match(
-    /<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]*)"\s*\/?>/i,
-  );
-  assert.ok(match, "HTML should include a Content-Security-Policy meta tag");
-  return match[1];
-}
-
-function normalizeHtml(source) {
-  return String(source || "")
-    .replace(/>\s+</g, "><")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function createHeadMock() {
-  const nodes = [];
-
-  function matchesSelector(node, selector) {
-    const tagName = String(node?.tagName || "").toLowerCase();
-    if (selector === 'meta[name="description"]') {
-      return tagName === "meta" && node.getAttribute("name") === "description";
-    }
-    if (selector === 'meta[name="robots"]') {
-      return tagName === "meta" && node.getAttribute("name") === "robots";
-    }
-    if (selector === 'meta[property="og:title"]') {
-      return tagName === "meta" && node.getAttribute("property") === "og:title";
-    }
-    if (selector === 'meta[property="og:description"]') {
-      return tagName === "meta" && node.getAttribute("property") === "og:description";
-    }
-    if (selector === 'meta[property="og:type"]') {
-      return tagName === "meta" && node.getAttribute("property") === "og:type";
-    }
-    if (selector === 'meta[property="og:url"]') {
-      return tagName === "meta" && node.getAttribute("property") === "og:url";
-    }
-    if (selector === 'meta[property="og:image"]') {
-      return tagName === "meta" && node.getAttribute("property") === "og:image";
-    }
-    if (selector === 'meta[property="og:image:alt"]') {
-      return tagName === "meta" && node.getAttribute("property") === "og:image:alt";
-    }
-    if (selector === 'link[rel="canonical"]') {
-      return tagName === "link" && node.getAttribute("rel") === "canonical";
-    }
-
-    return false;
-  }
-
-  return {
-    appendChild(node) {
-      nodes.push(node);
-      node.remove = () => {
-        const index = nodes.indexOf(node);
-        if (index >= 0) {
-          nodes.splice(index, 1);
-        }
-      };
-      return node;
-    },
-    querySelector(selector) {
-      return nodes.find((node) => matchesSelector(node, selector)) || null;
-    },
-    nodes,
-  };
-}
-
-function getValueAtPath(target, path) {
-  return String(path || "")
-    .split(".")
-    .filter(Boolean)
-    .reduce((value, segment) => {
-      if (value == null) {
-        return value;
-      }
-
-      return value[segment];
-    }, target);
-}
-
-function runNotionBlockFixture(fixture) {
-  const mappedBlocks = fixture.rawBlocks.map((block) => notionContentHelpers.mapNotionBlock(block, {
-    baseOrigin: FIXTURE_BASE_ORIGIN,
-  }));
-
-  assert.equal(
-    JSON.stringify(mappedBlocks.map((block) => block?.type)),
-    JSON.stringify(fixture.expectedTypes),
-    `${fixture.name} should map each raw Notion block to the expected block type`,
-  );
-
-  (fixture.mappedChecks || []).forEach((check) => {
-    const actual = getValueAtPath(mappedBlocks[check.blockIndex], check.path);
-
-    if (Object.prototype.hasOwnProperty.call(check, "equals")) {
-      assert.equal(
-        actual,
-        check.equals,
-        `${fixture.name} should map ${check.path} to the expected value`,
-      );
-    }
-
-    if (Object.prototype.hasOwnProperty.call(check, "includes")) {
-      expectIncludes(
-        String(actual),
-        check.includes,
-        `${fixture.name} should preserve ${check.path} in the mapped block`,
-      );
-    }
-  });
-
-  const renderedHtml = normalizeHtml(notionContentHelpers.renderBlocks(mappedBlocks, {
-    baseOrigin: FIXTURE_BASE_ORIGIN,
-  }));
-
-  (fixture.expectedHtmlIncludes || []).forEach((snippet) => {
-    expectIncludes(
-      renderedHtml,
-      normalizeHtml(snippet),
-      `${fixture.name} should render semantic HTML for the fixture`,
-    );
-  });
-
-  (fixture.expectedHtmlExcludes || []).forEach((snippet) => {
-    expectNotIncludes(
-      renderedHtml,
-      normalizeHtml(snippet),
-      `${fixture.name} should avoid rendering stale fallback markup`,
-    );
-  });
-}
-
-function expectNoMalformedClosingTags(source, message) {
-  assert.ok(
-    !/(^|[^<])\/(?:p|span|a|div|button|svg|main|section|article|h1|h2|h3|title)>/m.test(source),
-    message,
-  );
-}
-
-function escapeRegex(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
+import { runBlogPageChecks } from "./smoke-check/blog-page.mjs";
+import { runImageProxyChecks } from "./smoke-check/image-proxy.mjs";
+import { runNotionApiClientChecks } from "./smoke-check/notion-api-client.mjs";
+import { runPublicContentAndNotionChecks } from "./smoke-check/public-content-notion.mjs";
+import { runRoutingAndVercelChecks } from "./smoke-check/routing-vercel.mjs";
+import {
+  assert,
+  Buffer,
+  FIXTURE_BASE_ORIGIN,
+  FakeElement,
+  checkSyntax,
+  createApiResponseRecorder,
+  createClassList,
+  createHeadMock,
+  createImageRequestMock,
+  createJsonResponse,
+  createQuotaLimitedStorageMock,
+  escapeRegex,
+  expectIncludes,
+  expectNoMalformedClosingTags,
+  expectNotIncludes,
+  extractContentSecurityPolicyMetaContent,
+  loadBrowserScript,
+  loadCommonJsModule,
+  normalizeHtml,
+  publicImageDnsLookup,
+  read,
+  runNotionBlockFixture,
+  withEnvOverrides,
+} from "./smoke-check/harness.mjs";
 
 [
   "js/common.js",
@@ -590,8 +58,10 @@ const indexHtml = read("index.html");
 const blogHtml = read("blog.html");
 const postHtml = read("post.html");
 const gitAttributes = read(".gitattributes");
+const kiroGitRules = read(".kiro/steering/git-rules.md");
 const packageJson = read("package.json");
 const readmeMd = read("README.md");
+const siteArchitectureMd = read("SITE_ARCHITECTURE.md");
 const vercelJson = read("vercel.json");
 const envExample = read(".env.example");
 const licenseText = read("LICENSE");
@@ -609,6 +79,14 @@ const notionContentJs = read("js/notion-content.js");
 const notionApiJs = read("js/notion-api.js");
 const postPageJs = read("js/post-page.js");
 const smokeCheckSource = read("scripts/smoke-check.mjs");
+const smokeCheckModuleSources = [
+  read("scripts/smoke-check/blog-page.mjs"),
+  read("scripts/smoke-check/harness.mjs"),
+  read("scripts/smoke-check/image-proxy.mjs"),
+  read("scripts/smoke-check/notion-api-client.mjs"),
+  read("scripts/smoke-check/public-content-notion.mjs"),
+  read("scripts/smoke-check/routing-vercel.mjs"),
+];
 const apiNotionJs = read("api/notion.js");
 const apiImageJs = read("api/image.js");
 const apiPostsDataJs = read("api/posts-data.js");
@@ -622,6 +100,13 @@ const publicContentHelpers = loadCommonJsModule("server/public-content.js");
 const securityPolicyHelpers = loadCommonJsModule("server/security-policy.js");
 const apiNotionHandler = loadCommonJsModule("api/notion.js");
 const apiImageHandler = loadCommonJsModule("api/image.js");
+const {
+  __test: imageProxyDefaultConfig,
+} = loadCommonJsModule("api/image.js", [
+  "IMAGE_PROXY_TIMEOUT_MS",
+  "IMAGE_PROXY_MAX_BYTES",
+  "IMAGE_PROXY_MAX_REDIRECTS",
+]);
 const apiPostHandler = loadCommonJsModule("api/post.js");
 const apiPostsDataHandler = loadCommonJsModule("api/posts-data.js");
 const apiPostDataHandler = loadCommonJsModule("api/post-data.js");
@@ -718,12 +203,17 @@ assert.ok(!styleCss.includes("\r\n"), "style.css should use LF line endings");
 assert.ok(!blogPageCss.includes("\r\n"), "blog-page.css should use LF line endings");
 assert.ok(!postPageCss.includes("\r\n"), "post-page.css should use LF line endings");
 assert.ok(!smokeCheckSource.includes("\r\n"), "smoke-check.mjs should use LF line endings");
+smokeCheckModuleSources.forEach((source, index) => {
+  assert.ok(!source.includes("\r\n"), `smoke-check module ${index + 1} should use LF line endings`);
+});
 expectNotIncludes(styleCss, ".blog-grid {", "style.css should not ship the blog grid layout anymore");
 expectNotIncludes(styleCss, ".post-content {", "style.css should not ship post content styles anymore");
 expectNotIncludes(styleCss, ".fab-bookmark {", "style.css should not ship the floating post bookmark styles anymore");
 expectIncludes(blogPageCss, ".blog-grid {", "blog-page.css should own the blog grid layout");
 expectIncludes(postPageCss, ".post-content {", "post-page.css should own the post content styles");
 expectIncludes(postPageCss, ".fab-bookmark {", "post-page.css should own the floating bookmark styles");
+expectNotIncludes(postPageCss, "body[data-page=\"post\"] .fab-bookmark", "post-page CSS should not override bookmark visibility that JavaScript owns");
+expectNotIncludes(postPageCss, "display: none !important", "post-page CSS should avoid forcing bookmark controls against JavaScript state");
 expectIncludes(blogPageJs, "EAGER_COVER_IMAGE_COUNT = 3", "blog cards should prioritize the first visible cover images");
 expectIncludes(blogPageJs, "resolveSafeCoverImage(post)", "blog cards should use display-safe cover URLs instead of share-image fallbacks");
 expectIncludes(blogPageJs, 'loading="${coverLoading}"', "blog cards should keep lazy loading off the first visible covers");
@@ -736,19 +226,70 @@ expectIncludes(blogPageCss, "pointer-events: none;\n}", "blog card cover media s
 expectIncludes(blogPageCss, "z-index: 3;\n  display: inline-flex;", "blog card bookmark button should stay above the card link layer");
 expectIncludes(commonJs, "DESKTOP_PARTICLE_COUNT = 350", "particle runtime should preserve the desktop particle density");
 expectIncludes(commonJs, "MOBILE_PARTICLE_COUNT = 48", "particle runtime should use a lighter mobile particle density");
-expectIncludes(commonJs, "shouldReduceMobileParticles", "particle runtime should gate reduced-motion behavior to mobile particles");
+expectIncludes(commonJs, "function shouldReduceMotion", "particle runtime should honor reduced-motion globally");
+expectIncludes(commonJs, "shouldReduceMobileParticles", "particle runtime should keep mobile-specific reduced particle helpers available");
+expectIncludes(commonJs, "if (shouldReduceMotion() || particlesPausedForScroll)", "particle runtime should stop animation for reduced-motion users on every viewport");
 expectIncludes(commonJs, "pauseMobileParticlesDuringScroll", "particle runtime should pause mobile particles while scrolling");
+expectNotIncludes(commonJs, "if (!isMobileParticleViewport()) return;", "particle runtime should not ignore desktop reduced-motion changes");
 expectIncludes(blogPageCss, "opacity 0.3s ease", "blog cards should use shorter reveal transitions on mobile");
 expectIncludes(blogPageJs, 'window.scrollTo({ top: 0, behavior: "auto" });', "blog pagination should avoid smooth-scroll jank on mobile");
 expectIncludes(notionApiJs, "POSTS_RESPONSE_CACHE_TTL", "notion client should keep a short in-memory list cache for fast returns");
+expectIncludes(notionApiJs, "POST_SUMMARY_MEMORY_CACHE_LIMIT = 200", "notion client should bound browser-side post summary memory");
+expectIncludes(notionApiJs, "rememberPostSummaryInMemory", "notion client should centralize post summary memory LRU updates");
+expectIncludes(notionApiJs, "postSummaryMemoryCache.keys().next().value", "notion client should evict the oldest in-memory post summary");
 expectIncludes(notionContentJs, "IMAGE_PROXY_PATH", "shared notion content should proxy remote display images through the same-origin image endpoint");
 expectIncludes(apiImageJs, "IMAGE_PROXY_CACHE_CONTROL", "image proxy endpoint should cache successful image responses at the edge");
+expectIncludes(apiImageJs, 'readPositiveEnvNumber("IMAGE_PROXY_TIMEOUT_MS", 10_000)', "image proxy timeout should be configurable while keeping its default");
+expectIncludes(apiImageJs, 'readPositiveEnvNumber("IMAGE_PROXY_MAX_BYTES", 8 * 1024 * 1024)', "image proxy size limit should be configurable while keeping its default");
+expectIncludes(apiImageJs, 'readNonNegativeEnvInteger("IMAGE_PROXY_MAX_REDIRECTS", 4)', "image proxy redirect limit should be configurable while keeping its default");
 expectIncludes(packageJson, '"dev": "node scripts/local-server.mjs"', "package scripts should expose the local API-aware dev server");
 expectIncludes(packageJson, '"license": "MIT"', "package metadata should match the published README license");
+expectIncludes(readmeMd, "SITE_URL=https://your-domain.example", "README should use the same SITE_URL placeholder as .env.example");
+expectIncludes(readmeMd, "IMAGE_PROXY_TIMEOUT_MS=10000", "README should document image proxy timeout tuning");
+expectIncludes(readmeMd, "IMAGE_PROXY_MAX_BYTES=8388608", "README should document image proxy size tuning");
+expectIncludes(readmeMd, "IMAGE_PROXY_MAX_REDIRECTS=4", "README should document image proxy redirect tuning");
 expectIncludes(envExample, "whole configured Notion database is public", ".env.example should document database-wide public mode");
+expectIncludes(envExample, "IMAGE_PROXY_TIMEOUT_MS=10000", ".env.example should expose image proxy timeout tuning");
+expectIncludes(envExample, "IMAGE_PROXY_MAX_BYTES=8388608", ".env.example should expose image proxy size tuning");
+expectIncludes(envExample, "IMAGE_PROXY_MAX_REDIRECTS=4", ".env.example should expose image proxy redirect tuning");
 expectNotIncludes(envExample, "NOTION_PUBLIC_PROPERTY_NAMES", ".env.example should not encourage field-based public filtering");
 expectIncludes(licenseText, "MIT License", "repository should include the LICENSE file referenced by README.md");
+expectIncludes(kiroGitRules, "inclusion: always", "Kiro steering should always apply release commit rules");
+expectIncludes(kiroGitRules, "vMAJOR.MINOR", "Kiro steering should mirror the version-only release commit convention");
+expectIncludes(siteArchitectureMd, ".kiro/steering/git-rules.md", "architecture docs should point to the Kiro steering release rules");
+expectIncludes(siteArchitectureMd, "Do not add a catch-all `/api/*` `Cache-Control` header", "architecture docs should warn against API-wide cache headers");
+expectIncludes(siteArchitectureMd, "up to 200 post summaries in memory", "architecture docs should describe the bounded summary memory cache");
+expectIncludes(siteArchitectureMd, "`blog-page.js` owns the `hashchange` flow for `/blog.html#bookmarks`", "architecture docs should document hash-only bookmark routing ownership");
+expectIncludes(siteArchitectureMd, "`notion-content.js` renders Notion blocks through a `block.type` -> renderer registry", "architecture docs should describe the block renderer registry");
+expectIncludes(siteArchitectureMd, "`scripts/smoke-check.mjs` is the single `npm.cmd run check` entrypoint", "architecture docs should describe the smoke-check entrypoint");
+expectIncludes(siteArchitectureMd, "`image-proxy.mjs` for `/api/image`", "architecture docs should list focused smoke-check modules");
+expectNotIncludes(
+  siteArchitectureMd,
+  "Add conservative length caps for public `category` and `search` query inputs",
+  "architecture backlog should not list query length caps that are already implemented",
+);
+expectNotIncludes(
+  siteArchitectureMd,
+  "Bound the browser-side post summary memory maps",
+  "architecture backlog should not list the now-bounded browser-side summary maps",
+);
+expectNotIncludes(
+  siteArchitectureMd,
+  "Split `scripts/smoke-check.mjs` into focused test modules",
+  "architecture backlog should not list the now-split smoke check structure",
+);
+expectNotIncludes(
+  siteArchitectureMd,
+  "Convert the central `notion-content.js` block-type switch",
+  "architecture backlog should not list the now-registered block renderer structure",
+);
 expectIncludes(localServerJs, '["/api/image", require("../api/image.js")]', "local dev server should route the image proxy endpoint");
+expectIncludes(localServerJs, '[".webp", "image/webp"]', "local dev server should serve WebP images with the correct MIME type");
+expectIncludes(localServerJs, '[".jpg", "image/jpeg"]', "local dev server should serve JPEG images with the correct MIME type");
+expectIncludes(localServerJs, '[".jpeg", "image/jpeg"]', "local dev server should serve JPEG images with the correct MIME type");
+expectIncludes(localServerJs, '[".ico", "image/x-icon"]', "local dev server should serve icons with the correct MIME type");
+expectIncludes(localServerJs, '[".xml", "application/xml; charset=utf-8"]', "local dev server should serve XML with the correct MIME type");
+expectIncludes(localServerJs, '[".mjs", "application/javascript; charset=utf-8"]', "local dev server should serve ESM scripts with the correct MIME type");
 expectIncludes(localServerJs, "path.relative(rootDir, filePath)", "local dev server should validate static paths by relative containment");
 expectIncludes(localServerJs, "path.isAbsolute(relativePath)", "local dev server should reject absolute relative paths after static path resolution");
 expectIncludes(spaRouterJs, 'script[src]:not([data-spa-runtime])', "SPA router should skip shared runtime scripts via HTML metadata");
@@ -1005,6 +546,9 @@ expectIncludes(notionContentJs, "root.NotionContent", "shared notion content mod
 expectIncludes(notionContentJs, "module.exports = exported;", "shared notion content module should support CommonJS consumers");
 expectIncludes(notionContentJs, "function mapNotionPage", "shared notion content module should own notion page mapping");
 expectIncludes(notionContentJs, "function renderBlocks", "shared notion content module should own block rendering");
+expectIncludes(notionContentJs, "function createBlockRenderers", "shared notion content module should register block renderers by type");
+expectIncludes(notionContentJs, "const blockRenderers = createBlockRenderers()", "shared notion content module should keep renderer dispatch in a registry");
+expectNotIncludes(notionContentJs, "switch (block.type)", "shared notion content renderer should avoid a central block-type switch");
 expectIncludes(notionContentJs, "function renderPostArticle", "shared notion content module should own article-shell rendering for both SSR and CSR");
 expectIncludes(notionContentJs, "resolveDisplayImageUrl", "shared notion content module should expose a display-safe image resolver");
 expectIncludes(notionContentJs, 'const SAFE_IMAGE_PROTOCOLS = new Set(["https:"])', "shared notion content module should align external image URL policy with production CSP");
@@ -1067,7 +611,7 @@ assert.equal(
   "https://assets.example.com/cover.png?token=1",
   "shared notion content helpers should preserve the upstream remote image URL inside the proxy query",
 );
-notionBlockFixtures.forEach(runNotionBlockFixture);
+notionBlockFixtures.forEach((fixture) => runNotionBlockFixture(fixture, notionContentHelpers));
 const renderedArticleHtml = normalizeHtml(notionContentHelpers.renderPostArticle({
   title: "Shared shell",
   category: "Tech",
@@ -1313,464 +857,26 @@ function parseBookmarkListingHashMock(hash = "") {
 
 }
 const registeredPages = new Map();
-const blogFiltersEl = new FakeElement();
-const blogSearchEl = new FakeElement();
-const blogGridEl = new FakeElement();
-const blogEmptyEl = new FakeElement();
-const blogPaginationEl = new FakeElement();
-const blogStatusEl = new FakeElement();
-const blogTopActionsEl = new FakeElement();
-const blogPageTitleEl = new FakeElement();
-const topActionOverview = {
-  classList: createClassList(),
-  querySelector: (selector) => (selector === "span" ? { textContent: "鎬昏" } : null),
-};
-const topActionBookmark = {
-  classList: createClassList(),
-  querySelector: (selector) => (selector === "span" ? { textContent: "鏀惰棌" } : null),
-};
-const blogLocation = new URL("https://example.com/blog.html");
-const blogHistory = {
-  pushCalls: [],
-  replaceCalls: [],
-  pushState(state, title, nextUrl) {
-    this.pushCalls.push(String(nextUrl));
-    blogLocation.href = new URL(String(nextUrl), blogLocation.href).href;
-  },
-  replaceState(state, title, nextUrl) {
-    this.replaceCalls.push(String(nextUrl));
-    blogLocation.href = new URL(String(nextUrl), blogLocation.href).href;
-  },
-};
-loadBrowserScript("js/blog-page.js", {
-  window: {
-    location: blogLocation,
-    history: blogHistory,
-    scrollTo: () => {},
-    NotionAPI: {
-      escapeHtml: (value) => String(value ?? ""),
-      getCategoryColor: () => ({ bg: "#000", color: "#fff", border: "#222" }),
-      getCategories: () => [
-        { name: "All", emoji: "📚" },
-        { name: "Tech", emoji: "🧠" },
-        { name: "Bookmarks", emoji: "🔖" },
-      ],
-      getPageSize: () => 9,
-      queryPosts: async () => ({
-        results: [],
-        total: 0,
-        totalPages: 1,
-        currentPage: 1,
-      }),
-    },
-    PageRuntime: {
-      register(pageId, pageModule) {
-        registeredPages.set(pageId, pageModule);
-      },
-    },
-    SiteUtils: {
-      rememberBlogReturnUrl: () => {},
-      sanitizeCoverBackground: (value, fallback) => value || fallback,
-      resolveDisplayImageUrl: (value) => value,
-      sanitizeImageUrl: (value) => value,
-      buildPostPath: (postId) => `/posts/${postId}`,
-      buildBookmarkListingUrl: buildBookmarkListingUrlMock,
-      parseBookmarkListingHash: parseBookmarkListingHashMock,
-    },
-    updateSeoMeta: () => {},
-    initBlogCardReveal: () => null,
-    requestAnimationFrame: () => 1,
-    cancelAnimationFrame: () => {},
-  },
-  document: {
-    getElementById(id) {
-      return {
-        blogFilters: blogFiltersEl,
-        blogSearch: blogSearchEl,
-        blogGrid: blogGridEl,
-        emptyState: blogEmptyEl,
-        pagination: blogPaginationEl,
-        blogStatus: blogStatusEl,
-        topActions: blogTopActionsEl,
-      }[id] || null;
-    },
-    querySelector(selector) {
-      return selector === ".page-title" ? blogPageTitleEl : null;
-    },
-    querySelectorAll(selector) {
-      return selector === ".top-actions .action-btn"
-        ? [topActionOverview, topActionBookmark]
-        : [];
-    },
-    createElement() {
-      return new FakeElement();
-    },
-  },
+await runBlogPageChecks({
+  assert,
+  FakeElement,
+  buildBookmarkListingUrlMock,
+  createClassList,
+  createJsonResponse,
+  loadBrowserScript,
+  notionContentHelpers,
+  parseBookmarkListingHashMock,
+  registeredPages,
+  siteUtilsHarness,
 });
-const blogPageCleanup = registeredPages.get("blog")?.init?.();
-await Promise.resolve();
-const filterButton = {
-    dataset: { category: "Tech" },
-  closest(selector) {
-    return selector === ".filter-btn" ? this : null;
-  },
-};
-blogFiltersEl.dispatch("click", { target: filterButton });
-assert.equal(
-  blogHistory.pushCalls.at(-1),
-  "/blog.html?category=Tech",
-  "blog page should push filter state changes so browser back returns to the previous listing state",
-);
-blogSearchEl.value = "deep test";
-blogSearchEl.dispatch("input");
-await new Promise((resolve) => setTimeout(resolve, 350));
-assert.equal(
-  blogHistory.replaceCalls.at(-1),
-  "/blog.html?category=Tech&search=deep+test",
-  "blog page should replace the current history entry while live search text changes",
-);
-let didPreventOverviewNav = false;
-blogTopActionsEl.dispatch("click", {
-  target: {
-    href: "https://example.com/blog.html",
-    closest(selector) {
-      return selector === "a[href]" ? this : null;
-    },
-  },
-  preventDefault() {
-    didPreventOverviewNav = true;
-  },
+await runNotionApiClientChecks({
+  assert,
+  createJsonResponse,
+  createQuotaLimitedStorageMock,
+  ephemeralCoverImage,
+  loadBrowserScript,
+  notionContentHelpers,
 });
-assert.equal(
-  didPreventOverviewNav,
-  true,
-  "blog page should intercept same-listing top action navigation for smoother in-page transitions",
-);
-assert.equal(
-  blogHistory.pushCalls.at(-1),
-  "/blog.html",
-  "blog page should push overview navigation without falling back to native hash routing",
-);
-blogPageCleanup?.();
-const legacyBookmarkRegisteredPages = new Map();
-const legacyBookmarkFiltersEl = new FakeElement();
-const legacyBookmarkSearchEl = new FakeElement();
-const legacyBookmarkGridEl = new FakeElement();
-const legacyBookmarkEmptyEl = new FakeElement();
-const legacyBookmarkPaginationEl = new FakeElement();
-const legacyBookmarkStatusEl = new FakeElement();
-const legacyBookmarkTitleEl = new FakeElement();
-const legacyBookmarkOverviewAction = {
-  classList: createClassList(),
-  querySelector: (selector) => (selector === "span" ? { textContent: "鎬昏" } : null),
-};
-const legacyBookmarkAction = {
-  classList: createClassList(),
-  querySelector: (selector) => (selector === "span" ? { textContent: "鏀惰棌" } : null),
-};
-const legacyBookmarkLocation = new URL("https://example.com/blog.html?category=%E6%94%B6%E8%97%8F&search=Alpha&page=2");
-const legacyBookmarkHistory = {
-  pushCalls: [],
-  replaceCalls: [],
-  pushState(state, title, nextUrl) {
-    this.pushCalls.push(String(nextUrl));
-    legacyBookmarkLocation.href = new URL(String(nextUrl), legacyBookmarkLocation.href).href;
-  },
-  replaceState(state, title, nextUrl) {
-    this.replaceCalls.push(String(nextUrl));
-    legacyBookmarkLocation.href = new URL(String(nextUrl), legacyBookmarkLocation.href).href;
-  },
-};
-loadBrowserScript("js/blog-page.js", {
-  window: {
-    location: legacyBookmarkLocation,
-    history: legacyBookmarkHistory,
-    scrollTo: () => {},
-    NotionAPI: {
-      escapeHtml: (value) => String(value ?? ""),
-      getCategoryColor: () => ({ bg: "#000", color: "#fff", border: "#222" }),
-      getCategories: () => [
-        { name: "All", emoji: "📚" },
-        { name: "Tech", emoji: "🧠" },
-      ],
-      getPageSize: () => 9,
-      queryPosts: async () => ({
-        results: [],
-        total: 0,
-        totalPages: 1,
-        currentPage: 1,
-      }),
-    },
-    PageRuntime: {
-      register(pageId, pageModule) {
-        legacyBookmarkRegisteredPages.set(pageId, pageModule);
-      },
-    },
-    SiteUtils: {
-      rememberBlogReturnUrl: () => {},
-      sanitizeCoverBackground: (value, fallback) => value || fallback,
-      resolveShareImageUrl: (value) => value,
-      resolveDisplayImageUrl: (value) => value,
-      sanitizeImageUrl: (value) => value,
-      buildPostPath: (postId) => `/posts/${postId}`,
-      buildBookmarkListingUrl: buildBookmarkListingUrlMock,
-      parseBookmarkListingHash: parseBookmarkListingHashMock,
-    },
-    updateSeoMeta: () => {},
-    initBlogCardReveal: () => null,
-    requestAnimationFrame: () => 1,
-    cancelAnimationFrame: () => {},
-  },
-  document: {
-    getElementById(id) {
-      return {
-        blogFilters: legacyBookmarkFiltersEl,
-        blogSearch: legacyBookmarkSearchEl,
-        blogGrid: legacyBookmarkGridEl,
-        emptyState: legacyBookmarkEmptyEl,
-        pagination: legacyBookmarkPaginationEl,
-        blogStatus: legacyBookmarkStatusEl,
-      }[id] || null;
-    },
-    querySelector(selector) {
-      return selector === ".page-title" ? legacyBookmarkTitleEl : null;
-    },
-    querySelectorAll(selector) {
-      return selector === ".top-actions .action-btn"
-        ? [legacyBookmarkOverviewAction, legacyBookmarkAction]
-        : [];
-    },
-    createElement() {
-      return new FakeElement();
-    },
-  },
-});
-const legacyBookmarkCleanup = legacyBookmarkRegisteredPages.get("blog")?.init?.();
-await Promise.resolve();
-assert.equal(
-  legacyBookmarkHistory.replaceCalls.at(0),
-  "/blog.html#bookmarks?search=Alpha&page=2",
-  "blog page should normalize legacy bookmark query routes onto the hash-only bookmark view URL",
-);
-legacyBookmarkCleanup?.();
-const bookmarkHashRegisteredPages = new Map();
-const bookmarkHashFiltersEl = new FakeElement();
-const bookmarkHashSearchEl = new FakeElement();
-const bookmarkHashGridEl = new FakeElement();
-const bookmarkHashEmptyEl = new FakeElement();
-const bookmarkHashPaginationEl = new FakeElement();
-const bookmarkHashStatusEl = new FakeElement();
-const bookmarkHashTitleEl = new FakeElement();
-const bookmarkHashHandlers = new Set();
-const bookmarkHashOverviewAction = {
-  classList: createClassList(),
-  querySelector: (selector) => (selector === "span" ? { textContent: "鎬昏" } : null),
-};
-const bookmarkHashAction = {
-  classList: createClassList(),
-  querySelector: (selector) => (selector === "span" ? { textContent: "鏀惰棌" } : null),
-};
-const bookmarkHashLocation = new URL("https://example.com/blog.html#bookmarks?search=TypeScript%20%20Testing&page=3");
-const bookmarkHashHistory = {
-  pushCalls: [],
-  replaceCalls: [],
-  pushState(state, title, nextUrl) {
-    this.pushCalls.push(String(nextUrl));
-    bookmarkHashLocation.href = new URL(String(nextUrl), bookmarkHashLocation.href).href;
-  },
-  replaceState(state, title, nextUrl) {
-    this.replaceCalls.push(String(nextUrl));
-    bookmarkHashLocation.href = new URL(String(nextUrl), bookmarkHashLocation.href).href;
-  },
-};
-loadBrowserScript("js/blog-page.js", {
-  window: {
-    location: bookmarkHashLocation,
-    history: bookmarkHashHistory,
-    scrollTo: () => {},
-    BookmarkManager: {
-      getAll: () => [{
-        id: "bookmark-hit",
-        title: "Bookmark hit",
-        excerpt: "Local only",
-        category: "",
-        date: "",
-        readTime: "",
-        coverImage: null,
-        coverEmoji: "馃摑",
-        coverGradient: "linear-gradient(135deg, #111111, #222222)",
-        tags: ["TypeScript", "Testing"],
-      }],
-      isBookmarked: () => true,
-      toggleById: () => true,
-      hasLegacyMetadata: () => false,
-    },
-    PageRuntime: {
-      register(pageId, pageModule) {
-        bookmarkHashRegisteredPages.set(pageId, pageModule);
-      },
-    },
-    SiteUtils: {
-      rememberBlogReturnUrl: () => {},
-      sanitizeCoverBackground: (value, fallback) => value || fallback,
-      resolveShareImageUrl: (value) => value,
-      resolveDisplayImageUrl: (value) => value,
-      sanitizeImageUrl: (value) => value,
-      buildPostPath: (postId) => `/posts/${postId}`,
-    },
-    updateSeoMeta: () => {},
-    initBlogCardReveal: () => null,
-    requestAnimationFrame: () => 1,
-    cancelAnimationFrame: () => {},
-    addEventListener(type, handler) {
-      if (type === "hashchange") {
-        bookmarkHashHandlers.add(handler);
-      }
-    },
-    removeEventListener(type, handler) {
-      if (type === "hashchange") {
-        bookmarkHashHandlers.delete(handler);
-      }
-    },
-  },
-  document: {
-    getElementById(id) {
-      return {
-        blogFilters: bookmarkHashFiltersEl,
-        blogSearch: bookmarkHashSearchEl,
-        blogGrid: bookmarkHashGridEl,
-        emptyState: bookmarkHashEmptyEl,
-        pagination: bookmarkHashPaginationEl,
-        blogStatus: bookmarkHashStatusEl,
-      }[id] || null;
-    },
-    querySelector(selector) {
-      return selector === ".page-title" ? bookmarkHashTitleEl : null;
-    },
-    querySelectorAll(selector) {
-      return selector === ".top-actions .action-btn"
-        ? [bookmarkHashOverviewAction, bookmarkHashAction]
-        : [];
-    },
-    createElement() {
-      return new FakeElement();
-    },
-  },
-});
-const bookmarkHashCleanup = bookmarkHashRegisteredPages.get("blog")?.init?.();
-await Promise.resolve();
-assert.equal(
-  bookmarkHashHistory.replaceCalls.at(0),
-  "/blog.html#bookmarks?search=TypeScript++Testing&page=3",
-  "blog page should preserve bookmark search and page params when it falls back to its local bookmark hash URL builder",
-);
-assert.ok(
-  bookmarkHashGridEl.innerHTML.includes("Bookmark hit"),
-  "blog page should keep bookmark search matches when the query contains extra whitespace",
-);
-bookmarkHashLocation.hash = "";
-bookmarkHashHandlers.forEach((handler) => handler());
-assert.equal(
-  bookmarkHashHistory.replaceCalls.at(-1),
-  "/blog.html#bookmarks?search=TypeScript++Testing",
-  "blog page should keep the local bookmark view pinned to the bookmark hash route when the remote source is unavailable",
-);
-bookmarkHashCleanup?.();
-const staleSessionSummaryKey = "notion_post_summary_stale";
-const quotaSessionStorage = createQuotaLimitedStorageMock({
-  initialEntries: {
-    [staleSessionSummaryKey]: JSON.stringify({
-      timestamp: Date.now() - 1000 * 60 * 60,
-      data: {
-        id: "stale-post",
-        title: "Stale post",
-        excerpt: "x".repeat(240),
-      },
-    }),
-  },
-  maxChars: 760,
-});
-let notionApiFetchCount = 0;
-const notionApiHarness = loadBrowserScript("js/notion-api.js", {
-  window: {
-    location: new URL("https://example.com/blog.html"),
-    NotionContent: notionContentHelpers,
-  },
-  sessionStorage: quotaSessionStorage,
-  fetch: async (url) => {
-    notionApiFetchCount += 1;
-    assert.equal(
-      String(url),
-      "/api/post-data?id=session-post-1",
-      "notion client should request the semantic post data endpoint for detail fetches",
-    );
-
-    return createJsonResponse({
-      id: "session-post-1",
-      title: "Session cached title",
-      excerpt: "Session cached excerpt",
-      category: "Tech",
-      date: "2026-04-17",
-      readTime: "5 min",
-      coverImage: `${ephemeralCoverImage}&padding=${"x".repeat(360)}`,
-      coverEmoji: "馃И",
-      coverGradient: "linear-gradient(135deg, #111111, #222222)",
-      tags: ["Alpha", "Beta", "Gamma"],
-      content: [],
-    });
-  },
-});
-const notionApiFetchedPost = await notionApiHarness.window.NotionAPI.getPost("session-post-1");
-assert.equal(
-  notionApiFetchCount,
-  1,
-  "notion client should issue exactly one network request for the uncached post detail",
-);
-assert.equal(
-  notionApiFetchedPost.id,
-  "session-post-1",
-  "notion client should still return the fetched post payload after compacting the summary cache entry",
-);
-const storedSessionSummaryRaw = quotaSessionStorage.getItem("notion_post_summary_session-post-1");
-assert.ok(
-  storedSessionSummaryRaw,
-  "notion client should persist a compacted post summary entry even when sessionStorage quota is tight",
-);
-const storedSessionSummary = JSON.parse(storedSessionSummaryRaw);
-assert.equal(
-  storedSessionSummary.data.coverImage,
-  null,
-  "notion client should drop session cover URLs when they are likely ephemeral or overly large",
-);
-assert.ok(
-  !Object.prototype.hasOwnProperty.call(storedSessionSummary.data, "_searchText"),
-  "notion client should avoid storing derived search text in the persisted session summary payload",
-);
-assert.equal(
-  quotaSessionStorage.getItem(staleSessionSummaryKey),
-  null,
-  "notion client should clear expired session summary entries before evicting fresher data under quota pressure",
-);
-const notionApiSessionReloadHarness = loadBrowserScript("js/notion-api.js", {
-  window: {
-    location: new URL("https://example.com/blog.html"),
-    NotionContent: notionContentHelpers,
-  },
-  sessionStorage: quotaSessionStorage,
-  fetch: async () => {
-    throw new Error("Unexpected network request while reading a persisted post summary");
-  },
-});
-const restoredSessionSummary = notionApiSessionReloadHarness.window.NotionAPI.getPostSummary("session-post-1");
-assert.equal(
-  restoredSessionSummary?.title,
-  "Session cached title",
-  "notion client should restore compacted session summaries without re-fetching the post detail",
-);
-assert.ok(
-  restoredSessionSummary?._searchText?.includes("alpha"),
-  "notion client should rebuild derived search text when reading a compacted summary back from sessionStorage",
-);
 expectIncludes(notionApiJs, "createRequestError", "notion client should preserve HTTP status metadata on failures");
 expectIncludes(notionApiJs, "error.status = Number(status);", "notion client should attach status codes to request errors");
 expectIncludes(notionApiJs, 'postsEndpoint: "/api/posts-data"', "notion client should load post listings from the semantic endpoint");
@@ -1823,12 +929,17 @@ expectIncludes(postPageJs, "notionApi.renderPostArticle(post)", "post page shoul
 expectIncludes(postPageJs, "siteUtils.getPreferredBlogReturnUrl", "post page back navigation should restore the preferred blog listing route");
 expectIncludes(postPageJs, "nowBookmarked === null", "post page should leave bookmark UI unchanged when persistence fails");
 expectIncludes(postPageJs, "isMissingPostError", "post page should distinguish not-found posts from temporary failures");
+expectIncludes(postPageJs, "return Number(error?.status) === 404;", "post page should trust the server's HTTP status for missing-post classification");
+expectNotIncludes(postPageJs, 'error?.notionCode === "validation_error"', "post page should leave Notion-specific missing-post classification to the server");
 expectIncludes(postPageJs, "showEmpty(isMissingPostError(error) ? \"not-found\" : \"unavailable\")", "post page should map 404-like errors to the not-found empty state");
 expectIncludes(postPageJs, "收藏失败，请稍后重试", "post page should announce bookmark persistence failures");
 expectIncludes(postPageJs, "hasServerRenderedContent", "post page should detect pre-rendered article content");
 expectIncludes(postPageJs, "showServerRenderedFallback", "post page should preserve server-rendered content when NotionAPI is unavailable");
+expectIncludes(postPageJs, 'console.warn("NotionAPI is unavailable on post page.")', "post page should report SSR fallback as a warning instead of an error");
+expectNotIncludes(postPageJs, 'console.error("NotionAPI is unavailable on post page.")', "post page should not write expected SSR fallback to stderr as an error");
 expectIncludes(postPageJs, "canBookmarkFromInitialData", "post page should recover bookmark controls from SSR initial data when the client API is unavailable");
 expectIncludes(postPageJs, "initBookmark(initialPostData);", "post page should still wire bookmark controls from SSR summary data in fallback mode");
+expectIncludes(postPageJs, 'element.style.display = mobileNavQuery.matches ? "none" : "flex";', "post page should hide the floating bookmark control on mobile through JavaScript state");
 assert.ok(
   postPageJs.indexOf("const postId = getCurrentPostId();") < postPageJs.indexOf('if (!notionApi)'),
   "post page should initialize route state before the NotionAPI fallback branch runs",
@@ -1872,6 +983,7 @@ initialPostDataScriptEl.textContent = JSON.stringify({
   coverGradient: "linear-gradient(135deg, #111111, #222222)",
   tags: ["TypeScript"],
 });
+const fallbackWarnings = [];
 loadBrowserScript("js/post-page.js", {
   window: {
     location: new URL("https://example.com/posts/post-1"),
@@ -1914,11 +1026,22 @@ loadBrowserScript("js/post-page.js", {
     },
   },
   globals: {
+    console: {
+      ...console,
+      warn(message, ...args) {
+        fallbackWarnings.push([message, ...args]);
+      },
+    },
     HTMLScriptElement: FakeScriptElement,
   },
 });
 const postPageCleanup = registeredPostPages.get("post")?.init?.();
 await Promise.resolve();
+assert.deepEqual(
+  fallbackWarnings,
+  [["NotionAPI is unavailable on post page."]],
+  "post page should report the expected SSR fallback warning without writing to stderr during smoke checks",
+);
 assert.equal(
   fabBookmarkEl.style.display,
   "flex",
@@ -1943,6 +1066,7 @@ expectIncludes(apiPostJs, "postContent:fallback", "article HTML route should fal
 expectIncludes(apiPostJs, '"Cache-Control", "no-store"', "article HTML route should not cache public post responses");
 expectIncludes(apiPostJs, "replaceMarkup(", "article HTML route should use literal-safe SSR replacements for dynamic content");
 expectIncludes(apiPostJs, "upsertHeadMarkup", "article HTML route should centralize head-tag insertion and replacement");
+expectNotIncludes(apiPostJs, "result !== html", "article HTML route should track replacement matches explicitly instead of comparing final strings");
 expectIncludes(apiPostJs, "resolveShareImageUrl(post.coverImage, defaultShareImageUrl, siteOrigin)", "article HTML route should resolve og:image against the site origin consistently");
 expectIncludes(apiPostJs, "../server/security-policy", "article HTML route should reuse the shared security policy builder");
 expectIncludes(apiPostJs, "createCspNonce", "article HTML route should use per-request nonces for inline JSON data");
@@ -2154,990 +1278,41 @@ assert.equal(postDataMethodNotAllowedRes.getHeader("cache-control"), "no-store",
 const postDataHeadRes = createApiResponseRecorder();
 await apiPostDataHandler({ method: "HEAD", query: { id: "post-1" } }, postDataHeadRes);
 assert.equal(postDataHeadRes.statusCode, 405, "post data endpoint should reject HEAD without loading the post detail tree");
-expectIncludes(apiImageJs, "IMAGE_PROXY_MAX_BYTES", "image proxy endpoint should bound upstream image size");
-expectIncludes(apiImageJs, "isBlockedImageHost", "image proxy endpoint should reject local and private upstream hosts");
-expectIncludes(apiImageJs, "resolvePublicImageHost", "image proxy endpoint should reject hosts that resolve to private addresses");
-expectIncludes(apiImageJs, "__IMAGE_PROXY_HTTPS_REQUEST__", "image proxy endpoint should bind checked DNS answers to the upstream request");
-expectIncludes(apiImageJs, "lookup(hostname, options, callback)", "image proxy endpoint should use a pinned lookup for the validated upstream host");
-expectIncludes(apiImageJs, "BLOCKED_IMAGE_CONTENT_TYPES", "image proxy endpoint should reject active image formats such as SVG");
-expectIncludes(apiImageJs, "X-Content-Type-Options", "image proxy endpoint should prevent content-type sniffing");
-let imageProxyFetchUrl = "";
-let imageProxyLookupAddress = "";
-const fakeImageBody = Buffer.from("png");
-const successfulImageProxyHandler = loadCommonJsModule("api/image.js", [], {
-  __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
-  __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
-    body: fakeImageBody,
-    headers: {
-      "content-type": "image/png",
-      "content-length": String(fakeImageBody.byteLength),
-    },
-    onRequest(url, options) {
-      imageProxyFetchUrl = String(url);
-      assert.equal(typeof options.lookup, "function", "image proxy endpoint should pin the validated DNS address");
-      options.lookup("assets.example.com", {}, (error, address, family) => {
-        assert.equal(error, null);
-        imageProxyLookupAddress = address;
-        assert.equal(family, 4, "image proxy endpoint should preserve the resolved IP family");
-      });
-    },
-  }),
+await runImageProxyChecks({
+  assert,
+  Buffer,
+  apiImageHandler,
+  apiImageJs,
+  createApiResponseRecorder,
+  createImageRequestMock,
+  expectIncludes,
+  imageProxyDefaultConfig,
+  loadCommonJsModule,
+  publicImageDnsLookup,
+  withEnvOverrides,
 });
-const imageProxySuccessRes = createApiResponseRecorder();
-await successfulImageProxyHandler({
-  method: "GET",
-  query: { src: "https://assets.example.com/cover.png" },
-}, imageProxySuccessRes);
-assert.equal(imageProxySuccessRes.statusCode, 200, "image proxy endpoint should return proxied images");
-assert.equal(imageProxyFetchUrl, "https://assets.example.com/cover.png", "image proxy endpoint should fetch the normalized upstream image URL");
-assert.equal(imageProxyLookupAddress, "93.184.216.34", "image proxy endpoint should connect to the DNS answer it already validated");
-assert.equal(imageProxySuccessRes.getHeader("content-type"), "image/png", "image proxy endpoint should preserve upstream image content type");
-assert.ok(
-  imageProxySuccessRes.getHeader("cache-control")?.includes("s-maxage=604800"),
-  "image proxy endpoint should make successful images edge-cacheable",
-);
-assert.ok(Buffer.isBuffer(imageProxySuccessRes.textBody), "image proxy endpoint should send a binary image buffer");
-const svgImageProxyHandler = loadCommonJsModule("api/image.js", [], {
-  __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
-  __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
-    body: Buffer.from("<svg></svg>"),
-    headers: {
-      "content-type": "image/svg+xml; charset=utf-8",
-      "content-length": "11",
-    },
-  }),
+await runPublicContentAndNotionChecks({
+  assert,
+  blogPageJs,
+  createJsonResponse,
+  expectIncludes,
+  expectNotIncludes,
+  loadCommonJsModule,
+  publicContentHelpers,
+  publicContentJs,
+  readmeMd,
+  serverNotionHelpers,
+  serverNotionJs,
+  withEnvOverrides,
 });
-const imageProxySvgRes = createApiResponseRecorder();
-await svgImageProxyHandler({
-  method: "GET",
-  query: { src: "https://assets.example.com/active.svg" },
-}, imageProxySvgRes);
-assert.equal(imageProxySvgRes.statusCode, 415, "image proxy endpoint should reject active SVG images");
-assert.equal(imageProxySvgRes.getHeader("cache-control"), "no-store", "rejected SVG proxy responses should not be cached");
-let blockedImageProxyFetchCount = 0;
-const blockedImageProxyHandler = loadCommonJsModule("api/image.js", [], {
-  __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
-  __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
-    onRequest() {
-      blockedImageProxyFetchCount += 1;
-      throw new Error("Blocked image URL should not be fetched");
-    },
-  }),
+await runRoutingAndVercelChecks({
+  assert,
+  apiNotionHandler,
+  apiNotionJs,
+  apiSitemapJs,
+  createApiResponseRecorder,
+  expectIncludes,
+  expectNotIncludes,
+  vercelJson,
 });
-const imageProxyBlockedRes = createApiResponseRecorder();
-await blockedImageProxyHandler({
-  method: "GET",
-  query: { src: "https://127.0.0.1/private.png" },
-}, imageProxyBlockedRes);
-assert.equal(imageProxyBlockedRes.statusCode, 400, "image proxy endpoint should reject private upstream hosts");
-assert.equal(blockedImageProxyFetchCount, 0, "image proxy endpoint should reject private hosts before fetching");
-const imageProxyBlockedIpv6Res = createApiResponseRecorder();
-await blockedImageProxyHandler({
-  method: "GET",
-  query: { src: "https://[::1]/private.png" },
-}, imageProxyBlockedIpv6Res);
-assert.equal(imageProxyBlockedIpv6Res.statusCode, 400, "image proxy endpoint should reject IPv6 loopback upstream hosts");
-assert.equal(blockedImageProxyFetchCount, 0, "image proxy endpoint should reject blocked IPv6 hosts before fetching");
-const imageProxyBlockedMappedIpv6Res = createApiResponseRecorder();
-await blockedImageProxyHandler({
-  method: "GET",
-  query: { src: "https://[::ffff:127.0.0.1]/private.png" },
-}, imageProxyBlockedMappedIpv6Res);
-assert.equal(imageProxyBlockedMappedIpv6Res.statusCode, 400, "image proxy endpoint should reject IPv4-mapped IPv6 upstream hosts");
-assert.equal(blockedImageProxyFetchCount, 0, "image proxy endpoint should reject blocked IPv4-mapped IPv6 hosts before fetching");
-const dnsBlockedImageProxyHandler = loadCommonJsModule("api/image.js", [], {
-  __IMAGE_PROXY_DNS_LOOKUP__: async () => [{ address: "10.0.0.8", family: 4 }],
-  __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
-    onRequest() {
-      throw new Error("DNS-blocked image URL should not be fetched");
-    },
-  }),
-});
-const imageProxyDnsBlockedRes = createApiResponseRecorder();
-await dnsBlockedImageProxyHandler({
-  method: "GET",
-  query: { src: "https://assets.example.com/private.png" },
-}, imageProxyDnsBlockedRes);
-assert.equal(imageProxyDnsBlockedRes.statusCode, 400, "image proxy endpoint should reject upstream hosts whose DNS resolves to private addresses");
-const mappedDnsBlockedImageProxyHandler = loadCommonJsModule("api/image.js", [], {
-  __IMAGE_PROXY_DNS_LOOKUP__: async () => [{ address: "::ffff:10.0.0.8", family: 6 }],
-  __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
-    onRequest() {
-      throw new Error("DNS-blocked IPv4-mapped image URL should not be fetched");
-    },
-  }),
-});
-const imageProxyMappedDnsBlockedRes = createApiResponseRecorder();
-await mappedDnsBlockedImageProxyHandler({
-  method: "GET",
-  query: { src: "https://assets.example.com/private.png" },
-}, imageProxyMappedDnsBlockedRes);
-assert.equal(imageProxyMappedDnsBlockedRes.statusCode, 400, "image proxy endpoint should reject DNS answers with private IPv4 embedded in IPv6");
-let redirectImageProxyFetchCount = 0;
-const redirectBlockedImageProxyHandler = loadCommonJsModule("api/image.js", [], {
-  __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
-  __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
-    status: 302,
-    headers: {
-      location: "https://[::1]/private.png",
-    },
-    onRequest() {
-      redirectImageProxyFetchCount += 1;
-    },
-  }),
-});
-const imageProxyRedirectBlockedRes = createApiResponseRecorder();
-await redirectBlockedImageProxyHandler({
-  method: "GET",
-  query: { src: "https://assets.example.com/redirect.png" },
-}, imageProxyRedirectBlockedRes);
-assert.equal(imageProxyRedirectBlockedRes.statusCode, 400, "image proxy endpoint should reject redirects to blocked hosts");
-assert.equal(redirectImageProxyFetchCount, 1, "image proxy endpoint should stop before fetching a blocked redirect target");
-const imageProxyMethodRes = createApiResponseRecorder();
-await apiImageHandler({ method: "POST", query: { src: "https://assets.example.com/cover.png" } }, imageProxyMethodRes);
-assert.equal(imageProxyMethodRes.statusCode, 405, "image proxy endpoint should reject unsupported methods");
-expectIncludes(publicContentJs, "getPublicPostErrorStatus", "public content helper should centralize post error mapping");
-expectNotIncludes(publicContentJs, "notion_public_config_error", "public content helper should not keep field-based public access errors in database-wide public mode");
-expectNotIncludes(blogPageJs, "公开字段或发布状态", "blog frontend should not suggest field-based public publishing in database-wide public mode");
-expectNotIncludes(readmeMd, "发布状态改为", "README should not describe status-field publishing in database-wide public mode");
-expectIncludes(publicContentJs, "notion_timeout_error", "public content helper should preserve upstream timeout status");
-expectIncludes(publicContentJs, "Retry-After", "public content helper should preserve retry guidance for upstream rate limits");
-expectIncludes(publicContentJs, "restricted_resource", "public content helper should classify upstream Notion permission failures as server-side integration faults");
-expectIncludes(publicContentJs, "object_not_found", "public content helper should classify missing upstream Notion objects as configuration faults");
-expectIncludes(publicContentJs, "resourceType", "public content helper should distinguish database and page Notion errors");
-assert.equal(
-  publicContentHelpers.getPublicContentErrorStatus({
-    status: 429,
-    notionCode: "rate_limited",
-  }),
-  429,
-  "public content helper should preserve Notion rate-limit responses as HTTP 429",
-);
-assert.equal(
-  publicContentHelpers.getPublicContentErrorStatus({
-    status: 401,
-    notionCode: "unauthorized",
-  }),
-  500,
-  "public content helper should treat upstream auth failures as a stable server-side configuration error",
-);
-assert.equal(
-  publicContentHelpers.getPublicContentErrorStatus({
-    status: 403,
-    notionCode: "restricted_resource",
-  }),
-  500,
-  "public content helper should treat upstream permission failures as a stable server-side configuration error",
-);
-assert.equal(
-  publicContentHelpers.getPublicContentErrorStatus({
-    status: 404,
-    notionCode: "object_not_found",
-  }),
-  500,
-  "public content helper should treat missing upstream Notion objects as a stable server-side configuration error",
-);
-assert.equal(
-  publicContentHelpers.getPublicPostErrorStatus({
-    status: 404,
-    notionCode: "object_not_found",
-    resourceType: "database",
-    detail: "Could not find database with ID: test-database",
-  }),
-  500,
-  "public post helper should treat missing database metadata as a server-side configuration error",
-);
-assert.equal(
-  publicContentHelpers.getPublicPostErrorStatus({
-    status: 400,
-    notionCode: "validation_error",
-    resourceType: "database",
-    detail: "path failed validation: path.database_id should be a valid uuid",
-  }),
-  500,
-  "public post helper should treat invalid database ids as server-side configuration errors",
-);
-assert.equal(
-  publicContentHelpers.getPublicPostErrorStatus({
-    status: 404,
-    notionCode: "object_not_found",
-    resourceType: "page",
-    detail: "Could not find page with ID: missing-post",
-  }),
-  404,
-  "public post helper should keep missing Notion pages as article-not-found responses",
-);
-assert.equal(
-  publicContentHelpers.getPublicPostErrorStatus({
-    status: 400,
-    notionCode: "validation_error",
-    resourceType: "page",
-  }),
-  404,
-  "public post helper should keep invalid route page ids as article-not-found responses",
-);
-const publicErrorHeaders = [];
-publicContentHelpers.applyPublicErrorHeaders({
-  setHeader(name, value) {
-    publicErrorHeaders.push([name, value]);
-  },
-}, {
-  retryAfter: "30",
-});
-assert.equal(
-  JSON.stringify(publicErrorHeaders),
-  JSON.stringify([["Retry-After", "30"]]),
-  "public content helper should forward Retry-After headers for rate-limited upstream responses",
-);
-const sanitizedPublicError = publicContentHelpers.serializePublicError({
-  code: "notion_config_error",
-  notionCode: "object_not_found",
-  detail: "Could not find database with ID: secret-database-id",
-}, "Post list unavailable");
-assert.equal(
-  Object.prototype.hasOwnProperty.call(sanitizedPublicError, "detail"),
-  false,
-  "public content helper should not expose upstream error details by default",
-);
-expectIncludes(serverNotionJs, "queryPublicPages", "server notion layer should expose a filtered public page query helper");
-expectIncludes(serverNotionJs, "queryPublicPosts", "server notion layer should provide a public post query helper");
-expectIncludes(serverNotionJs, "getNotionResourceType", "server notion layer should annotate upstream errors with the Notion resource type");
-expectIncludes(serverNotionJs, "PUBLIC_PAGE_SUMMARY_CACHE_TTL_MS", "server notion layer should define a short-lived public summary cache");
-expectIncludes(serverNotionJs, "buildContentSchema", "server notion layer should derive content property mappings from database metadata");
-expectIncludes(serverNotionJs, "buildDatabaseSorts", "server notion layer should derive list sorting from the resolved schema");
-expectIncludes(serverNotionJs, "normalizePostQueryFilters", "server notion layer should normalize category and search inputs before querying");
-expectIncludes(serverNotionJs, "PUBLIC_SEARCH_QUERY_MAX_LENGTH", "server notion layer should cap public search query input length");
-expectIncludes(serverNotionJs, "hasPostQueryFilters", "server notion layer should detect when filtered queries need extra work");
-expectIncludes(serverNotionJs, "NOTION_REQUEST_TIMEOUT_MS", "server notion layer should define a request timeout for upstream calls");
-expectIncludes(serverNotionJs, "AbortController", "server notion layer should abort slow Notion requests");
-expectIncludes(serverNotionJs, "runWithBlockChildConcurrency", "server notion layer should limit recursive block child fetch concurrency");
-expectIncludes(serverNotionJs, "buildDatabaseWidePublicAccessPolicy", "server notion layer should keep v2.5-compatible database-wide public mode");
-expectNotIncludes(serverNotionJs, "findPropertyEntriesByCandidates", "server notion layer should not inspect public visibility properties in database-wide public mode");
-expectNotIncludes(serverNotionJs, "NOTION_PUBLIC_PROPERTY_NAME", "server notion layer should ignore public visibility property env vars in database-wide public mode");
-expectNotIncludes(serverNotionJs, "NOTION_PUBLIC_STATUS_VALUES", "server notion layer should ignore public status env vars in database-wide public mode");
-expectNotIncludes(serverNotionJs, "NOTION_ALLOW_DATABASE_WIDE_PUBLIC_ACCESS", "server notion layer should not require opt-in for database-wide public mode");
-expectIncludes(serverNotionJs, 'require("../js/notion-content")', "server notion layer should reuse the shared notion content helpers");
-expectIncludes(serverNotionJs, "buildSharedArticleStructuredData", "server notion layer should delegate article structured data to the shared content helper");
-expectIncludes(serverNotionJs, "resolveNotionContentSchema", "server notion layer should resolve renamed content properties from database metadata");
-expectIncludes(serverNotionJs, "renderPostContent", "server notion layer should render SSR post HTML without duplicating it in API payloads");
-expectNotIncludes(serverNotionJs, "buildSearchFilter", "server notion layer should not delegate search semantics to upstream filters that behave differently from local search");
-expectNotIncludes(serverNotionJs, 'category === "閸忋劑鍎?', "server notion layer should not compare against a mojibake category label");
-const resolvedContentSchema = serverNotionHelpers.buildContentSchema({
-  properties: {
-    Title: { id: "title", name: "Title", type: "title" },
-    Summary: { id: "excerpt", name: "Summary", type: "rich_text" },
-    Category: { id: "category", name: "Category", type: "select" },
-    "Published At": { id: "date", name: "Published At", type: "date" },
-  },
-});
-assert.equal(
-  resolvedContentSchema.title?.name,
-  "Title",
-  "server notion layer should resolve renamed content properties from database metadata",
-);
-assert.equal(
-  JSON.stringify(serverNotionHelpers.buildDatabaseSorts(resolvedContentSchema)),
-  JSON.stringify([{
-    property: "Published At",
-    direction: "descending",
-  }]),
-  "server notion layer should sort by the resolved date property instead of a hardcoded field name",
-);
-assert.equal(
-  JSON.stringify(serverNotionHelpers.buildCategoryFilter("Tech", {
-    category: { name: "Category", type: "select" },
-  })),
-  JSON.stringify({
-    property: "Category",
-    select: { equals: "Tech" },
-  }),
-  "category prefilter should only be emitted when the Notion schema still matches the expected select field",
-);
-assert.equal(
-  serverNotionHelpers.buildCategoryFilter("Tech", {
-    category: { name: "Category", type: "multi_select" },
-  }),
-  null,
-  "category prefilter should disable itself instead of breaking requests when the Notion schema drifts",
-);
-const databaseWideDefaultPublicAccessPolicy = withEnvOverrides({}, () => serverNotionHelpers.buildPublicAccessPolicyFromDatabase({
-  properties: {
-    Published: {
-      id: "published-date",
-      name: "Published",
-      type: "date",
-    },
-    Status: {
-      id: "status",
-      name: "Status",
-      type: "status",
-      status: {
-        options: [
-          { id: "draft", name: "Draft" },
-          { id: "published", name: "Published" },
-        ],
-      },
-    },
-  },
-}));
-assert.equal(
-  databaseWideDefaultPublicAccessPolicy.propertyType,
-  "database",
-  "server notion layer should default to database-wide public mode when no public visibility field is explicitly configured",
-);
-assert.equal(
-  databaseWideDefaultPublicAccessPolicy.filter,
-  null,
-  "database-wide public mode should not emit a Notion visibility filter",
-);
-const databaseWideWithIgnoredPublicEnvPolicy = withEnvOverrides({
-  NOTION_PUBLIC_PROPERTY_NAME: "MissingPublicFlag",
-  NOTION_PUBLIC_PROPERTY_NAMES: "Status,Public,发布状态",
-  NOTION_PUBLIC_STATUS_VALUES: "Published,Public,Live",
-}, () => serverNotionHelpers.buildPublicAccessPolicyFromDatabase({
-  properties: {
-    Workflow: {
-      id: "workflow",
-      name: "Workflow",
-      type: "status",
-    },
-  },
-}));
-assert.equal(
-  databaseWideWithIgnoredPublicEnvPolicy.propertyType,
-  "database",
-  "server notion layer should keep exposing the configured database even if legacy public env vars are set",
-);
-assert.equal(
-  databaseWideWithIgnoredPublicEnvPolicy.filter,
-  null,
-  "database-wide public mode should ignore legacy public env vars and avoid Notion visibility filters",
-);
-assert.equal(
-  serverNotionHelpers.filterPostsBySearch([
-    { title: "", excerpt: "", tags: ["TypeScript"] },
-    { title: "Other", excerpt: "", tags: ["Docs"] },
-  ], "script").length,
-  1,
-  "local post search should preserve substring matches for tag text",
-);
-const boundedPostQueryFilters = serverNotionHelpers.normalizePostQueryFilters({
-  category: ` ${"c".repeat(180)} `,
-  search: ` ${"s".repeat(320)} `,
-});
-assert.equal(
-  boundedPostQueryFilters.category.length,
-  128,
-  "server notion layer should cap category query input length before caching and filtering",
-);
-assert.equal(
-  boundedPostQueryFilters.search.length,
-  256,
-  "server notion layer should cap search query input length before caching and filtering",
-);
-const builtPostPayload = serverNotionHelpers.buildPostPayload(
-  {
-    id: "post-1",
-    title: "Payload title",
-    excerpt: "Payload excerpt",
-    category: "Tech",
-    date: "2026-04-11",
-    readTime: "5 min",
-    tags: [],
-  },
-  [{
-    type: "paragraph",
-    paragraph: {
-      rich_text: [{ plain_text: "Server rendered body" }],
-    },
-  }],
-);
-assert.ok(
-  Array.isArray(builtPostPayload.content) && !("renderedContent" in builtPostPayload),
-  "server notion layer should return structured post content without duplicating rendered HTML in the payload",
-);
-assert.equal(
-  serverNotionHelpers.renderPostContent(builtPostPayload, { baseOrigin: "https://example.com" }),
-  "<p>Server rendered body</p>",
-  "server notion layer should render post HTML on demand from structured content",
-);
-const queryCacheFetchCounts = {
-  database: 0,
-  pageQueries: 0,
-};
-const queryCacheRequestBodies = [];
-const queryCacheServerNotion = loadCommonJsModule("server/notion-server.js", [], {
-  process: {
-    env: {
-      ...process.env,
-      NOTION_TOKEN: "test-token",
-      NOTION_DATABASE_ID: "query-cache-database",
-      SITE_URL: "https://example.com",
-      PUBLIC_PAGE_SUMMARY_CACHE_TTL_MS: "120000",
-    },
-  },
-  fetch: async (url, init = {}) => {
-    const requestUrl = String(url);
-
-    if (requestUrl.endsWith("/databases/query-cache-database")) {
-      queryCacheFetchCounts.database += 1;
-      return createJsonResponse({
-        properties: {
-          Name: { id: "title", name: "Name", type: "title" },
-          Excerpt: { id: "excerpt", name: "Excerpt", type: "rich_text" },
-          Tags: { id: "tags", name: "Tags", type: "multi_select" },
-          Category: { id: "category", name: "Category", type: "select" },
-        },
-      });
-    }
-
-    if (requestUrl.endsWith("/databases/query-cache-database/query")) {
-      queryCacheFetchCounts.pageQueries += 1;
-      const requestBody = JSON.parse(init?.body || "{}");
-      queryCacheRequestBodies.push(requestBody);
-      const requestedCategory = requestBody?.filter?.select?.equals;
-
-      if (requestedCategory === "tech") {
-        return createJsonResponse({
-          results: [],
-          has_more: false,
-          next_cursor: null,
-        });
-      }
-
-      return createJsonResponse({
-        results: [
-          {
-            id: "search-post-alpha",
-            properties: {
-              Name: {
-                id: "title",
-                name: "Name",
-                type: "title",
-                title: [{ plain_text: "Alpha article" }],
-              },
-              Excerpt: {
-                id: "excerpt",
-                name: "Excerpt",
-                type: "rich_text",
-                rich_text: [{ plain_text: "Searchable excerpt" }],
-              },
-              Tags: {
-                id: "tags",
-                name: "Tags",
-                type: "multi_select",
-                multi_select: [{ name: "alpha" }],
-              },
-              Category: {
-                id: "category",
-                name: "Category",
-                type: "select",
-                select: { name: "Tech" },
-              },
-            },
-          },
-          {
-            id: "search-post-beta",
-            properties: {
-              Name: {
-                id: "title",
-                name: "Name",
-                type: "title",
-                title: [{ plain_text: "Beta article" }],
-              },
-              Excerpt: {
-                id: "excerpt",
-                name: "Excerpt",
-                type: "rich_text",
-                rich_text: [{ plain_text: "Other excerpt" }],
-              },
-              Tags: {
-                id: "tags",
-                name: "Tags",
-                type: "multi_select",
-                multi_select: [{ name: "beta" }],
-              },
-              Category: {
-                id: "category",
-                name: "Category",
-                type: "select",
-                select: { name: "Tech" },
-              },
-            },
-          },
-        ],
-        has_more: false,
-        next_cursor: null,
-      });
-    }
-
-    throw new Error(`Unexpected Notion request during filtered query cache test: ${requestUrl}`);
-  },
-});
-const firstCachedQuery = await queryCacheServerNotion.queryPublicPosts({
-  category: "Tech",
-  search: "alpha",
-  page: 1,
-});
-const secondCachedQuery = await queryCacheServerNotion.queryPublicPosts({
-  category: "Tech",
-  search: "alpha",
-  page: 1,
-});
-const differentlyCasedQuery = await queryCacheServerNotion.queryPublicPosts({
-  category: "tech",
-  search: "alpha",
-  page: 1,
-});
-assert.equal(
-  queryCacheFetchCounts.database,
-  1,
-  "server notion layer should reuse one database metadata lookup while caching filtered list queries",
-);
-assert.equal(
-  queryCacheFetchCounts.pageQueries,
-  2,
-  "server notion layer should reuse cached filtered query results for identical filters without collapsing differently cased category queries",
-);
-assert.equal(
-  queryCacheRequestBodies[0]?.filter?.property,
-  "Category",
-  "server notion layer should still push category filters down to the Notion database query when possible",
-);
-assert.equal(
-  firstCachedQuery.total,
-  1,
-  "server notion layer should still apply local search filtering after the category-prefiltered query returns",
-);
-assert.equal(
-  secondCachedQuery.results[0]?.id,
-  "search-post-alpha",
-  "server notion layer should return the cached filtered result set without changing the query output",
-);
-assert.equal(
-  differentlyCasedQuery.total,
-  0,
-  "server notion layer should not reuse a cached category query result when the requested category value changes semantically",
-);
-const dedupedFetchCounts = {
-  database: 0,
-  page: 0,
-  blocks: 0,
-};
-const dedupedServerNotion = loadCommonJsModule("server/notion-server.js", [], {
-  process: {
-    env: {
-      ...process.env,
-      NOTION_TOKEN: "test-token",
-      NOTION_DATABASE_ID: "test-database",
-      SITE_URL: "https://example.com",
-    },
-  },
-  fetch: async (url) => {
-    const requestUrl = String(url);
-
-    if (requestUrl.endsWith("/databases/test-database")) {
-      dedupedFetchCounts.database += 1;
-      return createJsonResponse({
-        properties: {
-          Name: { id: "title", name: "Name", type: "title" },
-        },
-      });
-    }
-
-    if (requestUrl.endsWith("/pages/post-1")) {
-      dedupedFetchCounts.page += 1;
-      await new Promise((resolve) => setTimeout(resolve, 15));
-      return createJsonResponse({
-        id: "post-1",
-        parent: { database_id: "test-database" },
-        properties: {
-          Name: {
-            id: "title",
-            name: "Name",
-            type: "title",
-            title: [{ plain_text: "Deduped title" }],
-          },
-        },
-      });
-    }
-
-    if (requestUrl.includes("/blocks/post-1/children?")) {
-      dedupedFetchCounts.blocks += 1;
-      await new Promise((resolve) => setTimeout(resolve, 15));
-      return createJsonResponse({
-        results: [{
-          id: "block-1",
-          type: "paragraph",
-          has_children: false,
-          paragraph: {
-            rich_text: [{ plain_text: "Deduped body" }],
-          },
-        }],
-        has_more: false,
-        next_cursor: null,
-      });
-    }
-
-    throw new Error(`Unexpected Notion request during dedupe test: ${requestUrl}`);
-  },
-});
-const [dedupedPostA, dedupedPostB] = await Promise.all([
-  dedupedServerNotion.fetchPublicPost("post-1"),
-  dedupedServerNotion.fetchPublicPost("post-1"),
-]);
-assert.strictEqual(
-  dedupedPostA,
-  dedupedPostB,
-  "server notion layer should resolve concurrent post-detail requests through the same in-flight promise",
-);
-assert.equal(
-  dedupedFetchCounts.database,
-  1,
-  "server notion layer should still reuse the shared database metadata lookup while coalescing concurrent post-detail requests",
-);
-assert.equal(
-  dedupedFetchCounts.page,
-  1,
-  "server notion layer should fetch the Notion page only once for concurrent requests to the same post",
-);
-assert.equal(
-  dedupedFetchCounts.blocks,
-  1,
-  "server notion layer should fetch the Notion block tree only once for concurrent requests to the same post",
-);
-assert.equal(
-  dedupedPostA.content?.[0]?.text,
-  "Deduped body",
-  "server notion layer should still return the mapped block content after coalescing concurrent requests",
-);
-const encodedPathRequests = [];
-const encodedPathServerNotion = loadCommonJsModule("server/notion-server.js", [], {
-  process: {
-    env: {
-      ...process.env,
-      NOTION_TOKEN: "test-token",
-      NOTION_DATABASE_ID: "encoded/database",
-      SITE_URL: "https://example.com",
-    },
-  },
-  fetch: async (url) => {
-    const requestUrl = String(url);
-    encodedPathRequests.push(requestUrl);
-
-    if (requestUrl.endsWith("/databases/encoded%2Fdatabase")) {
-      return createJsonResponse({
-        properties: {
-          Name: { id: "title", name: "Name", type: "title" },
-        },
-      });
-    }
-
-    if (requestUrl.endsWith("/pages/unsafe%2Fpost%3Fdebug%3D1")) {
-      return createJsonResponse({
-        id: "safe-post-id",
-        parent: { database_id: "encoded/database" },
-        properties: {
-          Name: {
-            id: "title",
-            name: "Name",
-            type: "title",
-            title: [{ plain_text: "Encoded path title" }],
-          },
-        },
-      });
-    }
-
-    if (requestUrl.includes("/blocks/safe-post-id/children?")) {
-      return createJsonResponse({
-        results: [],
-        has_more: false,
-        next_cursor: null,
-      });
-    }
-
-    throw new Error(`Unexpected Notion request during encoded path test: ${requestUrl}`);
-  },
-});
-const encodedPathPost = await encodedPathServerNotion.fetchPublicPost("unsafe/post?debug=1");
-assert.equal(
-  encodedPathPost.id,
-  "safe-post-id",
-  "server notion layer should still map the public page returned for an encoded page id",
-);
-assert.ok(
-  encodedPathRequests.some((requestUrl) => requestUrl.endsWith("/pages/unsafe%2Fpost%3Fdebug%3D1")),
-  "server notion layer should encode route-supplied Notion page ids before building API paths",
-);
-assert.ok(
-  encodedPathRequests.some((requestUrl) => requestUrl.includes("/blocks/safe-post-id/children?")),
-  "server notion layer should fetch blocks using the canonical Notion page id returned by the API",
-);
-const retryFetchCounts = {
-  database: 0,
-  page: 0,
-  blocks: 0,
-};
-let shouldFailNextRetryPageRequest = true;
-const retryServerNotion = loadCommonJsModule("server/notion-server.js", [], {
-  process: {
-    env: {
-      ...process.env,
-      NOTION_TOKEN: "test-token",
-      NOTION_DATABASE_ID: "retry-database",
-      SITE_URL: "https://example.com",
-    },
-  },
-  fetch: async (url) => {
-    const requestUrl = String(url);
-
-    if (requestUrl.endsWith("/databases/retry-database")) {
-      retryFetchCounts.database += 1;
-      return createJsonResponse({
-        properties: {
-          Name: { id: "title", name: "Name", type: "title" },
-        },
-      });
-    }
-
-    if (requestUrl.endsWith("/pages/retry-post")) {
-      retryFetchCounts.page += 1;
-      if (shouldFailNextRetryPageRequest) {
-        shouldFailNextRetryPageRequest = false;
-        return createJsonResponse({
-          message: "temporary upstream failure",
-          code: "internal_server_error",
-        }, {
-          status: 500,
-        });
-      }
-
-      return createJsonResponse({
-        id: "retry-post",
-        parent: { database_id: "retry-database" },
-        properties: {
-          Name: {
-            id: "title",
-            name: "Name",
-            type: "title",
-            title: [{ plain_text: "Recovered title" }],
-          },
-        },
-      });
-    }
-
-    if (requestUrl.includes("/blocks/retry-post/children?")) {
-      retryFetchCounts.blocks += 1;
-      return createJsonResponse({
-        results: [{
-          id: "retry-block-1",
-          type: "paragraph",
-          has_children: false,
-          paragraph: {
-            rich_text: [{ plain_text: "Recovered body" }],
-          },
-        }],
-        has_more: false,
-        next_cursor: null,
-      });
-    }
-
-    throw new Error(`Unexpected Notion request during retry test: ${requestUrl}`);
-  },
-});
-await assert.rejects(
-  () => retryServerNotion.fetchPublicPost("retry-post"),
-  (error) => {
-    assert.equal(error?.status, 500);
-    return true;
-  },
-  "server notion layer should surface the original upstream failure for the first failed post-detail request",
-);
-const recoveredRetryPost = await retryServerNotion.fetchPublicPost("retry-post");
-assert.equal(
-  retryFetchCounts.page,
-  2,
-  "server notion layer should clear failed in-flight post-detail requests so the next retry can re-fetch the page",
-);
-assert.equal(
-  retryFetchCounts.blocks,
-  1,
-  "server notion layer should only fetch block children once after the retry successfully loads the page metadata",
-);
-assert.equal(
-  recoveredRetryPost.title,
-  "Recovered title",
-  "server notion layer should recover cleanly after a failed in-flight post-detail request",
-);
-let invalidPostCacheNow = 0;
-class InvalidPostCacheDate extends Date {
-  static now() {
-    return invalidPostCacheNow;
-  }
-}
-const invalidPostCacheFetchCounts = {
-  database: 0,
-  page: 0,
-  blocks: 0,
-};
-const invalidPostCacheServerNotion = loadCommonJsModule("server/notion-server.js", [], {
-  Date: InvalidPostCacheDate,
-  process: {
-    env: {
-      ...process.env,
-      NOTION_TOKEN: "test-token",
-      NOTION_DATABASE_ID: "ttl-post-database",
-      PUBLIC_POST_CACHE_TTL_MS: "not-a-number",
-      SITE_URL: "https://example.com",
-    },
-  },
-  fetch: async (url) => {
-    const requestUrl = String(url);
-
-    if (requestUrl.endsWith("/databases/ttl-post-database")) {
-      invalidPostCacheFetchCounts.database += 1;
-      return createJsonResponse({
-        properties: {
-          Name: { id: "title", name: "Name", type: "title" },
-        },
-      });
-    }
-
-    if (requestUrl.endsWith("/pages/ttl-post")) {
-      invalidPostCacheFetchCounts.page += 1;
-      return createJsonResponse({
-        id: "ttl-post",
-        parent: { database_id: "ttl-post-database" },
-        properties: {
-          Name: {
-            id: "title",
-            name: "Name",
-            type: "title",
-            title: [{ plain_text: `TTL post ${invalidPostCacheFetchCounts.page}` }],
-          },
-        },
-      });
-    }
-
-    if (requestUrl.includes("/blocks/ttl-post/children?")) {
-      invalidPostCacheFetchCounts.blocks += 1;
-      return createJsonResponse({
-        results: [],
-        has_more: false,
-        next_cursor: null,
-      });
-    }
-
-    throw new Error(`Unexpected Notion request during invalid post cache TTL test: ${requestUrl}`);
-  },
-});
-await invalidPostCacheServerNotion.fetchPublicPost("ttl-post");
-invalidPostCacheNow = 61_000;
-await invalidPostCacheServerNotion.fetchPublicPost("ttl-post");
-assert.equal(
-  invalidPostCacheFetchCounts.page,
-  2,
-  "server notion layer should fall back to the default post cache TTL when the env value is invalid",
-);
-let invalidMetadataNow = 0;
-class InvalidMetadataDate extends Date {
-  static now() {
-    return invalidMetadataNow;
-  }
-}
-const invalidMetadataFetchCounts = {
-  database: 0,
-  query: 0,
-};
-const invalidMetadataServerNotion = loadCommonJsModule("server/notion-server.js", [], {
-  Date: InvalidMetadataDate,
-  process: {
-    env: {
-      ...process.env,
-      NOTION_TOKEN: "test-token",
-      NOTION_DATABASE_ID: "ttl-metadata-database",
-      DATABASE_METADATA_TTL_MS: "not-a-number",
-      SITE_URL: "https://example.com",
-    },
-  },
-  fetch: async (url) => {
-    const requestUrl = String(url);
-
-    if (requestUrl.endsWith("/databases/ttl-metadata-database")) {
-      invalidMetadataFetchCounts.database += 1;
-      return createJsonResponse({
-        properties: {
-          Name: { id: "title", name: "Name", type: "title" },
-        },
-      });
-    }
-
-    if (requestUrl.endsWith("/databases/ttl-metadata-database/query")) {
-      invalidMetadataFetchCounts.query += 1;
-      return createJsonResponse({
-        results: [],
-        has_more: false,
-        next_cursor: null,
-      });
-    }
-
-    throw new Error(`Unexpected Notion request during invalid metadata TTL test: ${requestUrl}`);
-  },
-});
-await invalidMetadataServerNotion.queryPublicPosts();
-invalidMetadataNow = 301_000;
-await invalidMetadataServerNotion.queryPublicPosts();
-assert.equal(
-  invalidMetadataFetchCounts.database,
-  2,
-  "server notion layer should fall back to the default database metadata TTL when the env value is invalid",
-);
-assert.ok(
-  !serverNotionJs.includes("鍔″繀鍚屾鏇存柊 js/notion-api.js"),
-  "server notion layer should not depend on manually syncing duplicated client helpers",
-);
-assert.ok(
-  !serverNotionJs.includes("queryAllPages"),
-  "server notion layer should not expose the whole database as the public content set",
-);
-expectIncludes(apiNotionJs, "generic Notion proxy is disabled", "API proxy should be explicitly disabled");
-assert.ok(
-  !apiNotionJs.includes("Authorization: `Bearer"),
-  "API proxy should not forward arbitrary authenticated Notion requests anymore",
-);
-assert.ok(
-  !apiNotionJs.includes("Access-Control-Allow-Origin"),
-  "disabled Notion proxy should not keep dead per-origin CORS response handling",
-);
-const disabledProxyResponse = createApiResponseRecorder();
-await apiNotionHandler({ method: "GET", headers: {} }, disabledProxyResponse);
-assert.equal(disabledProxyResponse.statusCode, 410, "disabled Notion proxy should return HTTP 410");
-assert.equal(disabledProxyResponse.getHeader("cache-control"), "no-store", "disabled Notion proxy should mark responses as non-cacheable");
-expectIncludes(apiSitemapJs, "buildPostUrl", "dynamic sitemap should include article routes");
-expectIncludes(apiSitemapJs, "queryPublicPages", "dynamic sitemap should only include public posts");
-expectIncludes(apiSitemapJs, "getPublicContentErrorStatus", "dynamic sitemap should reuse public content error status mapping");
-expectIncludes(apiSitemapJs, "applyPublicErrorHeaders", "dynamic sitemap should preserve upstream retry guidance");
-expectIncludes(apiSitemapJs, "serializePublicError", "dynamic sitemap should serialize upstream errors consistently");
-expectIncludes(apiSitemapJs, '"Cache-Control", "no-store"', "dynamic sitemap should not outlive public access changes");
-expectIncludes(vercelJson, '"/posts/:id"', "Vercel should rewrite canonical article routes");
-expectIncludes(vercelJson, '"/sitemap.xml"', "Vercel should serve a dynamic sitemap");
-expectIncludes(vercelJson, '"/favicon.png"', "Vercel should set cache headers for the real favicon asset");
-expectIncludes(vercelJson, "max-age=3600, stale-while-revalidate=86400", "Vercel should give versioned static scripts and styles a short browser cache");
-const parsedVercelJson = JSON.parse(vercelJson);
-const rootHeaderRule = parsedVercelJson.headers.find((entry) => entry.source === "/");
-assert.ok(
-  rootHeaderRule?.headers?.some((header) => header.key === "Cache-Control" && header.value === "public, max-age=0, must-revalidate"),
-  "Vercel should explicitly give the root route the same revalidation policy as static HTML files",
-);
-const apiHeaderRule = parsedVercelJson.headers.find((entry) => entry.source === "/api/(.*)");
-assert.ok(
-  !apiHeaderRule?.headers?.some((header) => String(header.key).toLowerCase() === "cache-control"),
-  "Vercel should leave API Cache-Control decisions to individual handlers so /api/image can be edge-cacheable",
-);
-expectIncludes(vercelJson, "frame-ancestors 'none'", "Vercel global CSP should preserve clickjacking protection");
-expectIncludes(vercelJson, '"X-Frame-Options"', "Vercel should retain legacy frame-denial protection");
-expectNotIncludes(vercelJson, "script-src-elem 'self' 'unsafe-inline'", "Vercel global CSP should not allow arbitrary inline script elements");
-expectNotIncludes(vercelJson, "default-src 'self'; script-src", "Vercel global CSP should leave script policy to static meta tags and SSR nonce headers");
-expectNotIncludes(vercelJson, '"/api/:path*"', "Vercel should not rewrite semantic API routes through the disabled legacy proxy");
-
 console.log("Smoke check passed.");

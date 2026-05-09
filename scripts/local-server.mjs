@@ -18,11 +18,17 @@ const host = process.env.HOST || "127.0.0.1";
 const mimeTypes = new Map([
   [".css", "text/css; charset=utf-8"],
   [".html", "text/html; charset=utf-8"],
+  [".ico", "image/x-icon"],
   [".js", "application/javascript; charset=utf-8"],
+  [".jpeg", "image/jpeg"],
+  [".jpg", "image/jpeg"],
   [".json", "application/json; charset=utf-8"],
+  [".mjs", "application/javascript; charset=utf-8"],
   [".png", "image/png"],
   [".svg", "image/svg+xml; charset=utf-8"],
   [".txt", "text/plain; charset=utf-8"],
+  [".webp", "image/webp"],
+  [".xml", "application/xml; charset=utf-8"],
 ]);
 const apiHandlers = new Map([
   ["/api/image", require("../api/image.js")],

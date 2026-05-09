@@ -76,8 +76,12 @@ function insertMarkupAfter(html, pattern, markup, indentation = "    ") {
 }
 
 function upsertHeadMarkup(html, pattern, markup) {
-  const result = html.replace(pattern, () => markup);
-  if (result !== html) {
+  let didMatch = false;
+  const result = html.replace(pattern, () => {
+    didMatch = true;
+    return markup;
+  });
+  if (didMatch) {
     return result;
   }
 
@@ -144,9 +148,13 @@ function injectInitialPostData(html, payload, { scriptNonce = "" } = {}) {
 function replacePostContent(html, post, { renderedContent, baseOrigin }) {
   const articleMarkup = renderPostArticle(post, { renderedContent, baseOrigin });
   const replacement = `<div id="postContent" style="display: block;">${articleMarkup}</div>`;
-  const result = html.replace(POST_CONTENT_PATTERN, () => replacement);
+  let didMatch = false;
+  const result = html.replace(POST_CONTENT_PATTERN, () => {
+    didMatch = true;
+    return replacement;
+  });
 
-  if (result !== html) {
+  if (didMatch) {
     return result;
   }
 

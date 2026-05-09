@@ -412,7 +412,7 @@ async function getDatabaseMetadata() {
   if (!databaseMetadataPromise) {
     databaseMetadataPromise = (async () => {
       const database = await requestNotionJson(`/databases/${encodeNotionPathId(getDatabaseId())}`);
-      const publicAccessPolicy = buildPublicAccessPolicyFromDatabase(database);
+      const publicAccessPolicy = buildPublicAccessPolicyFromDatabase();
       const contentSchema = buildContentSchema(database);
       const nextMetadata = {
         database,

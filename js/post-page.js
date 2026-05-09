@@ -107,8 +107,7 @@
     }
 
     function isMissingPostError(error) {
-      const status = Number(error?.status);
-      return status === 404 || (status === 400 && error?.notionCode === "validation_error");
+      return Number(error?.status) === 404;
     }
 
     function setBookmarkControlsVisible(isVisible) {
@@ -123,7 +122,7 @@
         if (element === navBookmark) {
           element.style.display = mobileNavQuery.matches ? "inline-flex" : "none";
         } else {
-          element.style.display = "flex";
+          element.style.display = mobileNavQuery.matches ? "none" : "flex";
         }
       });
     }
@@ -290,7 +289,7 @@
     }
 
     if (!notionApi) {
-      console.error("NotionAPI is unavailable on post page.");
+      console.warn("NotionAPI is unavailable on post page.");
       initBackButton();
       setBookmarkControlsVisible(false);
       const initialPostData = readInitialPostData();
