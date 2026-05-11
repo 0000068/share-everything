@@ -11,16 +11,6 @@
         addListener: () => {},
         removeListener: () => {},
       };
-  const reducedMotionQuery =
-    typeof siteUtils.createMediaQueryList === "function"
-      ? siteUtils.createMediaQueryList("(prefers-reduced-motion: reduce)")
-      : window.matchMedia?.("(prefers-reduced-motion: reduce)") || {
-        matches: false,
-        addEventListener: null,
-        removeEventListener: null,
-        addListener: () => {},
-        removeListener: () => {},
-      };
   let mouseAF = null;
   let cursorTrackingEnabled = false;
   let latestPointerX = 0;
@@ -38,7 +28,7 @@
   }
 
   function canUseCursorGlow() {
-    return Boolean(cursorGlow) && finePointerQuery.matches && !reducedMotionQuery.matches;
+    return Boolean(cursorGlow) && finePointerQuery.matches;
   }
 
   function syncParticlePointer(clientX, clientY) {
@@ -116,7 +106,6 @@
 
   document.addEventListener("mousemove", handleMouseMove, { passive: true });
   bindMediaQueryChange(finePointerQuery, syncCursorGlowState);
-  bindMediaQueryChange(reducedMotionQuery, syncCursorGlowState);
   syncCursorGlowState();
 
   document.addEventListener("mousedown", (event) => {

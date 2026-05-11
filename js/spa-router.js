@@ -36,15 +36,13 @@
     typeof siteUtils.rememberBlogReturnUrl === "function"
       ? siteUtils.rememberBlogReturnUrl
       : () => null;
-  const ROUTE_EXIT_TRANSITION = "opacity 0.35s cubic-bezier(0.4, 0, 1, 1), transform 0.35s cubic-bezier(0.4, 0, 1, 1)";
-  const ROUTE_ENTER_TRANSITION = "opacity 0.65s cubic-bezier(0.16, 1, 0.3, 1), transform 0.65s cubic-bezier(0.16, 1, 0.3, 1)";
-  const ROUTE_REDUCED_TRANSITION = "opacity 0.2s ease";
-  const ROUTE_EXIT_TRANSFORM = "translateY(-20px) scale(0.96)";
-  const ROUTE_ENTER_START_TRANSFORM = "translateY(36px) scale(0.97)";
-  const ROUTE_ENTER_END_TRANSFORM = "translateY(0) scale(1)";
-  const ROUTE_TRANSITION_RESET_MS = 750;
-  const ROUTE_REDUCED_RESET_MS = 280;
-  const ROUTE_EXIT_CUE_MS = 200;
+  const ROUTE_EXIT_TRANSITION = "opacity 0.15s ease, transform 0.15s ease";
+  const ROUTE_ENTER_TRANSITION = "opacity 0.25s ease, transform 0.25s var(--transition-smooth)";
+  const ROUTE_EXIT_TRANSFORM = "translateY(-8px)";
+  const ROUTE_ENTER_START_TRANSFORM = "translateY(12px)";
+  const ROUTE_ENTER_END_TRANSFORM = "translateY(0)";
+  const ROUTE_TRANSITION_RESET_MS = 300;
+  const ROUTE_EXIT_CUE_MS = 150;
   const ROUTE_LOCAL_POST_FALLBACK_MS = 700;
   const ROUTE_STUCK_FALLBACK_MS = 2500;
 
@@ -329,27 +327,8 @@
       });
     }
 
-    function waitForPaintOpportunity() {
-      return new Promise((resolve) => {
-        if (typeof window.requestAnimationFrame === "function") {
-          window.requestAnimationFrame(() => resolve());
-          return;
-        }
-
-        setTimeout(resolve, 16);
-      });
-    }
-
-    function waitForRouteExitCue(reduceRouteMotion) {
-      if (reduceRouteMotion) {
-        return waitForPaintOpportunity();
-      }
-
+    function waitForRouteExitCue() {
       return new Promise((resolve) => setTimeout(resolve, ROUTE_EXIT_CUE_MS));
-    }
-
-    function prefersReducedRouteMotion() {
-      return window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches || false;
     }
 
     function getNavigationFallbackUrl(routeKey) {
@@ -379,7 +358,6 @@
       const currentPageId = PageRuntime.getPageIdFromUrl(window.location.href);
       const targetPageId = PageRuntime.getPageIdFromUrl(targetRouteKey);
       const currentToken = ++navigationToken;
-      const reduceRouteMotion = prefersReducedRouteMotion();
 
       if (currentPageId === "blog" && targetPageId === "post") {
         rememberBlogReturnUrl(window.location.href);
@@ -392,9 +370,9 @@
 
       content.style.pointerEvents = "none";
       content.style.willChange = "opacity, transform";
-      content.style.transition = reduceRouteMotion ? ROUTE_REDUCED_TRANSITION : ROUTE_EXIT_TRANSITION;
+      content.style.transition = ROUTE_EXIT_TRANSITION;
       content.style.opacity = "0";
-      content.style.transform = reduceRouteMotion ? "none" : ROUTE_EXIT_TRANSFORM;
+      content.style.transform = ROUTE_EXIT_TRANSFORM;
       const stuckFallbackTimer = setTimeout(() => {
         if (
           currentToken !== navigationToken ||
@@ -414,7 +392,7 @@
         });
         if (currentToken !== navigationToken) return;
 
-        await waitForRouteExitCue(reduceRouteMotion);
+        await waitForRouteExitCue();
         if (currentToken !== navigationToken) return;
 
         const doc = new DOMParser().parseFromString(html, "text/html");
@@ -499,11 +477,11 @@
         });
 
         content.style.opacity = "0";
-        content.style.transform = reduceRouteMotion ? "none" : ROUTE_ENTER_START_TRANSFORM;
+        content.style.transform = ROUTE_ENTER_START_TRANSFORM;
         void content.offsetHeight;
-        content.style.transition = reduceRouteMotion ? ROUTE_REDUCED_TRANSITION : ROUTE_ENTER_TRANSITION;
+        content.style.transition = ROUTE_ENTER_TRANSITION;
         content.style.opacity = "1";
-        content.style.transform = reduceRouteMotion ? "none" : ROUTE_ENTER_END_TRANSFORM;
+        content.style.transform = ROUTE_ENTER_END_TRANSFORM;
         clearTimeout(stuckFallbackTimer);
 
         setTimeout(() => {
@@ -513,7 +491,7 @@
           content.style.transform = "";
           content.style.pointerEvents = "";
           content.style.willChange = "";
-        }, reduceRouteMotion ? ROUTE_REDUCED_RESET_MS : ROUTE_TRANSITION_RESET_MS);
+        }, ROUTE_TRANSITION_RESET_MS);
       } catch (error) {
         if (error?.name === "AbortError" || currentToken !== navigationToken) {
           return;

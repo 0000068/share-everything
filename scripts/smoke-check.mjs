@@ -225,12 +225,12 @@ expectIncludes(blogPageCss, "z-index: 2;\n  border-radius: inherit;", "blog card
 expectIncludes(blogPageCss, "pointer-events: none;\n}", "blog card cover media should not swallow clicks meant for the card link");
 expectIncludes(blogPageCss, "z-index: 3;\n  display: inline-flex;", "blog card bookmark button should stay above the card link layer");
 expectIncludes(commonJs, "DESKTOP_PARTICLE_COUNT = 350", "particle runtime should preserve the desktop particle density");
-expectIncludes(commonJs, "MOBILE_PARTICLE_COUNT = 48", "particle runtime should use a lighter mobile particle density");
-expectIncludes(commonJs, "function shouldReduceMotion", "particle runtime should honor reduced-motion globally");
-expectIncludes(commonJs, "shouldReduceMobileParticles", "particle runtime should keep mobile-specific reduced particle helpers available");
-expectIncludes(commonJs, "if (shouldReduceMotion() || particlesPausedForScroll)", "particle runtime should stop animation for reduced-motion users on every viewport");
+expectIncludes(commonJs, "MOBILE_PARTICLE_COUNT = 120", "particle runtime should preserve the old mobile particle density");
+expectNotIncludes(commonJs, "function shouldReduceMotion", "particle runtime should not stop the old particle animation for reduced-motion settings");
+expectNotIncludes(commonJs, "shouldReduceMobileParticles", "particle runtime should avoid reduced-motion gates in the particle loop");
+expectIncludes(commonJs, "if (particlesPausedForScroll)", "particle runtime should only stop animation for the explicit mobile scroll pause");
 expectIncludes(commonJs, "pauseMobileParticlesDuringScroll", "particle runtime should pause mobile particles while scrolling");
-expectNotIncludes(commonJs, "if (!isMobileParticleViewport()) return;", "particle runtime should not ignore desktop reduced-motion changes");
+expectIncludes(commonJs, "if (!isMobileParticleViewport()) return;", "particle runtime should keep scroll pauses mobile-only");
 expectIncludes(blogPageCss, "opacity 0.3s ease", "blog cards should use shorter reveal transitions on mobile");
 expectIncludes(blogPageJs, 'window.scrollTo({ top: 0, behavior: "auto" });', "blog pagination should avoid smooth-scroll jank on mobile");
 expectIncludes(notionApiJs, "POSTS_RESPONSE_CACHE_TTL", "notion client should keep a short in-memory list cache for fast returns");
@@ -294,7 +294,7 @@ expectIncludes(localServerJs, "path.relative(rootDir, filePath)", "local dev ser
 expectIncludes(localServerJs, "path.isAbsolute(relativePath)", "local dev server should reject absolute relative paths after static path resolution");
 expectIncludes(spaRouterJs, 'script[src]:not([data-spa-runtime])', "SPA router should skip shared runtime scripts via HTML metadata");
 expectIncludes(spaRouterJs, "waitForRouteExitCue", "SPA router should preserve the v1.6-style route exit cue");
-expectIncludes(spaRouterJs, "ROUTE_EXIT_CUE_MS = 200", "SPA router should keep a visible route exit pause");
+expectIncludes(spaRouterJs, "ROUTE_EXIT_CUE_MS = 150", "SPA router should keep the old quick route exit pause");
 expectIncludes(spaRouterJs, "ROUTE_LOCAL_POST_FALLBACK_MS", "SPA router should quickly recover local post route stalls");
 expectIncludes(spaRouterJs, "ROUTE_STUCK_FALLBACK_MS", "SPA router should recover if a route transition gets stuck in the exit state");
 expectIncludes(spaRouterJs, "getNavigationFallbackUrl", "SPA router stuck fallback should use local-compatible post URLs");
@@ -304,13 +304,14 @@ expectIncludes(spaRouterJs, "shouldUsePostTemplateFallbackFirst", "SPA router sh
 expectIncludes(spaRouterJs, '"127.0.0.1"', "SPA router local post template preference should cover the bundled local server host");
 expectIncludes(spaRouterJs, 'templateUrl.searchParams.set("id", postId);', "SPA router post fallback should load the static post template with the target id");
 expectIncludes(spaRouterJs, "ROUTE_ENTER_TRANSITION", "SPA router should keep a visible route enter animation after cache hits");
-expectIncludes(spaRouterJs, 'ROUTE_ENTER_START_TRANSFORM = "translateY(36px) scale(0.97)"', "SPA router should use a dramatic route entry sweep with depth");
+expectIncludes(spaRouterJs, 'ROUTE_EXIT_TRANSITION = "opacity 0.15s ease, transform 0.15s ease"', "SPA router should keep the old quick route exit cadence");
+expectIncludes(spaRouterJs, 'ROUTE_ENTER_START_TRANSFORM = "translateY(12px)"', "SPA router should keep the old light route entry slide");
 expectIncludes(spaRouterJs, 'element.style.animation = "none"', "SPA router should suppress nested first-load animations during SPA route swaps");
 expectNotIncludes(spaRouterJs, "ROUTE_ENTER_CLASS", "SPA router should keep v1.6-style whole-page route motion instead of layered route classes");
 expectNotIncludes(styleCss, "spa-layer-rise", "style.css should not ship layered route-entry animation when using the v1.6-style transition");
 expectNotIncludes(blogPageCss, "spa-route-entering", "blog-page.css should not add layered route-entry animations over the v1.6-style transition");
 expectNotIncludes(postPageCss, "spa-route-entering", "post-page.css should not add layered route-entry animations over the v1.6-style transition");
-expectIncludes(styleCss, "prefers-reduced-motion: reduce", "CSS should weaken route transitions for reduced-motion users");
+expectNotIncludes(styleCss, "prefers-reduced-motion: reduce", "CSS should not weaken the old route and ambient motion");
 expectIncludes(spaRouterJs, "pointerEvents = \"none\"", "SPA router should avoid interactions during route transitions");
 assert.ok(
   !spaRouterJs.includes("SHARED_RUNTIME_SCRIPT_NAMES"),

@@ -15,13 +15,9 @@ let mouseY = 0;
 let targetMouseX = 0;
 let targetMouseY = 0;
 const MOBILE_PARTICLE_BREAKPOINT = 768;
-const MOBILE_PARTICLE_COUNT = 48;
+const MOBILE_PARTICLE_COUNT = 120;
 const DESKTOP_PARTICLE_COUNT = 350;
 const MOBILE_SCROLL_PARTICLE_PAUSE_MS = 180;
-const reducedMotionQuery =
-  typeof window.matchMedia === "function"
-    ? window.matchMedia("(prefers-reduced-motion: reduce)")
-    : null;
 let particleCount = getParticleCountForViewport();
 const colors = [
   "rgba(0, 255, 255, 1)",
@@ -37,14 +33,6 @@ function isMobileParticleViewport() {
 
 function getParticleCountForViewport() {
   return isMobileParticleViewport() ? MOBILE_PARTICLE_COUNT : DESKTOP_PARTICLE_COUNT;
-}
-
-function shouldReduceMotion() {
-  return Boolean(reducedMotionQuery?.matches);
-}
-
-function shouldReduceMobileParticles() {
-  return isMobileParticleViewport() && shouldReduceMotion();
 }
 
 function resize() {
@@ -227,7 +215,7 @@ function bootstrapParticles(force = false) {
   }
 
   drawParticlesFrame(false);
-  if (shouldReduceMotion() || particlesPausedForScroll) {
+  if (particlesPausedForScroll) {
     return true;
   }
 
@@ -270,7 +258,7 @@ function clearScrollParticleResumeTimer() {
 }
 
 function pauseMobileParticlesDuringScroll() {
-  if (!isMobileParticleViewport() || shouldReduceMobileParticles()) return;
+  if (!isMobileParticleViewport()) return;
 
   particlesPausedForScroll = true;
   stopParticles();
@@ -307,34 +295,15 @@ window.addEventListener("resize", () => {
   }, 300);
 });
 
-window.addEventListener("mousedown", () => (targetSpeedMultiplier = 20));
-window.addEventListener("mouseup", () => (targetSpeedMultiplier = 1));
-window.addEventListener("mouseleave", () => (targetSpeedMultiplier = 1));
-window.addEventListener("touchstart", () => (targetSpeedMultiplier = 20), {
-  passive: true,
+window.addEventListener("pointerdown", (event) => {
+  if (event.pointerType === "mouse") targetSpeedMultiplier = 20;
 });
-window.addEventListener("touchend", () => (targetSpeedMultiplier = 1), {
-  passive: true,
+window.addEventListener("pointerup", (event) => {
+  if (event.pointerType === "mouse") targetSpeedMultiplier = 1;
 });
-window.addEventListener("touchcancel", () => (targetSpeedMultiplier = 1), {
-  passive: true,
+window.addEventListener("pointerleave", (event) => {
+  if (event.pointerType === "mouse") targetSpeedMultiplier = 1;
 });
-
-function handleReducedMotionChange() {
-  stopParticles();
-  clearParticleBootstrapTimer();
-  if (!document.hidden) {
-    bootstrapParticles(true);
-  }
-}
-
-if (reducedMotionQuery) {
-  if (typeof reducedMotionQuery.addEventListener === "function") {
-    reducedMotionQuery.addEventListener("change", handleReducedMotionChange);
-  } else {
-    reducedMotionQuery.addListener?.(handleReducedMotionChange);
-  }
-}
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => scheduleParticleBootstrap(), {

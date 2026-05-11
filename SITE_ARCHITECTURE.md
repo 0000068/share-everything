@@ -44,7 +44,7 @@ v2.8 is a code-quality and maintainability release that closes out the review ba
 - `scripts/smoke-check.mjs` is split into a thin entrypoint plus focused modules under `scripts/smoke-check/` (`harness`, `blog-page`, `image-proxy`, `notion-api-client`, `public-content-notion`, `routing-vercel`).
 - `scripts/local-server.mjs` gains full MIME coverage for `.webp`, `.jpg`, `.jpeg`, `.ico`, `.xml`, and `.mjs` so local dev matches production content types more closely.
 - `css/post-page.css` drops the `body[data-page="post"] .fab-bookmark { display: none !important; }` override; JavaScript is now the single source of truth for floating bookmark visibility, and `js/post-page.js` continues to hide the fab on mobile in favor of the top-bar bookmark action.
-- `js/common.js` particle runtime now honors `prefers-reduced-motion: reduce` globally via `shouldReduceMotion()` instead of only on mobile viewports, aligning with WCAG 2.3.3.
+- `js/common.js` particle runtime keeps the original always-on starfield motion and avoids reduced-motion gates that would freeze the canvas after the first frame.
 - `js/post-page.js` demotes the "NotionAPI is unavailable" fallback log from `console.error` to `console.warn`, reflecting that it is a supported SSR fallback path rather than an error.
 - `vercel.json` intent around `/api/*` cache headers is documented directly in §5: do not add a catch-all `Cache-Control` there, since each handler owns its own policy (e.g. `/api/image` edge caching).
 - Kiro steering file `.kiro/steering/git-rules.md` mirrors the release commit convention from §13 as always-on workspace steering.
@@ -91,13 +91,13 @@ v2.5 is a code-quality refactoring release focused on DRY compliance, defensive 
 
 ### v2.4 Highlights
 
-v2.4 refines the SPA route transition animation for a smoother, more cinematic feel, fixes card cover placeholders, and adds a project README.
+v2.4 refined the SPA route transition internals, fixes card cover placeholders, and adds a project README; the current motion parameters keep the earlier quick v1.6 feel.
 
-- SPA route exit uses `ease-in` timing (0.35s) with `translateY(-20px) scale(0.96)` for a visible "sink away" depth effect.
-- SPA route entry uses the spring curve (0.65s) with `translateY(36px) scale(0.97)` for a dramatic "rise into view" motion.
-- Route exit visual cue pause extended from 150ms to 200ms for a clearer page-switching feel.
-- Initial page load CSS animation updated to match SPA transitions: 0.7s duration, 36px travel with `scale(0.97)`.
-- Transition reset timer extended to 750ms to fully complete the longer entry animation.
+- SPA route exit uses the original quick `0.15s ease` timing with `translateY(-8px)` for a crisp page switch.
+- SPA route entry uses the original `0.25s` timing with `translateY(12px)` for a light slide into view.
+- Route exit visual cue pause stays at 150ms for a quick page-switching feel.
+- Initial page load CSS animation returns to the original 0.5s, 15px fade/slide without scale.
+- Transition reset timer returns to 300ms to match the shorter entry animation.
 - Blog card cover placeholders now use the site-consistent dark gradient instead of Notion-sourced gradients when an image is present, preventing jarring color flashes before images load.
 - Added comprehensive project README with features, architecture, quick-start guide, deployment instructions, and environment variable reference.
 
@@ -111,13 +111,13 @@ v2.3 restores the v1.6-style whole-page SPA route motion while keeping the v2.0 
 - Blog cover media is non-interactive so clicks always reach the card link, while bookmark buttons remain above the link layer.
 - Article content prioritizes the first image with eager loading and high fetch priority.
 - Remote display images can be routed through the same-origin `/api/image` proxy for better cache behavior.
-- Mobile particle density was reduced from 80 to 48, and particles pause briefly while scrolling on mobile.
-- SPA page HTML requests are coalesced, while route swaps keep the v1.6-style 200ms visual exit cue.
+- Mobile particle density preserves the old 120-particle starfield feel, and particles pause briefly while scrolling on mobile.
+- SPA page HTML requests are coalesced, while route swaps keep the v1.6-style 150ms visual exit cue.
 - SPA article navigation uses `/post.html?id=...` first on local dev origins and falls back to it when another server does not support `/posts/:id` rewrites.
 - SPA route transitions use the v1.6-style whole-page fade/slide cadence: quick fade out, short visual cue, and a 12px page slide in.
 - Nested first-load animations are suppressed during SPA swaps so page titles, top actions, and content do not compete with the whole-page transition.
 - Route transitions include a stuck-state fallback, with a faster local post fallback, so the page cannot remain transparent or non-clickable if navigation stalls.
-- Reduced-motion users receive a quick fade-only route transition.
+- Route transitions intentionally keep the original animated fade/slide cadence instead of switching to a reduced-motion variant.
 - `npm.cmd run dev` now starts a local API-aware server through `scripts/local-server.mjs`.
 
 ## 3. Public Routes
@@ -290,7 +290,7 @@ globals listed above.
 `spa-router.js` MUST be loaded **last** among the runtime scripts because it initializes
 link interception immediately on load and depends on all preceding globals.
 
-`spa-router.js` keeps canonical URLs in the address bar, but can load `/post.html?id=...` as a compatibility fallback when a server returns `404` for `/posts/:id`. On local dev origins such as `127.0.0.1` and `localhost`, it loads that static post template first because the local static server does not rewrite `/posts/:id`. Route changes use the v1.6-style whole-page opacity/transform cadence with a short 200ms visual exit cue, then suppress nested first-load animations after the swap so the transition reads as one calm page movement. Same-path hash-only changes are intentionally passed through to native browser handling; `blog-page.js` owns the `hashchange` flow for `/blog.html#bookmarks`. If a route remains in its exit state too long, the router falls back to a local-compatible full navigation instead of leaving the page transparent or non-clickable.
+`spa-router.js` keeps canonical URLs in the address bar, but can load `/post.html?id=...` as a compatibility fallback when a server returns `404` for `/posts/:id`. On local dev origins such as `127.0.0.1` and `localhost`, it loads that static post template first because the local static server does not rewrite `/posts/:id`. Route changes use the v1.6-style whole-page opacity/transform cadence with a short 150ms visual exit cue, then suppress nested first-load animations after the swap so the transition reads as one calm page movement. Same-path hash-only changes are intentionally passed through to native browser handling; `blog-page.js` owns the `hashchange` flow for `/blog.html#bookmarks`. If a route remains in its exit state too long, the router falls back to a local-compatible full navigation instead of leaving the page transparent or non-clickable.
 
 `notion-content.js` renders Notion blocks through a `block.type` -> renderer registry built by `createBlockRenderers()`. New block types should be added as focused renderer entries so SSR and browser rendering stay aligned without expanding a central switch.
 
@@ -406,7 +406,7 @@ The smoke suite currently covers:
 - SEO runtime behavior.
 - SPA navigation and page HTML request coalescing.
 - SPA post-template fallback for local `/posts/:id` 404s.
-- SPA route transition animation parameters and depth effects.
+- SPA route transition animation parameters.
 - Blog cover preloading and mobile reveal behavior.
 - Blog cover click layering.
 - Remote display image proxying.
