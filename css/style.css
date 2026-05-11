@@ -792,6 +792,7 @@ body.has-cursor-glow .cursor-glow {
   body[data-page="post"] .top-actions {
     top: auto;
     bottom: calc(24px + env(safe-area-inset-bottom));
+    box-sizing: border-box;
     gap: 8px;
     padding: 9px;
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -808,8 +809,8 @@ body.has-cursor-glow .cursor-glow {
   }
 
   body[data-page="blog"] .top-actions {
-    left: 24px;
-    right: 24px;
+    left: max(24px, env(safe-area-inset-left));
+    right: max(24px, env(safe-area-inset-right));
   }
 
   body[data-page="blog"] .action-btn,
@@ -850,16 +851,21 @@ body.has-cursor-glow .cursor-glow {
   }
 
   body[data-page="post"] .top-actions {
-    left: 20px;
-    right: 20px;
+    left: max(18px, env(safe-area-inset-left));
+    right: max(18px, env(safe-area-inset-right));
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr)) 44px;
+    align-items: center;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(42px, 44px);
   }
 
   body[data-page="post"] .action-btn {
     padding: 9px 6px;
     border-radius: 999px;
     font-size: 0.7rem;
+  }
+
+  body[data-page="post"] .action-btn span {
+    min-width: 0;
   }
 
   body[data-page="post"] .action-btn-bookmark {
@@ -988,8 +994,8 @@ body.has-cursor-glow .cursor-glow {
 
   body[data-page="blog"] .top-actions {
     bottom: calc(20px + env(safe-area-inset-bottom));
-    left: 18px;
-    right: 18px;
+    left: max(18px, env(safe-area-inset-left));
+    right: max(18px, env(safe-area-inset-right));
     gap: 6px;
     padding: 8px;
     border-radius: 24px;
@@ -1020,19 +1026,20 @@ body.has-cursor-glow .cursor-glow {
   }
 
   body[data-page="post"] .top-actions {
-    bottom: calc(20px + env(safe-area-inset-bottom));
-    left: 14px;
-    right: 14px;
-    grid-template-columns: repeat(3, minmax(0, 1fr)) 40px;
-    gap: 5px;
-    padding: 7px;
+    bottom: calc(24px + env(safe-area-inset-bottom));
+    left: max(12px, env(safe-area-inset-left));
+    right: max(12px, env(safe-area-inset-right));
+    grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(38px, 40px);
+    gap: 4px;
+    padding: 6px;
     border-radius: 24px;
   }
 
   body[data-page="post"] .action-btn {
     min-height: 38px;
-    padding: 8px 5px;
+    padding: 8px 4px;
     font-size: 0.66rem;
+    line-height: 1;
   }
 
   body[data-page="post"] .action-btn-bookmark {
@@ -1057,7 +1064,30 @@ body.has-cursor-glow .cursor-glow {
 
 }
 
-@media (hover: none), (pointer: coarse) {
+@media (max-width: 360px) and (hover: none) and (pointer: coarse) {
+  body[data-page="post"] .top-actions {
+    left: max(10px, env(safe-area-inset-left));
+    right: max(10px, env(safe-area-inset-right));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  body[data-page="post"] .action-btn {
+    min-height: 40px;
+    gap: 0;
+    padding: 8px 0;
+  }
+
+  body[data-page="post"] .action-btn span {
+    display: none;
+  }
+
+  body[data-page="post"] .action-btn-bookmark {
+    width: auto;
+    min-width: 0;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
   .cursor-glow {
     display: none;
   }

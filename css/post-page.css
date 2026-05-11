@@ -548,14 +548,34 @@
 
 .post-equation-expression {
   overflow-x: auto;
+  padding: 2px 0 4px;
+  scrollbar-width: thin;
 }
 
-.post-equation-expression code {
-  display: inline-block;
-  padding: 0;
-  background: none;
+.post-math {
   color: var(--text-primary);
-  font-size: 0.96rem;
+  font-family:
+    "Cambria Math",
+    "STIX Two Math",
+    "Times New Roman",
+    serif;
+}
+
+.post-math-inline {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: -0.08em;
+}
+
+.post-math-display {
+  display: block;
+  min-width: max-content;
+  font-size: 1.16rem;
+  line-height: 1.45;
+}
+
+.post-math annotation {
+  display: none;
 }
 
 .post-table-of-contents-list {
@@ -689,6 +709,10 @@
     padding: 18px;
     border-radius: 18px;
     font-size: 0.82rem;
+  }
+
+  .post-math-display {
+    font-size: 1.04rem;
   }
 
   .fab-bookmark {

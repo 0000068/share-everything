@@ -229,7 +229,10 @@ expectIncludes(blogPageCss, "z-index: 2;\n  border-radius: inherit;", "blog card
 expectIncludes(blogPageCss, "pointer-events: none;\n}", "blog card cover media should not swallow clicks meant for the card link");
 expectIncludes(blogPageCss, "z-index: 3;\n  display: inline-flex;", "blog card bookmark button should stay above the card link layer");
 expectIncludes(commonJs, "DESKTOP_PARTICLE_COUNT = 350", "particle runtime should preserve the desktop particle density");
-expectIncludes(commonJs, "MOBILE_PARTICLE_COUNT = 120", "particle runtime should preserve the old mobile particle density");
+expectIncludes(commonJs, "MOBILE_PARTICLE_COUNT = 72", "particle runtime should use the lighter v3.2 mobile-only particle density");
+expectIncludes(commonJs, "MOBILE_PARTICLE_FRAME_INTERVAL_MS = 50", "particle runtime should throttle mobile-only particle drawing");
+expectIncludes(commonJs, "class MobileParticle", "particle runtime should use a cheaper mobile-only particle model");
+expectIncludes(commonJs, "particleProfile.isMobile ? MobileParticle : Particle", "particle runtime should keep the desktop particle class separate from the mobile renderer");
 expectIncludes(commonJs, "siteUtils.isMobileDeviceViewport", "particle runtime should use the shared real-mobile gate before changing density");
 expectIncludes(commonJs, '(hover: none) and (pointer: coarse)', "particle fallback should avoid treating narrow desktop windows as mobile");
 expectNotIncludes(commonJs, "function shouldReduceMotion", "particle runtime should not stop the old particle animation for reduced-motion settings");
@@ -242,8 +245,13 @@ expectIncludes(siteUtilsJs, "createMobileDeviceQueryList", "site utils should ex
 expectIncludes(styleCss, "@media (max-width: 768px) and (hover: none) and (pointer: coarse)", "shared mobile CSS should not affect narrow desktop windows");
 expectIncludes(blogPageCss, "@media (max-width: 768px) and (hover: none) and (pointer: coarse)", "blog mobile CSS should not affect narrow desktop windows");
 expectIncludes(postPageCss, "@media (max-width: 768px) and (hover: none) and (pointer: coarse)", "post mobile CSS should not affect narrow desktop windows");
+expectIncludes(styleCss, 'body[data-page="post"] .action-btn span', "post mobile dock should constrain labels so the bar stays fully visible");
+expectIncludes(styleCss, "max(12px, env(safe-area-inset-left))", "post mobile dock should respect horizontal safe areas on narrow phones");
+expectIncludes(styleCss, "@media (max-width: 360px) and (hover: none) and (pointer: coarse)", "post mobile dock should have an icon-only fallback for very narrow phones");
+expectIncludes(styleCss, "@media (hover: none) and (pointer: coarse)", "cursor glow should be disabled only for touch-first pointers");
+expectNotIncludes(styleCss, "@media (hover: none), (pointer: coarse)", "cursor glow touch fallback should not use a broad OR media query");
 assert.ok(
-  !/@media\s*\(max-width:\s*(?:768|540)px\)\s*\{/.test(`${styleCss}\n${blogPageCss}\n${postPageCss}`),
+  !/@media\s*\(max-width:\s*(?:768|540|360)px\)\s*\{/.test(`${styleCss}\n${blogPageCss}\n${postPageCss}`),
   "mobile CSS breakpoints should include the real-mobile pointer/hover gate",
 );
 expectNotIncludes(postPageJs, 'createMediaQueryList("(max-width: 768px)")', "post page should not treat narrow desktop windows as mobile");
@@ -567,6 +575,8 @@ expectIncludes(notionContentJs, "function createBlockRenderers", "shared notion 
 expectIncludes(notionContentJs, "const blockRenderers = createBlockRenderers()", "shared notion content module should keep renderer dispatch in a registry");
 expectNotIncludes(notionContentJs, "switch (block.type)", "shared notion content renderer should avoid a central block-type switch");
 expectIncludes(notionContentJs, "function renderPostArticle", "shared notion content module should own article-shell rendering for both SSR and CSR");
+expectIncludes(notionContentJs, "function renderMathExpression", "shared notion content module should render Notion equations without exposing LaTeX as code");
+expectIncludes(notionContentJs, "application/x-tex", "shared notion content module should keep the original TeX only as MathML annotation");
 expectIncludes(notionContentJs, "resolveDisplayImageUrl", "shared notion content module should expose a display-safe image resolver");
 expectIncludes(notionContentJs, 'const SAFE_IMAGE_PROTOCOLS = new Set(["https:"])', "shared notion content module should align external image URL policy with production CSP");
 expectIncludes(notionContentJs, "resolveNotionContentSchema", "shared notion content module should resolve Notion schemas for renamed database properties");
@@ -579,6 +589,8 @@ expectIncludes(notionContentJs, "table_of_contents: () => ({ type })", "shared n
 expectIncludes(notionContentJs, "function renderTableOfContentsBlock", "shared notion content module should build semantic table of contents navigation");
 expectIncludes(notionContentJs, "function renderBookmarkBlock", "shared notion content module should render bookmark blocks as semantic cards");
 expectIncludes(notionContentJs, "function renderEmbedBlock", "shared notion content module should render embed resources through a dedicated renderer");
+expectIncludes(postPageCss, ".post-math-display", "post page CSS should style display equations as rendered math instead of code");
+expectNotIncludes(postPageCss, ".post-equation-expression code", "post page CSS should not style equations as visible code blocks");
 assert.equal(
   notionContentHelpers.ALL_CATEGORY,
   "全部",

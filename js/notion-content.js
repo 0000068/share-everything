@@ -165,6 +165,479 @@
       .replace(/'/g, "&#39;");
   }
 
+  const LATEX_SYMBOLS = Object.freeze({
+    alpha: "α",
+    beta: "β",
+    gamma: "γ",
+    delta: "δ",
+    epsilon: "ε",
+    varepsilon: "ε",
+    zeta: "ζ",
+    eta: "η",
+    theta: "θ",
+    vartheta: "ϑ",
+    iota: "ι",
+    kappa: "κ",
+    lambda: "λ",
+    mu: "μ",
+    nu: "ν",
+    xi: "ξ",
+    pi: "π",
+    varpi: "ϖ",
+    rho: "ρ",
+    sigma: "σ",
+    tau: "τ",
+    upsilon: "υ",
+    phi: "φ",
+    varphi: "φ",
+    chi: "χ",
+    psi: "ψ",
+    omega: "ω",
+    Gamma: "Γ",
+    Delta: "Δ",
+    Theta: "Θ",
+    Lambda: "Λ",
+    Xi: "Ξ",
+    Pi: "Π",
+    Sigma: "Σ",
+    Upsilon: "Υ",
+    Phi: "Φ",
+    Psi: "Ψ",
+    Omega: "Ω",
+    infty: "∞",
+    infinity: "∞",
+    partial: "∂",
+    nabla: "∇",
+    emptyset: "∅",
+    ell: "ℓ",
+    le: "≤",
+    leq: "≤",
+    ge: "≥",
+    geq: "≥",
+    ne: "≠",
+    neq: "≠",
+    approx: "≈",
+    sim: "∼",
+    simeq: "≃",
+    equiv: "≡",
+    propto: "∝",
+    times: "×",
+    cdot: "⋅",
+    div: "÷",
+    pm: "±",
+    mp: "∓",
+    to: "→",
+    rightarrow: "→",
+    leftarrow: "←",
+    leftrightarrow: "↔",
+    Rightarrow: "⇒",
+    Leftarrow: "⇐",
+    Leftrightarrow: "⇔",
+    implies: "⇒",
+    iff: "⇔",
+    sum: "∑",
+    prod: "∏",
+    int: "∫",
+    oint: "∮",
+    forall: "∀",
+    exists: "∃",
+    in: "∈",
+    notin: "∉",
+    subset: "⊂",
+    subseteq: "⊆",
+    supset: "⊃",
+    supseteq: "⊇",
+    cup: "∪",
+    cap: "∩",
+    land: "∧",
+    lor: "∨",
+    neg: "¬",
+    angle: "∠",
+    degree: "°",
+  });
+
+  const LATEX_OPERATOR_COMMANDS = new Set([
+    "arccos",
+    "arcsin",
+    "arctan",
+    "cos",
+    "cosh",
+    "cot",
+    "csc",
+    "det",
+    "dim",
+    "exp",
+    "gcd",
+    "hom",
+    "ker",
+    "lg",
+    "lim",
+    "ln",
+    "log",
+    "max",
+    "min",
+    "Pr",
+    "sec",
+    "sin",
+    "sinh",
+    "sup",
+    "tan",
+    "tanh",
+  ]);
+  const LATEX_OPERATOR_SYMBOLS = new Set([
+    "approx",
+    "cap",
+    "cdot",
+    "cup",
+    "degree",
+    "div",
+    "equiv",
+    "exists",
+    "forall",
+    "ge",
+    "geq",
+    "in",
+    "int",
+    "land",
+    "le",
+    "leq",
+    "leftarrow",
+    "leftrightarrow",
+    "Leftarrow",
+    "Leftrightarrow",
+    "lor",
+    "mp",
+    "ne",
+    "neq",
+    "neg",
+    "notin",
+    "oint",
+    "pm",
+    "prod",
+    "propto",
+    "rightarrow",
+    "Rightarrow",
+    "sim",
+    "simeq",
+    "subset",
+    "subseteq",
+    "sum",
+    "supset",
+    "supseteq",
+    "times",
+    "to",
+  ]);
+  const LATEX_SPACING_COMMANDS = new Set([" ", ",", ":", ";", "!", "quad", "qquad", "thinspace"]);
+  const LATEX_DELIMITER_COMMANDS = Object.freeze({
+    lbrace: "{",
+    rbrace: "}",
+    langle: "⟨",
+    rangle: "⟩",
+    lvert: "|",
+    rvert: "|",
+    lVert: "‖",
+    rVert: "‖",
+  });
+  const LATEX_ACCENTS = Object.freeze({
+    bar: "¯",
+    hat: "^",
+    tilde: "~",
+    vec: "→",
+    dot: ".",
+  });
+  const MATH_ENVIRONMENT_DELIMITERS = Object.freeze({
+    pmatrix: ["(", ")"],
+    bmatrix: ["[", "]"],
+    Bmatrix: ["{", "}"],
+    vmatrix: ["|", "|"],
+    Vmatrix: ["‖", "‖"],
+  });
+
+  function normalizeLatexExpression(expression) {
+    let source = String(expression || "").trim();
+    if ((source.startsWith("$$") && source.endsWith("$$")) || (source.startsWith("\\[") && source.endsWith("\\]"))) {
+      source = source.slice(2, -2).trim();
+    } else if (source.startsWith("\\(") && source.endsWith("\\)")) {
+      source = source.slice(2, -2).trim();
+    } else if (source.startsWith("$") && source.endsWith("$")) {
+      source = source.slice(1, -1).trim();
+    }
+
+    return source;
+  }
+
+  function isLatexLetter(character) {
+    return /^[A-Za-z]$/.test(character);
+  }
+
+  function isLatexDigit(character) {
+    return /^[0-9]$/.test(character);
+  }
+
+  function skipLatexSpaces(state) {
+    while (state.index < state.source.length && /\s/.test(state.source[state.index])) {
+      state.index += 1;
+    }
+  }
+
+  function readLatexCommand(state) {
+    if (state.source[state.index] !== "\\") return "";
+    state.index += 1;
+    const start = state.index;
+    while (state.index < state.source.length && isLatexLetter(state.source[state.index])) {
+      state.index += 1;
+    }
+    if (state.index > start) return state.source.slice(start, state.index);
+    return state.source[state.index++] || "";
+  }
+
+  function readRawLatexGroup(state, open = "{", close = "}") {
+    skipLatexSpaces(state);
+    if (state.source[state.index] !== open) return "";
+
+    state.index += 1;
+    let depth = 1;
+    const start = state.index;
+    while (state.index < state.source.length) {
+      const character = state.source[state.index];
+      if (character === "\\") {
+        state.index += 2;
+        continue;
+      }
+      if (character === open) depth += 1;
+      if (character === close) depth -= 1;
+      if (depth === 0) {
+        const raw = state.source.slice(start, state.index);
+        state.index += 1;
+        return raw;
+      }
+      state.index += 1;
+    }
+
+    return state.source.slice(start);
+  }
+
+  function splitLatexRows(source) {
+    return String(source || "")
+      .split(/\\\\/)
+      .map((row) => row.trim())
+      .filter(Boolean);
+  }
+
+  function splitLatexCells(source) {
+    return String(source || "").split("&").map((cell) => cell.trim());
+  }
+
+  function wrapMathRow(html) {
+    return `<mrow>${html || ""}</mrow>`;
+  }
+
+  function createMathIdentifier(value, attributes = "") {
+    return `<mi${attributes}>${escapeHtml(value)}</mi>`;
+  }
+
+  function createMathOperator(value) {
+    return `<mo>${escapeHtml(value)}</mo>`;
+  }
+
+  function parseLatexFragment(source) {
+    const state = {
+      source: normalizeLatexExpression(source),
+      index: 0,
+    };
+    return parseLatexSequence(state);
+  }
+
+  function parseLatexRequiredArgument(state) {
+    skipLatexSpaces(state);
+    if (state.source[state.index] === "{") {
+      state.index += 1;
+      const html = parseLatexSequence(state, "}");
+      if (state.source[state.index] === "}") state.index += 1;
+      return wrapMathRow(html);
+    }
+
+    const atom = parseLatexAtom(state);
+    return atom ? applyLatexScripts(state, atom) : wrapMathRow("");
+  }
+
+  function parseLatexScriptArgument(state) {
+    skipLatexSpaces(state);
+    if (state.source[state.index] === "{") {
+      state.index += 1;
+      const html = parseLatexSequence(state, "}");
+      if (state.source[state.index] === "}") state.index += 1;
+      return wrapMathRow(html);
+    }
+
+    return parseLatexAtom(state) || wrapMathRow("");
+  }
+
+  function parseLatexOptionalArgument(state) {
+    skipLatexSpaces(state);
+    if (state.source[state.index] !== "[") return "";
+    state.index += 1;
+    const html = parseLatexSequence(state, "]");
+    if (state.source[state.index] === "]") state.index += 1;
+    return wrapMathRow(html);
+  }
+
+  function parseLatexEnvironment(command, state) {
+    const environmentName = readRawLatexGroup(state);
+    if (!environmentName) return createMathIdentifier(command);
+
+    const endToken = `\\end{${environmentName}}`;
+    const endIndex = state.source.indexOf(endToken, state.index);
+    if (endIndex === -1) return createMathIdentifier(environmentName);
+
+    const body = state.source.slice(state.index, endIndex);
+    state.index = endIndex + endToken.length;
+    const rows = splitLatexRows(body);
+    const tableHtml = `<mtable>${rows.map((row) => `<mtr>${splitLatexCells(row).map((cell) => `<mtd>${wrapMathRow(parseLatexFragment(cell))}</mtd>`).join("")}</mtr>`).join("")}</mtable>`;
+    const delimiters = MATH_ENVIRONMENT_DELIMITERS[environmentName];
+    if (!delimiters) return tableHtml;
+
+    return `<mrow>${createMathOperator(delimiters[0])}${tableHtml}${createMathOperator(delimiters[1])}</mrow>`;
+  }
+
+  function parseLatexCommand(state) {
+    const command = readLatexCommand(state);
+    if (!command) return "";
+
+    if (LATEX_SPACING_COMMANDS.has(command)) {
+      return command === "!" ? "" : '<mspace width="0.22em"></mspace>';
+    }
+
+    if (command === "frac" || command === "dfrac" || command === "tfrac") {
+      return `<mfrac>${parseLatexRequiredArgument(state)}${parseLatexRequiredArgument(state)}</mfrac>`;
+    }
+
+    if (command === "sqrt") {
+      const indexHtml = parseLatexOptionalArgument(state);
+      const radicand = parseLatexRequiredArgument(state);
+      return indexHtml ? `<mroot>${radicand}${indexHtml}</mroot>` : `<msqrt>${radicand}</msqrt>`;
+    }
+
+    if (command === "text") {
+      return `<mtext>${escapeHtml(readRawLatexGroup(state))}</mtext>`;
+    }
+
+    if (command === "mathrm" || command === "operatorname") {
+      return createMathIdentifier(readRawLatexGroup(state), ' mathvariant="normal"');
+    }
+
+    if (command === "begin") {
+      return parseLatexEnvironment(command, state);
+    }
+
+    if (command === "left" || command === "right" || command === "big" || command === "Big" || command === "bigg" || command === "Bigg") {
+      skipLatexSpaces(state);
+      if (state.source[state.index] === ".") {
+        state.index += 1;
+        return "";
+      }
+      return parseLatexAtom(state);
+    }
+
+    if (LATEX_ACCENTS[command]) {
+      return `<mover>${parseLatexRequiredArgument(state)}${createMathOperator(LATEX_ACCENTS[command])}</mover>`;
+    }
+
+    if (LATEX_DELIMITER_COMMANDS[command]) {
+      return createMathOperator(LATEX_DELIMITER_COMMANDS[command]);
+    }
+
+    if (LATEX_SYMBOLS[command]) {
+      const value = LATEX_SYMBOLS[command];
+      return LATEX_OPERATOR_SYMBOLS.has(command) ? createMathOperator(value) : createMathIdentifier(value);
+    }
+
+    if (LATEX_OPERATOR_COMMANDS.has(command)) {
+      return createMathIdentifier(command, ' mathvariant="normal"');
+    }
+
+    if (command === "\\") {
+      return '<mspace linebreak="newline"></mspace>';
+    }
+
+    return createMathIdentifier(command);
+  }
+
+  function parseLatexAtom(state) {
+    skipLatexSpaces(state);
+    const character = state.source[state.index];
+    if (!character) return "";
+
+    if (character === "\\") {
+      return parseLatexCommand(state);
+    }
+
+    if (character === "{") {
+      state.index += 1;
+      const html = parseLatexSequence(state, "}");
+      if (state.source[state.index] === "}") state.index += 1;
+      return wrapMathRow(html);
+    }
+
+    if (isLatexDigit(character) || (character === "." && isLatexDigit(state.source[state.index + 1]))) {
+      const start = state.index;
+      state.index += 1;
+      while (state.index < state.source.length && /[0-9.]/.test(state.source[state.index])) {
+        state.index += 1;
+      }
+      return `<mn>${escapeHtml(state.source.slice(start, state.index))}</mn>`;
+    }
+
+    state.index += 1;
+    if (isLatexLetter(character)) return createMathIdentifier(character);
+    return createMathOperator(character);
+  }
+
+  function applyLatexScripts(state, baseHtml) {
+    let subscriptHtml = "";
+    let superscriptHtml = "";
+
+    while (state.index < state.source.length) {
+      skipLatexSpaces(state);
+      const marker = state.source[state.index];
+      if (marker !== "_" && marker !== "^") break;
+      state.index += 1;
+      const argument = parseLatexScriptArgument(state);
+      if (marker === "_") {
+        subscriptHtml = argument;
+      } else {
+        superscriptHtml = argument;
+      }
+    }
+
+    if (subscriptHtml && superscriptHtml) return `<msubsup>${baseHtml}${subscriptHtml}${superscriptHtml}</msubsup>`;
+    if (subscriptHtml) return `<msub>${baseHtml}${subscriptHtml}</msub>`;
+    if (superscriptHtml) return `<msup>${baseHtml}${superscriptHtml}</msup>`;
+    return baseHtml;
+  }
+
+  function parseLatexSequence(state, stopCharacter = "") {
+    const nodes = [];
+    while (state.index < state.source.length) {
+      if (stopCharacter && state.source[state.index] === stopCharacter) break;
+      const atom = parseLatexAtom(state);
+      if (atom) nodes.push(applyLatexScripts(state, atom));
+    }
+    return nodes.join("");
+  }
+
+  function renderMathExpression(expression, { display = false } = {}) {
+    const source = normalizeLatexExpression(expression);
+    if (!source) return "";
+
+    const className = display ? "post-math post-math-display" : "post-math post-math-inline";
+    const displayAttribute = display ? ' display="block"' : "";
+    const label = escapeHtml(source);
+    const bodyHtml = wrapMathRow(parseLatexFragment(source));
+
+    return `<math class="${className}" xmlns="http://www.w3.org/1998/Math/MathML"${displayAttribute} aria-label="${label}"><semantics>${bodyHtml}<annotation encoding="application/x-tex">${label}</annotation></semantics></math>`;
+  }
+
   function normalizeName(value) {
     return typeof value === "string" ? value.trim().toLowerCase() : "";
   }
@@ -400,16 +873,23 @@
     if (!richText?.length) return "";
 
     return richText.map((item) => {
-      let text = escapeHtml(item.plain_text);
+      const equationExpression = item?.type === "equation" || item?.equation?.expression
+        ? item?.equation?.expression || item?.plain_text || ""
+        : "";
+      let text = equationExpression
+        ? renderMathExpression(equationExpression)
+        : escapeHtml(item.plain_text);
       const annotations = item.annotations || {};
 
-      if (annotations.code) text = `<code>${text}</code>`;
-      if (annotations.bold) text = `<strong>${text}</strong>`;
-      if (annotations.italic) text = `<em>${text}</em>`;
-      if (annotations.strikethrough) text = `<del>${text}</del>`;
-      if (annotations.underline) text = `<u>${text}</u>`;
-      if (annotations.color && NOTION_ANNOTATION_STYLES[annotations.color]) {
-        text = `<span style="${NOTION_ANNOTATION_STYLES[annotations.color]}">${text}</span>`;
+      if (!equationExpression) {
+        if (annotations.code) text = `<code>${text}</code>`;
+        if (annotations.bold) text = `<strong>${text}</strong>`;
+        if (annotations.italic) text = `<em>${text}</em>`;
+        if (annotations.strikethrough) text = `<del>${text}</del>`;
+        if (annotations.underline) text = `<u>${text}</u>`;
+        if (annotations.color && NOTION_ANNOTATION_STYLES[annotations.color]) {
+          text = `<span style="${NOTION_ANNOTATION_STYLES[annotations.color]}">${text}</span>`;
+        }
       }
 
       const safeHref = sanitizeUrl(item.href, SAFE_LINK_PROTOCOLS, baseOrigin);
@@ -870,7 +1350,7 @@
       },
       toggle: (block, { childrenHtml }) => `<details class="post-toggle"><summary>${block.text || ""}</summary>${childrenHtml}</details>`,
       to_do: (block, { childrenHtml }) => `<div class="post-todo${block.checked ? " checked" : ""}"><span class="post-todo-box" aria-hidden="true">${block.checked ? "&#10003;" : ""}</span><div class="post-todo-content"><div class="post-todo-text">${block.text || ""}</div>${childrenHtml}</div></div>`,
-      equation: (block, { childrenHtml }) => `<figure class="post-equation"><figcaption class="post-block-label">Equation</figcaption><div class="post-equation-expression" role="math" aria-label="Equation"><code>${escapeHtml(block.expression || "")}</code></div></figure>${childrenHtml}`,
+      equation: (block, { childrenHtml }) => `<figure class="post-equation"><figcaption class="post-block-label">Equation</figcaption><div class="post-equation-expression">${renderMathExpression(block.expression || "", { display: true })}</div></figure>${childrenHtml}`,
       bookmark: (block, { baseOrigin, childrenHtml }) => renderBookmarkBlock(block, childrenHtml, baseOrigin),
       resource: (block, { baseOrigin, childrenHtml }) => (
         block.resourceType === "embed"
@@ -1084,6 +1564,7 @@
     isLikelyEphemeralAssetUrl,
     mapNotionBlock,
     mapNotionPage,
+    renderMathExpression,
     renderPostArticle,
     renderBlocks,
     resolveDisplayImageUrl,

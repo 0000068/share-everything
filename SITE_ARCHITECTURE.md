@@ -1,7 +1,7 @@
 # Share Everything Site Architecture
 
-> Version: v2.8
-> Updated: 2026-05-09
+> Version: v3.2
+> Updated: 2026-05-11
 
 ## 1. Overview
 
@@ -32,7 +32,27 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v2.8 Highlights
+## 2. Version v3.2 Highlights
+
+v3.2 fixes Notion formula rendering and adds a mobile-only particle performance profile while preserving desktop animation behavior.
+
+- `js/notion-content.js` renders Notion block and inline equations as local MathML, keeping the original TeX only in hidden `application/x-tex` annotations for accessibility and copy/debug use.
+- `css/post-page.css` styles rendered math directly, removing the previous visible `<code>` treatment that made formulas look like raw LaTeX source.
+- `js/common.js` keeps the old desktop particle class, 350-particle density, and frame cadence unchanged.
+- Real mobile devices now use a separate `MobileParticle` model, 72 particles, and a 50ms draw interval to reduce phone CPU/GPU cost.
+- Mobile UI and performance overrides still require `(max-width: 768px) and (hover: none) and (pointer: coarse)`, so a narrow desktop browser window keeps desktop particles and desktop layout behavior.
+- Article pages keep the v3.1 mobile dock safe-area layout and ultra-narrow icon fallback.
+
+### v3.1 Highlights
+
+v3.1 restores the preferred old animation feel while keeping mobile-only performance and layout rules isolated from desktop behavior.
+
+- Mobile UI and performance overrides require `(max-width: 768px) and (hover: none) and (pointer: coarse)`, so a narrow desktop browser window keeps desktop particles and desktop layout behavior.
+- Article pages move the bookmark control into the mobile dock only on real mobile devices; desktop keeps the floating bookmark control.
+- The article mobile dock accounts for horizontal safe areas, keeps the four-action layout visible at normal phone widths, and switches to icon-only labels below 360px to avoid clipping.
+- Route transitions intentionally keep the old quick fade/slide cadence instead of using a reduced-motion variant.
+
+### v2.8 Highlights
 
 v2.8 is a code-quality and maintainability release that closes out the review backlog tracked in v2.7 while keeping the public runtime behavior unchanged.
 
@@ -112,7 +132,7 @@ v2.3 restores the v1.6-style whole-page SPA route motion while keeping the v2.0 
 - Blog cover media is non-interactive so clicks always reach the card link, while bookmark buttons remain above the link layer.
 - Article content prioritizes the first image with eager loading and high fetch priority.
 - Remote display images can be routed through the same-origin `/api/image` proxy for better cache behavior.
-- Mobile particle density preserves the old 120-particle starfield feel, and particles pause briefly while scrolling on mobile.
+- Mobile particle rendering now uses the v3.2 lightweight profile on real mobile devices only, and particles pause briefly while scrolling on mobile.
 - Mobile UI and performance overrides are gated by the shared real-mobile media query rather than width alone, keeping PC behavior stable even in narrow browser windows.
 - SPA page HTML requests are coalesced, while route swaps keep the v1.6-style 150ms visual exit cue.
 - SPA article navigation uses `/post.html?id=...` first on local dev origins and falls back to it when another server does not support `/posts/:id` rewrites.
@@ -410,7 +430,8 @@ The smoke suite currently covers:
 - SPA post-template fallback for local `/posts/:id` 404s.
 - SPA route transition animation parameters.
 - Blog cover preloading and mobile reveal behavior.
-- Real-mobile gating for mobile-only CSS, particle density, and bookmark control placement.
+- Notion block and inline equation rendering through MathML instead of visible TeX code.
+- Real-mobile gating for mobile-only CSS, particle density, bookmark control placement, and the article dock safe-area layout.
 - Blog cover click layering.
 - Remote display image proxying.
 - `/api/image` private-host/DNS validation, pinned lookup behavior, redirect-hop validation, cache headers, binary response behavior, and method guard.

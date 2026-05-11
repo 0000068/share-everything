@@ -87,8 +87,43 @@ export const notionBlockFixtures = Object.freeze([
     expectedHtmlIncludes: Object.freeze([
       '<figure class="post-equation">',
       '<figcaption class="post-block-label">Equation</figcaption>',
-      'role="math"',
+      '<math class="post-math post-math-display"',
+      '<msup><mi>c</mi><mn>2</mn></msup>',
+      '<annotation encoding="application/x-tex">E = mc^2</annotation>',
+    ]),
+    expectedHtmlExcludes: Object.freeze([
       "<code>E = mc^2</code>",
+    ]),
+  }),
+  Object.freeze({
+    name: "inline equations render as MathML",
+    rawBlocks: Object.freeze([
+      Object.freeze({
+        id: "paragraph-with-equation",
+        type: "paragraph",
+        paragraph: Object.freeze({
+          rich_text: Object.freeze([
+            Object.freeze({ plain_text: "Area: " }),
+            Object.freeze({
+              type: "equation",
+              plain_text: "A=\\pi r^2",
+              equation: Object.freeze({
+                expression: "A=\\pi r^2",
+              }),
+            }),
+          ]),
+        }),
+      }),
+    ]),
+    expectedTypes: Object.freeze(["paragraph"]),
+    expectedHtmlIncludes: Object.freeze([
+      '<p>Area: <math class="post-math post-math-inline"',
+      '<mi>π</mi>',
+      '<msup><mi>r</mi><mn>2</mn></msup>',
+      '<annotation encoding="application/x-tex">A=\\pi r^2</annotation>',
+    ]),
+    expectedHtmlExcludes: Object.freeze([
+      "<code>A=\\pi r^2</code>",
     ]),
   }),
   Object.freeze({
