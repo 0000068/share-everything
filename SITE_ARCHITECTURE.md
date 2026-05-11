@@ -45,6 +45,7 @@ v2.8 is a code-quality and maintainability release that closes out the review ba
 - `scripts/local-server.mjs` gains full MIME coverage for `.webp`, `.jpg`, `.jpeg`, `.ico`, `.xml`, and `.mjs` so local dev matches production content types more closely.
 - `css/post-page.css` drops the `body[data-page="post"] .fab-bookmark { display: none !important; }` override; JavaScript is now the single source of truth for floating bookmark visibility, and `js/post-page.js` continues to hide the fab on mobile in favor of the top-bar bookmark action.
 - `js/common.js` particle runtime keeps the original always-on starfield motion and avoids reduced-motion gates that would freeze the canvas after the first frame.
+- `js/site-utils.js` centralizes the real-mobile query `(max-width: 768px) and (hover: none) and (pointer: coarse)` so mobile UI and performance changes do not affect narrow desktop windows.
 - `js/post-page.js` demotes the "NotionAPI is unavailable" fallback log from `console.error` to `console.warn`, reflecting that it is a supported SSR fallback path rather than an error.
 - `vercel.json` intent around `/api/*` cache headers is documented directly in §5: do not add a catch-all `Cache-Control` there, since each handler owns its own policy (e.g. `/api/image` edge caching).
 - Kiro steering file `.kiro/steering/git-rules.md` mirrors the release commit convention from §13 as always-on workspace steering.
@@ -106,12 +107,13 @@ v2.4 refined the SPA route transition internals, fixes card cover placeholders, 
 v2.3 restores the v1.6-style whole-page SPA route motion while keeping the v2.0 navigation, cover image, mobile performance, and local development improvements.
 
 - Blog top actions now switch listing state in-page, avoiding a full reload when moving between bookmarks and overview.
-- Blog cards preload the first visible cover images and mark first-screen covers as `loading="eager"` with `fetchpriority="high"`.
+- Blog cards preload the first visible cover images and mark first-screen covers as `loading="eager"` with `fetchpriority="high"`; real mobile devices reduce this to the first cover only.
 - Blog cover cards include a stable fallback layer so slow images do not leave a blank cover area.
 - Blog cover media is non-interactive so clicks always reach the card link, while bookmark buttons remain above the link layer.
 - Article content prioritizes the first image with eager loading and high fetch priority.
 - Remote display images can be routed through the same-origin `/api/image` proxy for better cache behavior.
 - Mobile particle density preserves the old 120-particle starfield feel, and particles pause briefly while scrolling on mobile.
+- Mobile UI and performance overrides are gated by the shared real-mobile media query rather than width alone, keeping PC behavior stable even in narrow browser windows.
 - SPA page HTML requests are coalesced, while route swaps keep the v1.6-style 150ms visual exit cue.
 - SPA article navigation uses `/post.html?id=...` first on local dev origins and falls back to it when another server does not support `/posts/:id` rewrites.
 - SPA route transitions use the v1.6-style whole-page fade/slide cadence: quick fade out, short visual cue, and a 12px page slide in.
@@ -303,7 +305,7 @@ link interception immediately on load and depends on all preceding globals.
 - Remote display images can be rewritten to `/api/image?src=...`.
 - Share images still avoid likely ephemeral signed URLs and fall back to stable defaults.
 
-`blog-page.js` uses `SiteUtils.resolveProxiedDisplayImageUrl()` for cover cards, preloads the first three cover images, and uses cover fallback markup so cards remain visually stable while images load.
+`blog-page.js` uses `SiteUtils.resolveProxiedDisplayImageUrl()` for cover cards, preloads the first three cover images on desktop, preloads only the first cover on real mobile devices, and uses cover fallback markup so cards remain visually stable while images load.
 
 Cover images and fallback layers set `pointer-events: none`; the full-card link sits above the media layer, and the bookmark button sits above the link. This preserves the expected behavior that clicking the cover opens the article and clicking the bookmark toggles the bookmark.
 
@@ -408,6 +410,7 @@ The smoke suite currently covers:
 - SPA post-template fallback for local `/posts/:id` 404s.
 - SPA route transition animation parameters.
 - Blog cover preloading and mobile reveal behavior.
+- Real-mobile gating for mobile-only CSS, particle density, and bookmark control placement.
 - Blog cover click layering.
 - Remote display image proxying.
 - `/api/image` private-host/DNS validation, pinned lookup behavior, redirect-hop validation, cache headers, binary response behavior, and method guard.

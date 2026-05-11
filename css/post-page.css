@@ -615,7 +615,7 @@
   border-bottom: none;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 768px) and (hover: none) and (pointer: coarse) {
   .post-article {
     max-width: 100%;
   }
@@ -712,7 +712,7 @@
 
 }
 
-@media (max-width: 540px) {
+@media (max-width: 540px) and (hover: none) and (pointer: coarse) {
   .post-title {
     font-size: clamp(1.85rem, 10vw, 2.3rem);
     line-height: 1.14;

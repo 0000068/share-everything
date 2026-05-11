@@ -4,6 +4,7 @@
   const BOOKMARK_CATEGORY = SHARED_CONTENT.BOOKMARK_CATEGORY || "收藏";
   const DEFAULT_PAGE_SIZE = 9;
   const EAGER_COVER_IMAGE_COUNT = 3;
+  const MOBILE_EAGER_COVER_IMAGE_COUNT = 1;
   const FALLBACK_BOOKMARK_ONLY_CATEGORIES = Object.freeze([
     { name: BOOKMARK_CATEGORY, emoji: "📚" },
   ]);
@@ -56,6 +57,7 @@
   const HISTORY_MODE_REPLACE = "replace";
   const HISTORY_MODE_PUSH = "push";
   const PRELOAD_COVER_IMAGE_COUNT = 3;
+  const MOBILE_PRELOAD_COVER_IMAGE_COUNT = 1;
 
   function buildBookmarkSearchText(post) {
     return typeof post?._searchText === "string" && post._searchText
@@ -122,6 +124,12 @@
       isBookmarked: () => false,
       toggleById: () => null,
     };
+    const mobileDeviceQuery =
+      typeof siteUtils.createMobileDeviceQueryList === "function"
+        ? siteUtils.createMobileDeviceQueryList()
+        : typeof siteUtils.createMediaQueryList === "function"
+          ? siteUtils.createMediaQueryList("(max-width: 768px) and (hover: none) and (pointer: coarse)")
+          : window.matchMedia?.("(max-width: 768px) and (hover: none) and (pointer: coarse)") || { matches: false };
     const hasRemoteSource = Boolean(notionApi);
     const defaultCategory = hasRemoteSource ? ALL_CATEGORY : BOOKMARK_CATEGORY;
 
@@ -470,7 +478,11 @@
     function preloadCoverImages(posts = []) {
       if (!Array.isArray(posts) || posts.length === 0) return;
 
-      posts.slice(0, PRELOAD_COVER_IMAGE_COUNT).forEach((post) => {
+      const preloadCount = mobileDeviceQuery.matches
+        ? MOBILE_PRELOAD_COVER_IMAGE_COUNT
+        : PRELOAD_COVER_IMAGE_COUNT;
+
+      posts.slice(0, preloadCount).forEach((post) => {
         const coverImage = resolveSafeCoverImage(post);
         if (!coverImage || preloadedCoverImages.has(coverImage)) return;
 
@@ -629,7 +641,10 @@
         typeof siteUtils.buildPostPath === "function"
           ? siteUtils.buildPostPath(post.id)
           : `/posts/${encodeURIComponent(post.id)}`;
-      const shouldLoadCoverEagerly = index < EAGER_COVER_IMAGE_COUNT;
+      const eagerCoverCount = mobileDeviceQuery.matches
+        ? MOBILE_EAGER_COVER_IMAGE_COUNT
+        : EAGER_COVER_IMAGE_COUNT;
+      const shouldLoadCoverEagerly = index < eagerCoverCount;
       const coverLoading = shouldLoadCoverEagerly ? "eager" : "lazy";
       const coverFetchPriority = shouldLoadCoverEagerly ? "high" : "auto";
       const serializedTags = esc(JSON.stringify(Array.isArray(post.tags) ? post.tags : []));

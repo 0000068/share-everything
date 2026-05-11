@@ -5,6 +5,7 @@
 
 const canvas = document.getElementById("particles-canvas");
 const ctx = canvas ? canvas.getContext("2d") : null;
+const siteUtils = window.SiteUtils || {};
 let width;
 let height;
 let particles = [];
@@ -28,7 +29,12 @@ const colors = [
 ];
 
 function isMobileParticleViewport() {
-  return window.innerWidth < MOBILE_PARTICLE_BREAKPOINT;
+  if (typeof siteUtils.isMobileDeviceViewport === "function") {
+    return siteUtils.isMobileDeviceViewport();
+  }
+
+  return window.innerWidth < MOBILE_PARTICLE_BREAKPOINT
+    && window.matchMedia?.("(hover: none) and (pointer: coarse)")?.matches;
 }
 
 function getParticleCountForViewport() {

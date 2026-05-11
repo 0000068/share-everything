@@ -78,6 +78,7 @@ const indexPageJs = read("js/index-page.js");
 const notionContentJs = read("js/notion-content.js");
 const notionApiJs = read("js/notion-api.js");
 const postPageJs = read("js/post-page.js");
+const siteUtilsJs = read("js/site-utils.js");
 const smokeCheckSource = read("scripts/smoke-check.mjs");
 const smokeCheckModuleSources = [
   read("scripts/smoke-check/blog-page.mjs"),
@@ -215,6 +216,9 @@ expectIncludes(postPageCss, ".fab-bookmark {", "post-page.css should own the flo
 expectNotIncludes(postPageCss, "body[data-page=\"post\"] .fab-bookmark", "post-page CSS should not override bookmark visibility that JavaScript owns");
 expectNotIncludes(postPageCss, "display: none !important", "post-page CSS should avoid forcing bookmark controls against JavaScript state");
 expectIncludes(blogPageJs, "EAGER_COVER_IMAGE_COUNT = 3", "blog cards should prioritize the first visible cover images");
+expectIncludes(blogPageJs, "MOBILE_EAGER_COVER_IMAGE_COUNT = 1", "blog cards should reduce eager cover loading on real mobile devices");
+expectIncludes(blogPageJs, "MOBILE_PRELOAD_COVER_IMAGE_COUNT = 1", "blog cards should reduce image preloads on real mobile devices");
+expectIncludes(blogPageJs, "mobileDeviceQuery.matches", "blog cards should gate mobile image policy through the shared mobile query");
 expectIncludes(blogPageJs, "resolveSafeCoverImage(post)", "blog cards should use display-safe cover URLs instead of share-image fallbacks");
 expectIncludes(blogPageJs, 'loading="${coverLoading}"', "blog cards should keep lazy loading off the first visible covers");
 expectIncludes(blogPageJs, 'fetchpriority="${coverFetchPriority}"', "blog cards should assign browser fetch priority to cover images");
@@ -226,11 +230,23 @@ expectIncludes(blogPageCss, "pointer-events: none;\n}", "blog card cover media s
 expectIncludes(blogPageCss, "z-index: 3;\n  display: inline-flex;", "blog card bookmark button should stay above the card link layer");
 expectIncludes(commonJs, "DESKTOP_PARTICLE_COUNT = 350", "particle runtime should preserve the desktop particle density");
 expectIncludes(commonJs, "MOBILE_PARTICLE_COUNT = 120", "particle runtime should preserve the old mobile particle density");
+expectIncludes(commonJs, "siteUtils.isMobileDeviceViewport", "particle runtime should use the shared real-mobile gate before changing density");
+expectIncludes(commonJs, '(hover: none) and (pointer: coarse)', "particle fallback should avoid treating narrow desktop windows as mobile");
 expectNotIncludes(commonJs, "function shouldReduceMotion", "particle runtime should not stop the old particle animation for reduced-motion settings");
 expectNotIncludes(commonJs, "shouldReduceMobileParticles", "particle runtime should avoid reduced-motion gates in the particle loop");
 expectIncludes(commonJs, "if (particlesPausedForScroll)", "particle runtime should only stop animation for the explicit mobile scroll pause");
 expectIncludes(commonJs, "pauseMobileParticlesDuringScroll", "particle runtime should pause mobile particles while scrolling");
 expectIncludes(commonJs, "if (!isMobileParticleViewport()) return;", "particle runtime should keep scroll pauses mobile-only");
+expectIncludes(siteUtilsJs, 'MOBILE_DEVICE_QUERY = "(max-width: 768px) and (hover: none) and (pointer: coarse)"', "site utils should centralize the real-mobile device query");
+expectIncludes(siteUtilsJs, "createMobileDeviceQueryList", "site utils should expose a reusable mobile media query helper");
+expectIncludes(styleCss, "@media (max-width: 768px) and (hover: none) and (pointer: coarse)", "shared mobile CSS should not affect narrow desktop windows");
+expectIncludes(blogPageCss, "@media (max-width: 768px) and (hover: none) and (pointer: coarse)", "blog mobile CSS should not affect narrow desktop windows");
+expectIncludes(postPageCss, "@media (max-width: 768px) and (hover: none) and (pointer: coarse)", "post mobile CSS should not affect narrow desktop windows");
+assert.ok(
+  !/@media\s*\(max-width:\s*(?:768|540)px\)\s*\{/.test(`${styleCss}\n${blogPageCss}\n${postPageCss}`),
+  "mobile CSS breakpoints should include the real-mobile pointer/hover gate",
+);
+expectNotIncludes(postPageJs, 'createMediaQueryList("(max-width: 768px)")', "post page should not treat narrow desktop windows as mobile");
 expectIncludes(blogPageCss, "opacity 0.3s ease", "blog cards should use shorter reveal transitions on mobile");
 expectIncludes(blogPageJs, 'window.scrollTo({ top: 0, behavior: "auto" });', "blog pagination should avoid smooth-scroll jank on mobile");
 expectIncludes(notionApiJs, "POSTS_RESPONSE_CACHE_TTL", "notion client should keep a short in-memory list cache for fast returns");
@@ -941,6 +957,7 @@ expectNotIncludes(postPageJs, 'console.error("NotionAPI is unavailable on post p
 expectIncludes(postPageJs, "canBookmarkFromInitialData", "post page should recover bookmark controls from SSR initial data when the client API is unavailable");
 expectIncludes(postPageJs, "initBookmark(initialPostData);", "post page should still wire bookmark controls from SSR summary data in fallback mode");
 expectIncludes(postPageJs, 'element.style.display = mobileNavQuery.matches ? "none" : "flex";', "post page should hide the floating bookmark control on mobile through JavaScript state");
+expectIncludes(postPageJs, "createMobileDeviceQueryList", "post page should use the shared real-mobile query for bookmark control placement");
 assert.ok(
   postPageJs.indexOf("const postId = getCurrentPostId();") < postPageJs.indexOf('if (!notionApi)'),
   "post page should initialize route state before the NotionAPI fallback branch runs",

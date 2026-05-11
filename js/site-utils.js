@@ -2,6 +2,7 @@
   const sharedContent = window.NotionContent || {};
   const BLOG_RETURN_URL_STORAGE_KEY = "spa:last-blog-url";
   const BOOKMARK_HASH_PREFIX = "#bookmarks";
+  const MOBILE_DEVICE_QUERY = "(max-width: 768px) and (hover: none) and (pointer: coarse)";
 
   function createMediaQueryList(query) {
     if (typeof window.matchMedia === "function") {
@@ -15,6 +16,14 @@
       addListener: () => {},
       removeListener: () => {},
     };
+  }
+
+  function createMobileDeviceQueryList() {
+    return createMediaQueryList(MOBILE_DEVICE_QUERY);
+  }
+
+  function isMobileDeviceViewport() {
+    return createMobileDeviceQueryList().matches;
   }
 
   function sanitizeImageUrl(candidate) {
@@ -251,11 +260,13 @@
     buildBookmarkListingUrl,
     buildPostPath,
     buildPostUrl,
+    createMobileDeviceQueryList,
     createMediaQueryList,
     getPreferredBlogReturnUrl,
     getPostIdFromUrl,
     isBlogPageUrl,
     isLikelyEphemeralAssetUrl,
+    isMobileDeviceViewport,
     normalizePageNumber,
     normalizePostId,
     parseBookmarkListingHash,

@@ -371,7 +371,7 @@
 }
 
 
-@media (max-width: 768px) {
+@media (max-width: 768px) and (hover: none) and (pointer: coarse) {
   .blog-card.visible {
     transition:
       opacity 0.3s ease,
@@ -438,6 +438,13 @@
     grid-template-rows: minmax(0, 0.52fr) minmax(0, 0.48fr);
     aspect-ratio: 1 / 1;
     border-radius: 20px;
+  }
+
+  .blog-card:hover {
+    background: var(--glass-bg);
+    border-color: var(--glass-border);
+    transform: none;
+    box-shadow: none;
   }
 
   .blog-card-cover-placeholder {
@@ -524,7 +531,7 @@
   }
 }
 
-@media (max-width: 540px) {
+@media (max-width: 540px) and (hover: none) and (pointer: coarse) {
   .blog-search {
     margin-bottom: 18px;
   }

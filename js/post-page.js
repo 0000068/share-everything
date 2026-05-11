@@ -24,9 +24,15 @@
     const postId = getCurrentPostId();
     const bookmarkElements = [fab, navBookmark].filter(Boolean);
     const mobileNavQuery =
-      typeof siteUtils.createMediaQueryList === "function"
-        ? siteUtils.createMediaQueryList("(max-width: 768px)")
-        : window.matchMedia("(max-width: 768px)");
+      typeof siteUtils.createMobileDeviceQueryList === "function"
+        ? siteUtils.createMobileDeviceQueryList()
+        : typeof siteUtils.createMediaQueryList === "function"
+          ? siteUtils.createMediaQueryList("(max-width: 768px) and (hover: none) and (pointer: coarse)")
+          : window.matchMedia?.("(max-width: 768px) and (hover: none) and (pointer: coarse)") || {
+            matches: false,
+            addListener: () => {},
+            removeListener: () => {},
+          };
     let isDisposed = false;
     let bookmarkBindings = [];
     let backClickHandler = null;
