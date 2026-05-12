@@ -125,6 +125,8 @@ expectIncludes(serverNotionJs, "buildContentSchema", "server notion layer should
 expectIncludes(serverNotionJs, "buildDatabaseSorts", "server notion layer should derive list sorting from the resolved schema");
 expectIncludes(serverNotionJs, "normalizePostQueryFilters", "server notion layer should normalize category and search inputs before querying");
 expectIncludes(serverNotionJs, "PUBLIC_SEARCH_QUERY_MAX_LENGTH", "server notion layer should cap public search query input length");
+expectIncludes(serverNotionJs, "normalizeSiteOrigin", "server notion layer should validate SITE_URL before generating public URLs");
+expectIncludes(serverNotionJs, "includeSearchText: true", "server notion layer should precompute public post search text when mapping Notion pages");
 expectIncludes(serverNotionJs, "hasPostQueryFilters", "server notion layer should detect when filtered queries need extra work");
 expectIncludes(serverNotionJs, "NOTION_REQUEST_TIMEOUT_MS", "server notion layer should define a request timeout for upstream calls");
 expectIncludes(serverNotionJs, "AbortController", "server notion layer should abort slow Notion requests");

@@ -3,6 +3,8 @@
   const BLOG_RETURN_URL_STORAGE_KEY = "spa:last-blog-url";
   const BOOKMARK_HASH_PREFIX = "#bookmarks";
   const MOBILE_DEVICE_QUERY = "(max-width: 768px) and (hover: none) and (pointer: coarse)";
+  const MOBILE_DEVICE_CLASS = "is-mobile-device-viewport";
+  const MOBILE_DEVICE_WIDTH = 768;
 
   function createMediaQueryList(query) {
     if (typeof window.matchMedia === "function") {
@@ -22,8 +24,44 @@
     return createMediaQueryList(MOBILE_DEVICE_QUERY);
   }
 
+  function hasTouchInput() {
+    const nav = window.navigator || {};
+    return Boolean(
+      nav.maxTouchPoints > 0 ||
+        nav.msMaxTouchPoints > 0 ||
+        "ontouchstart" in window,
+    );
+  }
+
+  function isNarrowViewport() {
+    const viewportWidth = Math.min(
+      window.innerWidth || Number.POSITIVE_INFINITY,
+      document.documentElement?.clientWidth || Number.POSITIVE_INFINITY,
+    );
+    return viewportWidth <= MOBILE_DEVICE_WIDTH;
+  }
+
   function isMobileDeviceViewport() {
-    return createMobileDeviceQueryList().matches;
+    return createMobileDeviceQueryList().matches || (isNarrowViewport() && hasTouchInput());
+  }
+
+  function syncMobileDeviceViewportClass() {
+    document.documentElement?.classList?.toggle(MOBILE_DEVICE_CLASS, isMobileDeviceViewport());
+  }
+
+  function bindMobileDeviceViewportClass() {
+    syncMobileDeviceViewportClass();
+
+    const mobileQuery = createMobileDeviceQueryList();
+    const handleChange = () => syncMobileDeviceViewportClass();
+    if (typeof mobileQuery.addEventListener === "function") {
+      mobileQuery.addEventListener("change", handleChange);
+    } else if (typeof mobileQuery.addListener === "function") {
+      mobileQuery.addListener(handleChange);
+    }
+
+    window.addEventListener?.("resize", handleChange, { passive: true });
+    window.addEventListener?.("orientationchange", handleChange, { passive: true });
   }
 
   function sanitizeImageUrl(candidate) {
@@ -276,7 +314,10 @@
     resolveShareImageUrl,
     sanitizeCoverBackground,
     sanitizeImageUrl,
+    syncMobileDeviceViewportClass,
   });
+
+  bindMobileDeviceViewportClass();
 
   if (isBlogPageUrl(window.location.href)) {
     rememberBlogReturnUrl(window.location.href);

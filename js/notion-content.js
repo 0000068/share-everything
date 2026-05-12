@@ -869,6 +869,17 @@
     return (richText || []).map((item) => item.plain_text).join("");
   }
 
+  function shouldOpenLinkInNewTab(href, baseOrigin) {
+    try {
+      const siteOrigin = new URL(getBaseOrigin(baseOrigin)).origin;
+      const targetUrl = new URL(href, siteOrigin);
+      if (targetUrl.protocol === "mailto:") return true;
+      return targetUrl.origin !== siteOrigin;
+    } catch {
+      return true;
+    }
+  }
+
   function richTextToHtml(richText, { baseOrigin } = {}) {
     if (!richText?.length) return "";
 
@@ -894,7 +905,10 @@
 
       const safeHref = sanitizeUrl(item.href, SAFE_LINK_PROTOCOLS, baseOrigin);
       if (safeHref) {
-        text = `<a href="${escapeHtml(safeHref)}" target="_blank" rel="noopener">${text}</a>`;
+        const newTabAttributes = shouldOpenLinkInNewTab(safeHref, baseOrigin)
+          ? ' target="_blank" rel="noopener"'
+          : "";
+        text = `<a href="${escapeHtml(safeHref)}"${newTabAttributes}>${text}</a>`;
       }
 
       return text;

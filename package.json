@@ -1,6 +1,6 @@
 {
   "name": "share-everything",
-  "version": "3.4.0",
+  "version": "3.5.0",
   "type": "commonjs",
   "private": true,
   "license": "MIT",
@@ -10,6 +10,8 @@
   },
   "scripts": {
     "check": "node scripts/smoke-check.mjs",
-    "dev": "node scripts/local-server.mjs"
+    "dev": "node scripts/local-server.mjs",
+    "dev:bg": "node scripts/start-dev-bg.mjs",
+    "stop:bg": "node scripts/stop-dev-bg.mjs"
   }
 }

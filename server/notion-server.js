@@ -17,7 +17,8 @@ const NOTION_BASE = "https://api.notion.com/v1";
 const NOTION_VERSION = "2022-06-28";
 const MAX_BLOCK_RECURSION_DEPTH = 10;
 const MAX_PAGINATION_ROUNDS = 50;
-const DEFAULT_SITE_ORIGIN = process.env.SITE_URL || "https://www.0000068.xyz";
+const FALLBACK_SITE_ORIGIN = "https://www.0000068.xyz";
+const DEFAULT_SITE_ORIGIN = normalizeSiteOrigin(process.env.SITE_URL, FALLBACK_SITE_ORIGIN);
 const DEFAULT_POST_PAGE_SIZE = 9;
 const PUBLIC_CATEGORY_QUERY_MAX_LENGTH = 128;
 const PUBLIC_SEARCH_QUERY_MAX_LENGTH = 256;
@@ -91,6 +92,27 @@ function normalizeNonNegativeNumber(value, fallback) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
+function normalizeSiteOrigin(value, fallback = FALLBACK_SITE_ORIGIN) {
+  const candidate = typeof value === "string" && value.trim() ? value.trim() : fallback;
+
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new Error("SITE_URL must use http or https");
+    }
+    parsed.username = "";
+    parsed.password = "";
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.href.replace(/\/+$/, "");
+  } catch (error) {
+    if (candidate !== fallback) {
+      console.warn(`Invalid SITE_URL "${candidate}", falling back to ${fallback}.`);
+    }
+    return fallback.replace(/\/+$/, "");
+  }
+}
+
 function createAsyncLimiter(limit) {
   const safeLimit = Math.max(1, Math.trunc(normalizePositiveNumber(limit, 1)));
   let activeCount = 0;
@@ -142,7 +164,7 @@ function getDatabaseId() {
 }
 
 function getSiteOrigin() {
-  return DEFAULT_SITE_ORIGIN.replace(/\/+$/, "");
+  return DEFAULT_SITE_ORIGIN;
 }
 
 function createNotionRequestError(message, {
@@ -465,7 +487,10 @@ async function queryDatabasePages({ filter, schema = null } = {}) {
     startCursor = data.has_more ? data.next_cursor : null;
   } while (startCursor);
 
-  const mappedPages = pages.map((page) => mapNotionPage(page, { schema }));
+  const mappedPages = pages.map((page) => mapNotionPage(page, {
+    includeSearchText: true,
+    schema,
+  }));
   return sorts ? mappedPages : sortPostsByDateDesc(mappedPages);
 }
 

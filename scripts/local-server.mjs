@@ -32,11 +32,29 @@ const mimeTypes = new Map([
 ]);
 const apiHandlers = new Map([
   ["/api/image", require("../api/image.js")],
+  ["/api/notion", require("../api/notion.js")],
   ["/api/post", require("../api/post.js")],
   ["/api/post-data", require("../api/post-data.js")],
   ["/api/posts-data", require("../api/posts-data.js")],
   ["/api/sitemap", require("../api/sitemap.js")],
 ]);
+
+function createHttpError(statusCode, message) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+function getErrorStatusCode(error) {
+  const statusCode = Number(error?.statusCode || error?.status);
+  return Number.isInteger(statusCode) && statusCode >= 400 && statusCode < 600
+    ? statusCode
+    : 500;
+}
+
+function isMissingStaticFileError(error) {
+  return error?.code === "ENOENT" || error?.code === "ENOTDIR";
+}
 
 function readQuery(url) {
   const query = {};
@@ -103,17 +121,29 @@ async function invokeApiHandler(handler, req, res, query = {}) {
 }
 
 async function serveStatic(url, res) {
-  let pathname = decodeURIComponent(url.pathname);
+  let pathname = "";
+  try {
+    pathname = decodeURIComponent(url.pathname);
+  } catch {
+    throw createHttpError(400, "Bad request");
+  }
+
   if (pathname === "/") pathname = "/index.html";
   const filePath = path.resolve(rootDir, `.${pathname}`);
   const relativePath = path.relative(rootDir, filePath);
   if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
-    res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
-    res.end("Forbidden");
-    return;
+    throw createHttpError(403, "Forbidden");
   }
 
-  const data = await readFile(filePath);
+  let data;
+  try {
+    data = await readFile(filePath);
+  } catch (error) {
+    if (isMissingStaticFileError(error)) {
+      throw createHttpError(404, "Not found");
+    }
+    throw error;
+  }
   res.writeHead(200, {
     "Content-Type": mimeTypes.get(path.extname(filePath).toLowerCase()) || "application/octet-stream",
   });
@@ -150,8 +180,13 @@ const server = createServer(async (req, res) => {
 
     await serveStatic(url, res);
   } catch (error) {
-    res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-    res.end("Not found");
+    const statusCode = getErrorStatusCode(error);
+    if (statusCode >= 500) {
+      console.error("Local server request failed:", error);
+    }
+
+    res.writeHead(statusCode, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end(statusCode === 404 ? "Not found" : error?.message || "Internal server error");
   }
 });
 

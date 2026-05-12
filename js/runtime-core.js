@@ -48,9 +48,56 @@
     script.textContent = JSON.stringify(payload);
   }
 
+  function syncStructuredDataFromDocument(sourceDocument) {
+    const sourceHead = sourceDocument?.head;
+    const targetHead = document.head;
+    if (!sourceHead || !targetHead) return;
+
+    const sourceScripts = Array.from(
+      sourceHead.querySelectorAll('script[type="application/ld+json"][data-structured-data]'),
+    );
+    const sourceKeys = new Set(
+      sourceScripts
+        .map((script) => script.getAttribute("data-structured-data"))
+        .filter(Boolean),
+    );
+
+    Array.from(targetHead.querySelectorAll('script[type="application/ld+json"][data-structured-data]'))
+      .forEach((script) => {
+        const key = script.getAttribute("data-structured-data");
+        if (!key || !sourceKeys.has(key)) {
+          script.remove();
+        }
+      });
+
+    sourceScripts.forEach((sourceScript) => {
+      const key = sourceScript.getAttribute("data-structured-data");
+      if (!key) return;
+
+      let targetScript = targetHead.querySelector(
+        `script[type="application/ld+json"][data-structured-data="${key}"]`,
+      );
+      if (!targetScript) {
+        targetScript = document.createElement("script");
+        targetScript.type = "application/ld+json";
+        targetScript.setAttribute("data-structured-data", key);
+        targetHead.appendChild(targetScript);
+      }
+
+      const nonce = sourceScript.nonce || sourceScript.getAttribute("nonce") || "";
+      if (nonce) {
+        targetScript.setAttribute("nonce", nonce);
+      } else {
+        targetScript.removeAttribute("nonce");
+      }
+      targetScript.textContent = sourceScript.textContent || "";
+    });
+  }
+
   window.StructuredData = Object.freeze({
     set: setStructuredData,
     clear: clearStructuredData,
+    syncFromDocument: syncStructuredDataFromDocument,
   });
 
   const PageProgress = (() => {
@@ -186,6 +233,19 @@
     return target;
   }
 
+  function cleanupTemporaryFocus(target) {
+    if (!(target instanceof HTMLElement) || target.dataset.spaManagedFocus !== "true") {
+      return;
+    }
+
+    const clearManagedFocus = () => {
+      target.removeAttribute("tabindex");
+      delete target.dataset.spaManagedFocus;
+    };
+
+    window.setTimeout(clearManagedFocus, 0);
+  }
+
   function focusSpaContent({ root, preferredSelectors = [], clearPendingFocus = true } = {}) {
     if (!(root instanceof HTMLElement)) return null;
 
@@ -193,6 +253,7 @@
     if (!target) return null;
 
     target.focus({ preventScroll: true });
+    cleanupTemporaryFocus(target);
     if (clearPendingFocus) {
       delete root.dataset.pendingFocus;
     }

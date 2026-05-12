@@ -451,10 +451,10 @@
           ogType: nextOgType,
           robots: nextRobots,
         });
+        window.StructuredData?.syncFromDocument?.(doc);
 
         content.innerHTML = newContent.innerHTML;
         content.dataset.pendingFocus = targetPageId || "page";
-        window.StructuredData?.clear?.("post-article");
 
         content.querySelectorAll(".page-transition-wrapper").forEach((element) => {
           element.style.animation = "none";

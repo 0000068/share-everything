@@ -18,6 +18,7 @@
 - 图 2 属实：文章页在移动浏览器缩放/地址栏变化时出现明显矩形背景分区。优先改成移动端文章/列表页统一的静态全页背景基底，避免固定 `100vh` canvas、fixed 背景层、局部内容背景互相错位。
 - 图 3/4 可作为移动端视觉方向参考：背景应该像 PC 一样连续、完整、沉浸，但不建议真正用 viewport/meta 缩放把整页压成桌面版，否则文章阅读字号和触控面积会变差。
 - 封面首屏笔记本 emoji 割裂属实：图片未加载、懒加载或加载失败时，不应闪出 `📝` 这种强风格 emoji，应换成低对比渐变、骨架屏或纯色占位。
+- Brave/vivo 修复后仍复现属实：根因不是文章数据，而是未带版本指纹的 `/css/*`、`/js/*` 会被移动浏览器继续复用旧缓存；同时部分 Android 浏览器对 `(hover: none) and (pointer: coarse)` 的结果不稳定，导致移动端隐藏 dock、长 URL 限宽等新规则没有稳定命中。
 
 ## P1 移动端重设计优先项
 
@@ -41,9 +42,20 @@
   - 检查方向：图标尺寸、emoji/图标 fallback、cover placeholder 裁切、首屏层级和背景衔接。
   - 相关文件：`css/style.css`、`css/blog-page.css`、`js/blog-page.js`、`js/bookmark.js`、`js/notion-api.js`、`js/notion-content.js`
 
-- [ ] 修复手机首页 `hero-title` 强制不换行导致的窄屏溢出风险。
+- [x] 修复手机首页 `hero-title` 强制不换行导致的窄屏溢出风险。
   - 影响：移动端首页首屏。
   - 相关文件：`css/style.css`
+
+- [x] 修复 Brave/vivo 继续显示旧 UI 的缓存与移动端 gate 兼容问题。
+  - 当前现象：Chrome/Safari 已正常，但 Brave/vivo 仍显示文章页顶部 dock、按钮文字被挤成竖排、长 URL 横向撑出正文。
+  - 根因：HTML 会重新验证，但 CSS/JS 是未指纹路径并带有 `stale-while-revalidate` 缓存；旧移动浏览器可能继续使用旧 `style.css`/`post-page.css`。另一个触发点是部分 Android 浏览器对 `hover/pointer` 媒体查询返回不一致。
+  - 修复方向：静态 CSS/JS 链接加 `?v=20260512-mobile-compat` 版本指纹；`site-utils.js` 在触屏窄视口下同步 `html.is-mobile-device-viewport`，CSS 和 JS 以这个 class 作为等价移动端 fallback。
+  - 相关文件：`index.html`、`blog.html`、`post.html`、`css/style.css`、`css/blog-page.css`、`css/post-page.css`、`js/site-utils.js`、`js/blog-page.js`、`js/post-page.js`
+
+- [x] 修复 Codex/Windows 启动本地服务时 `cmd /c start /b ... > log` 卡死的问题。
+  - 当前现象：服务实际已启动，但外层 `cmd` 继承常驻进程的 stdout/stderr 句柄，导致工具调用一直不返回。
+  - 修复方向：新增 `scripts/start-dev-bg.mjs` 和 `scripts/stop-dev-bg.mjs`，通过 Node `spawn(..., { detached: true })` + `child.unref()` 真正后台启动；`AGENTS.md` 记录以后必须用 `npm run dev:bg`。
+  - 相关文件：`scripts/start-dev-bg.mjs`、`scripts/stop-dev-bg.mjs`、`package.json`、`AGENTS.md`、`.gitignore`
 
 - [ ] 保留博客列表双列正方形卡片，但重做移动端卡片内部排版。
   - 目标：双列方卡继续好看，同时标题、分类、封面、收藏按钮不拥挤。
@@ -74,7 +86,7 @@
   - 影响：移动端文章页基本导航。
   - 相关文件：`post.html`、`css/post-page.css`、`js/post-page.js`
 
-- [ ] 将 `blog.html` 搜索框从 `type="text"` 改为 `type="search"`。
+- [x] 将 `blog.html` 搜索框从 `type="text"` 改为 `type="search"`。
   - 影响：手机搜索键盘和清除按钮体验。
   - 相关文件：`blog.html`
 
@@ -90,7 +102,7 @@
 
 - [x] 统一 `SITE_ARCHITECTURE.md`、`README.md`、`package.json` 的版本描述。
   - 影响：读者理解、发布规则一致性。
-  - 当前状态：已按最新发布顺序从 `v3.3` 推进到 `v3.4`；`package.json` 和 README 使用 `3.4.0`，`SITE_ARCHITECTURE.md` 使用 `v3.4`；当前仓库根目录未发现 `git-rules.md`。
+  - 当前状态：已按最新发布顺序推进到 `v3.5`；`package.json` 和 README 使用 `3.5.0`，`SITE_ARCHITECTURE.md` 使用 `v3.5`；当前仓库根目录未发现 `git-rules.md`。
   - 相关文件：`SITE_ARCHITECTURE.md`、`README.md`、`package.json`、`scripts/smoke-check.mjs`
 
 - [ ] 让本地 dev server 挂载 `/api/notion` 并返回与生产一致的 `410`。

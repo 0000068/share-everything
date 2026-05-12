@@ -130,6 +130,12 @@
         : typeof siteUtils.createMediaQueryList === "function"
           ? siteUtils.createMediaQueryList("(max-width: 768px) and (hover: none) and (pointer: coarse)")
           : window.matchMedia?.("(max-width: 768px) and (hover: none) and (pointer: coarse)") || { matches: false };
+    function isMobileDeviceViewport() {
+      return typeof siteUtils.isMobileDeviceViewport === "function"
+        ? siteUtils.isMobileDeviceViewport()
+        : mobileDeviceQuery.matches;
+    }
+
     const hasRemoteSource = Boolean(notionApi);
     const defaultCategory = hasRemoteSource ? ALL_CATEGORY : BOOKMARK_CATEGORY;
 
@@ -478,7 +484,7 @@
     function preloadCoverImages(posts = []) {
       if (!Array.isArray(posts) || posts.length === 0) return;
 
-      const preloadCount = mobileDeviceQuery.matches
+      const preloadCount = isMobileDeviceViewport()
         ? MOBILE_PRELOAD_COVER_IMAGE_COUNT
         : PRELOAD_COVER_IMAGE_COUNT;
 
@@ -641,7 +647,7 @@
         typeof siteUtils.buildPostPath === "function"
           ? siteUtils.buildPostPath(post.id)
           : `/posts/${encodeURIComponent(post.id)}`;
-      const eagerCoverCount = mobileDeviceQuery.matches
+      const eagerCoverCount = isMobileDeviceViewport()
         ? MOBILE_EAGER_COVER_IMAGE_COUNT
         : EAGER_COVER_IMAGE_COUNT;
       const shouldLoadCoverEagerly = index < eagerCoverCount;

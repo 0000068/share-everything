@@ -66,6 +66,9 @@ const vercelJson = read("vercel.json");
 const envExample = read(".env.example");
 const licenseText = read("LICENSE");
 const localServerJs = read("scripts/local-server.mjs");
+const startDevBgJs = read("scripts/start-dev-bg.mjs");
+const stopDevBgJs = read("scripts/stop-dev-bg.mjs");
+const agentsMd = read("AGENTS.md");
 const styleCss = read("css/style.css");
 const blogPageCss = read("css/blog-page.css");
 const postPageCss = read("css/post-page.css");
@@ -136,6 +139,8 @@ const {
   "renderPostContent",
 ]);
 
+const assetVersion = "v=20260512-mobile-compat";
+
 expectIncludes(indexHtml, 'property="og:image"', "index.html should declare og:image");
 expectIncludes(blogHtml, 'property="og:image"', "blog.html should declare og:image");
 expectIncludes(postHtml, 'property="og:image"', "post.html should declare og:image");
@@ -144,7 +149,9 @@ expectIncludes(indexHtml, 'action="/blog.html"', "index.html search should degra
 expectIncludes(indexHtml, 'method="get"', "index.html search should work without JavaScript");
 expectIncludes(postHtml, 'rel="canonical"', "post.html should declare a fallback canonical link");
 expectIncludes(postHtml, 'href="/blog.html"', "post.html should use root-relative blog links for canonical post routes");
-expectIncludes(postHtml, 'src="/js/post-page.js"', "post.html should use root-relative scripts for canonical post routes");
+expectIncludes(postHtml, 'class="empty-state-helper"', "post.html should keep empty-state helper styling in CSS classes");
+expectIncludes(postHtml, 'class="empty-state-link"', "post.html should keep empty-state link styling in CSS classes");
+expectIncludes(postHtml, `src="/js/post-page.js?${assetVersion}"`, "post.html should use cache-busted root-relative scripts for canonical post routes");
 expectIncludes(postHtml, 'id="postStatus"', "post.html should expose a live status region for post interactions");
 expectIncludes(blogHtml, 'href="/"', "blog.html should point the home action to the canonical root route");
 expectIncludes(postHtml, 'href="/"', "post.html should point the home action to the canonical root route");
@@ -165,14 +172,14 @@ const pageHtmlByLabel = [
   ["post.html", postHtml],
 ];
 const sharedRuntimeScriptSources = [
-  "/js/font-loader.js",
-  "/js/notion-content.js",
-  "/js/runtime-core.js",
-  "/js/site-utils.js",
-  "/js/common.js",
-  "/js/ui-effects.js",
-  "/js/seo-meta.js",
-  "/js/spa-router.js",
+  `/js/font-loader.js?${assetVersion}`,
+  `/js/notion-content.js?${assetVersion}`,
+  `/js/runtime-core.js?${assetVersion}`,
+  `/js/site-utils.js?${assetVersion}`,
+  `/js/common.js?${assetVersion}`,
+  `/js/ui-effects.js?${assetVersion}`,
+  `/js/seo-meta.js?${assetVersion}`,
+  `/js/spa-router.js?${assetVersion}`,
 ];
 const expectedStaticContentSecurityPolicy = securityPolicyHelpers.buildStaticContentSecurityPolicy();
 pageHtmlByLabel.forEach(([label, htmlSource]) => {
@@ -197,8 +204,17 @@ expectIncludes(indexHtml, "data-page-focus", "index.html should mark a focus tar
 expectIncludes(blogHtml, "data-page-focus", "blog.html should mark a focus target");
 expectIncludes(blogHtml, 'id="blogStatus"', "blog.html should include the live status region");
 expectIncludes(blogHtml, 'id="blogGrid" role="list"', "blog grid should expose list semantics");
-expectIncludes(blogHtml, 'href="/css/blog-page.css"', "blog.html should load blog-page.css");
-expectIncludes(postHtml, 'href="/css/post-page.css"', "post.html should load post-page.css");
+expectIncludes(blogHtml, 'type="search" id="blogSearch"', "blog search input should use the mobile-friendly search keyboard");
+expectIncludes(indexHtml, `href="/css/style.css?${assetVersion}"`, "index.html should cache-bust shared CSS");
+expectIncludes(blogHtml, `href="/css/blog-page.css?${assetVersion}"`, "blog.html should cache-bust blog-page.css");
+expectIncludes(postHtml, `href="/css/post-page.css?${assetVersion}"`, "post.html should cache-bust post-page.css");
+expectIncludes(packageJson, '"dev:bg": "node scripts/start-dev-bg.mjs"', "package.json should provide a detached dev server launcher");
+expectIncludes(packageJson, '"stop:bg": "node scripts/stop-dev-bg.mjs"', "package.json should provide a tracked dev server stopper");
+expectIncludes(startDevBgJs, "detached: true", "background dev launcher should detach the local server process");
+expectIncludes(startDevBgJs, "child.unref();", "background dev launcher should let the parent process exit immediately");
+expectIncludes(startDevBgJs, "portInUse", "background dev launcher should no-op when the dev server port is already listening");
+expectIncludes(stopDevBgJs, "process.kill(pid)", "background dev stopper should terminate the tracked server pid");
+expectIncludes(agentsMd, "npm run dev:bg", "agent notes should tell future agents to use the detached dev server launcher");
 expectIncludes(gitAttributes, "*.mjs text eol=lf", ".gitattributes should normalize .mjs files to LF");
 assert.ok(!styleCss.includes("\r\n"), "style.css should use LF line endings");
 assert.ok(!blogPageCss.includes("\r\n"), "blog-page.css should use LF line endings");
@@ -214,6 +230,7 @@ expectIncludes(blogPageCss, ".blog-grid {", "blog-page.css should own the blog g
 expectIncludes(postPageCss, ".post-content {", "post-page.css should own the post content styles");
 expectIncludes(postPageCss, "overflow-wrap: anywhere;", "post content should break long URLs before they widen mobile layout");
 expectIncludes(postPageCss, "word-break: break-word;", "post content should include legacy long-word wrapping fallback");
+expectIncludes(postPageCss, ".empty-state-link", "post page CSS should own empty-state link styling");
 expectIncludes(postPageCss, ".fab-bookmark {", "post-page.css should own the floating bookmark styles");
 expectNotIncludes(postPageCss, "body[data-page=\"post\"] .fab-bookmark", "post-page CSS should not override bookmark visibility that JavaScript owns");
 expectNotIncludes(postPageCss, "display: none !important", "post-page CSS should avoid forcing bookmark controls against JavaScript state");
@@ -244,14 +261,20 @@ expectIncludes(commonJs, "if (particlesPausedForScroll)", "particle runtime shou
 expectIncludes(commonJs, "pauseMobileParticlesDuringScroll", "particle runtime should pause mobile particles while scrolling");
 expectIncludes(commonJs, "if (!isMobileParticleViewport()) return;", "particle runtime should keep scroll pauses mobile-only");
 expectIncludes(siteUtilsJs, 'MOBILE_DEVICE_QUERY = "(max-width: 768px) and (hover: none) and (pointer: coarse)"', "site utils should centralize the real-mobile device query");
+expectIncludes(siteUtilsJs, 'MOBILE_DEVICE_CLASS = "is-mobile-device-viewport"', "site utils should expose a JS fallback class for mobile browsers with broken pointer media queries");
+expectIncludes(siteUtilsJs, "hasTouchInput", "site utils should fall back to touch capability for Brave/vivo mobile detection");
+expectIncludes(siteUtilsJs, "syncMobileDeviceViewportClass", "site utils should keep the mobile compatibility class in sync");
 expectIncludes(siteUtilsJs, "createMobileDeviceQueryList", "site utils should expose a reusable mobile media query helper");
 expectIncludes(styleCss, "@media (max-width: 768px) and (hover: none) and (pointer: coarse)", "shared mobile CSS should not affect narrow desktop windows");
 expectIncludes(blogPageCss, "@media (max-width: 768px) and (hover: none) and (pointer: coarse)", "blog mobile CSS should not affect narrow desktop windows");
 expectIncludes(postPageCss, "@media (max-width: 768px) and (hover: none) and (pointer: coarse)", "post mobile CSS should not affect narrow desktop windows");
 expectIncludes(styleCss, 'body[data-page="post"] .top-actions', "post mobile CSS should explicitly target the article dock");
+expectIncludes(styleCss, 'html.is-mobile-device-viewport body[data-page="post"] .top-actions', "post mobile dock should also hide when the JS mobile compatibility class is active");
+expectIncludes(blogPageCss, "html.is-mobile-device-viewport .blog-grid", "blog mobile grid should also apply through the JS mobile compatibility class");
+expectIncludes(postPageCss, 'html.is-mobile-device-viewport body[data-page="post"] .page-transition-wrapper', "post wrapper clamp should also apply through the JS mobile compatibility class");
 expectIncludes(styleCss, "display: none;", "post mobile dock should be hidden for clean reading");
 expectIncludes(postPageCss, 'body[data-page="post"] .page-transition-wrapper', "post mobile CSS should clamp article layout wrappers to the viewport");
-expectIncludes(postPageJs, "if (mobileNavQuery.matches || element === navBookmark)", "post page should hide article bookmark controls on mobile through JavaScript state");
+expectIncludes(postPageJs, "siteUtils.isMobileDeviceViewport", "post page should hide article bookmark controls through the shared mobile compatibility check");
 expectIncludes(styleCss, "@media (hover: none) and (pointer: coarse)", "cursor glow should be disabled only for touch-first pointers");
 expectNotIncludes(styleCss, "@media (hover: none), (pointer: coarse)", "cursor glow touch fallback should not use a broad OR media query");
 assert.ok(
@@ -312,6 +335,7 @@ expectNotIncludes(
   "architecture backlog should not list the now-registered block renderer structure",
 );
 expectIncludes(localServerJs, '["/api/image", require("../api/image.js")]', "local dev server should route the image proxy endpoint");
+expectIncludes(localServerJs, '["/api/notion", require("../api/notion.js")]', "local dev server should route the disabled legacy Notion proxy");
 expectIncludes(localServerJs, '[".webp", "image/webp"]', "local dev server should serve WebP images with the correct MIME type");
 expectIncludes(localServerJs, '[".jpg", "image/jpeg"]', "local dev server should serve JPEG images with the correct MIME type");
 expectIncludes(localServerJs, '[".jpeg", "image/jpeg"]', "local dev server should serve JPEG images with the correct MIME type");
@@ -320,7 +344,11 @@ expectIncludes(localServerJs, '[".xml", "application/xml; charset=utf-8"]', "loc
 expectIncludes(localServerJs, '[".mjs", "application/javascript; charset=utf-8"]', "local dev server should serve ESM scripts with the correct MIME type");
 expectIncludes(localServerJs, "path.relative(rootDir, filePath)", "local dev server should validate static paths by relative containment");
 expectIncludes(localServerJs, "path.isAbsolute(relativePath)", "local dev server should reject absolute relative paths after static path resolution");
+expectIncludes(localServerJs, "isMissingStaticFileError", "local dev server should distinguish missing static files from server errors");
+expectIncludes(localServerJs, "getErrorStatusCode", "local dev server should preserve API error status codes instead of converting everything to 404");
+expectIncludes(localServerJs, "statusCode >= 500", "local dev server should log unexpected local request failures");
 expectIncludes(spaRouterJs, 'script[src]:not([data-spa-runtime])', "SPA router should skip shared runtime scripts via HTML metadata");
+expectIncludes(spaRouterJs, "StructuredData?.syncFromDocument", "SPA router should carry SSR JSON-LD into the active document during navigation");
 expectIncludes(spaRouterJs, "waitForRouteExitCue", "SPA router should preserve the v1.6-style route exit cue");
 expectIncludes(spaRouterJs, "ROUTE_EXIT_CUE_MS = 150", "SPA router should keep the old quick route exit pause");
 expectIncludes(spaRouterJs, "ROUTE_LOCAL_POST_FALLBACK_MS", "SPA router should quickly recover local post route stalls");
@@ -554,10 +582,14 @@ assert.equal(
 
 expectIncludes(runtimeCoreJs, 'application/ld+json', "runtime-core.js should own structured data script management");
 expectIncludes(runtimeCoreJs, "readStructuredDataNonce", "runtime-core.js should only create JSON-LD nodes when a request nonce is available");
+expectIncludes(runtimeCoreJs, "syncStructuredDataFromDocument", "runtime-core.js should preserve fetched SSR JSON-LD during SPA swaps");
+expectIncludes(runtimeCoreJs, "syncFromDocument", "runtime-core.js should expose structured-data document syncing");
 expectIncludes(runtimeCoreJs, "document.head?.querySelector", "runtime-core.js should only trust nonce-bearing scripts already present in the active document head");
 expectIncludes(runtimeCoreJs, 'script.setAttribute("nonce", nonce)', "runtime-core.js should preserve CSP nonce protection for runtime JSON-LD updates");
 expectIncludes(runtimeCoreJs, "page-progress", "runtime-core.js should wire the shared page progress bar");
 expectIncludes(runtimeCoreJs, "focusSpaContent", "runtime-core.js should expose SPA focus management");
+expectIncludes(runtimeCoreJs, "cleanupTemporaryFocus", "runtime-core.js should clean up temporary SPA focus tabindex attributes");
+expectIncludes(runtimeCoreJs, 'removeAttribute("tabindex")', "runtime-core.js should remove managed tabindex after programmatic focus");
 expectIncludes(runtimeCoreJs, "const PageRuntime = (() => {", "runtime-core.js should own page module registration and cleanup");
 expectIncludes(bookmarkJs, "parseSerializedTags", "bookmark fallback should recover serialized tags");
 expectIncludes(bookmarkJs, "createBookmarkEntry", "bookmark manager should centralize bookmark record creation");
@@ -593,6 +625,7 @@ expectIncludes(notionContentJs, "table_of_contents: () => ({ type })", "shared n
 expectIncludes(notionContentJs, "function renderTableOfContentsBlock", "shared notion content module should build semantic table of contents navigation");
 expectIncludes(notionContentJs, "function renderBookmarkBlock", "shared notion content module should render bookmark blocks as semantic cards");
 expectIncludes(notionContentJs, "function renderEmbedBlock", "shared notion content module should render embed resources through a dedicated renderer");
+expectIncludes(notionContentJs, "shouldOpenLinkInNewTab", "shared notion content module should distinguish internal rich-text links from external links");
 expectIncludes(postPageCss, ".post-math-display", "post page CSS should style display equations as rendered math instead of code");
 expectNotIncludes(postPageCss, ".post-equation-expression code", "post page CSS should not style equations as visible code blocks");
 assert.equal(
@@ -799,6 +832,28 @@ assert.equal(
   "shared notion content helpers should normalize reusable post search text consistently",
 );
 assert.equal(
+  notionContentHelpers.richTextToHtml([{
+    plain_text: "Internal link",
+    href: "/posts/post-1",
+    annotations: {},
+  }], {
+    baseOrigin: FIXTURE_BASE_ORIGIN,
+  }),
+  '<a href="https://example.com/posts/post-1">Internal link</a>',
+  "shared notion content helpers should keep same-origin rich-text links in the current tab",
+);
+assert.equal(
+  notionContentHelpers.richTextToHtml([{
+    plain_text: "External link",
+    href: "https://external.example/post",
+    annotations: {},
+  }], {
+    baseOrigin: FIXTURE_BASE_ORIGIN,
+  }),
+  '<a href="https://external.example/post" target="_blank" rel="noopener">External link</a>',
+  "shared notion content helpers should keep external rich-text links isolated in a new tab",
+);
+assert.equal(
   notionContentHelpers.mapNotionPage({
     id: "post-1",
     icon: { emoji: "📘" },
@@ -972,7 +1027,7 @@ expectIncludes(postPageJs, 'console.warn("NotionAPI is unavailable on post page.
 expectNotIncludes(postPageJs, 'console.error("NotionAPI is unavailable on post page.")', "post page should not write expected SSR fallback to stderr as an error");
 expectIncludes(postPageJs, "canBookmarkFromInitialData", "post page should recover bookmark controls from SSR initial data when the client API is unavailable");
 expectIncludes(postPageJs, "initBookmark(initialPostData);", "post page should still wire bookmark controls from SSR summary data in fallback mode");
-expectIncludes(postPageJs, "if (mobileNavQuery.matches || element === navBookmark)", "post page should hide article bookmark controls on mobile through JavaScript state");
+expectIncludes(postPageJs, "isMobileViewport || element === navBookmark", "post page should hide article bookmark controls on mobile through JavaScript state");
 expectIncludes(postPageJs, "createMobileDeviceQueryList", "post page should use the shared real-mobile query for bookmark control placement");
 assert.ok(
   postPageJs.indexOf("const postId = getCurrentPostId();") < postPageJs.indexOf('if (!notionApi)'),
@@ -1270,7 +1325,7 @@ assert.equal(
 );
 
 const replacedEmptyState = apiPostHelpers.replaceEmptyStateContent(
-  '<div class="empty-state" id="postEmpty"><svg></svg><p>old</p><p style="font-size: 0.85rem;"><a href="/old">old</a></p></div>',
+  '<div class="empty-state" id="postEmpty"><svg></svg><p>old</p><p class="empty-state-helper"><a class="empty-state-link" href="/old">old</a></p></div>',
   {
     message: replacementSentinel,
     linkText: replacementSentinel,

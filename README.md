@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-3.4.0-00e5ff?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/version-3.5.0-00e5ff?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/deploy-Vercel-000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel" />
   <img src="https://img.shields.io/badge/CMS-Notion-000?style=flat-square&logo=notion&logoColor=white" alt="Notion" />
@@ -47,10 +47,10 @@
 ### 🎨 设计
 
 - 深色玻璃拟态 (Glassmorphism) 设计语言
-- WebGL 粒子背景 + 多层光晕轨道动画
+- Canvas 2D 粒子背景 + 多层光晕轨道动画
 - 鼠标跟随光效
 - 渐变文字标题 + 微交互动效
-- 3 级响应式断点（桌面 / 平板 / 手机）
+- 真实移动端 gate（窄视口 + 触控能力）优先，窄屏桌面保持桌面体验
 - 保留旧版粒子、路由与光标动态，不使用 reduced-motion 弱化主动画
 
 ### 📝 内容
@@ -152,7 +152,9 @@ Notion Database
 │   └── post-page.css       文章页样式
 ├── scripts/
 │   ├── local-server.mjs    本地开发服务器
-│   └── smoke-check.mjs     冒烟测试 (3000+ 断言)
+│   ├── start-dev-bg.mjs    后台启动本地服务器
+│   ├── stop-dev-bg.mjs     停止后台本地服务器
+│   └── smoke-check.mjs     冒烟测试（3000+ 行测试 / 约 540 个断言）
 └── vercel.json             路由、缓存、安全头
 ```
 
@@ -202,16 +204,18 @@ IMAGE_PROXY_MAX_REDIRECTS=4
 
 ### 3. 本地开发
 
-```bash
-npm run dev
+```powershell
+npm.cmd run dev:bg
 ```
 
 浏览器打开 `http://127.0.0.1:4173`
 
+如果需要前台日志，可改用 `npm.cmd run dev`；后台服务可用 `npm.cmd run stop:bg` 停止。
+
 ### 4. 运行测试
 
-```bash
-npm run check
+```powershell
+npm.cmd run check
 ```
 
 ---
@@ -284,7 +288,7 @@ npm run check
   </tr>
   <tr>
     <td align="center"><b>设计</b></td>
-    <td>Glassmorphism + WebGL 粒子 + 微交互</td>
+    <td>Glassmorphism + Canvas 2D 粒子 + 微交互</td>
   </tr>
   <tr>
     <td align="center"><b>字体</b></td>
@@ -292,7 +296,7 @@ npm run check
   </tr>
   <tr>
     <td align="center"><b>测试</b></td>
-    <td>自定义冒烟测试 (3000+ 断言，零依赖)</td>
+    <td>自定义冒烟测试（3000+ 行测试 / 约 540 个断言，零依赖）</td>
   </tr>
 </table>
 

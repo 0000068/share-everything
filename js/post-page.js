@@ -118,6 +118,10 @@
 
     function setBookmarkControlsVisible(isVisible) {
       bookmarkControlsVisible = isVisible;
+      const isMobileViewport =
+        typeof siteUtils.isMobileDeviceViewport === "function"
+          ? siteUtils.isMobileDeviceViewport()
+          : mobileNavQuery.matches;
 
       bookmarkElements.forEach((element) => {
         if (!isVisible) {
@@ -125,7 +129,7 @@
           return;
         }
 
-        if (mobileNavQuery.matches || element === navBookmark) {
+        if (isMobileViewport || element === navBookmark) {
           element.style.display = "none";
           return;
         }
@@ -164,16 +168,24 @@
 
       if (typeof mobileNavQuery.addEventListener === "function") {
         mobileNavQuery.addEventListener("change", handleMediaChange);
+        window.addEventListener?.("resize", handleMediaChange, { passive: true });
+        window.addEventListener?.("orientationchange", handleMediaChange, { passive: true });
         mediaQueryCleanup = () => {
           mobileNavQuery.removeEventListener("change", handleMediaChange);
+          window.removeEventListener?.("resize", handleMediaChange);
+          window.removeEventListener?.("orientationchange", handleMediaChange);
           mediaQueryCleanup = null;
         };
         return;
       }
 
       mobileNavQuery.addListener(handleMediaChange);
+      window.addEventListener?.("resize", handleMediaChange, { passive: true });
+      window.addEventListener?.("orientationchange", handleMediaChange, { passive: true });
       mediaQueryCleanup = () => {
         mobileNavQuery.removeListener(handleMediaChange);
+        window.removeEventListener?.("resize", handleMediaChange);
+        window.removeEventListener?.("orientationchange", handleMediaChange);
         mediaQueryCleanup = null;
       };
     }

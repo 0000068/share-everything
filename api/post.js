@@ -51,6 +51,10 @@ function serializeJsonForScript(value) {
   return JSON.stringify(value).replace(/</g, "\\u003c");
 }
 
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function replaceMarkup(html, pattern, markup, label) {
   let didMatch = false;
   const result = html.replace(pattern, () => {
@@ -129,8 +133,9 @@ function buildNonceAttribute(scriptNonce = "") {
 function upsertStructuredDataScript(html, key, payload, { scriptNonce = "" } = {}) {
   const marker = `data-structured-data="${escapeAttribute(key)}"`;
   const scriptTag = `    <script type="application/ld+json"${buildNonceAttribute(scriptNonce)} ${marker}>${serializeJsonForScript(payload)}</script>`;
+  const markerPattern = escapeRegex(marker);
   const existingPattern = new RegExp(
-    `<script type="application/ld\\+json"[^>]*${marker}[^>]*>[\\s\\S]*?<\\/script>`,
+    `<script type="application/ld\\+json"[^>]*${markerPattern}[^>]*>[\\s\\S]*?<\\/script>`,
   );
 
   if (existingPattern.test(html)) {
@@ -211,7 +216,7 @@ function replaceEmptyStateContent(html, { message, linkText = "返回博客列�
   );
 
   nextHtml = nextHtml.replace(
-    /(<div class="empty-state" id="postEmpty"[^>]*>[\s\S]*?<p style="font-size: 0\.85rem;">\s*<a href=")[^"]*("[^>]*>)[\s\S]*?(<\/a>)/,
+    /(<div class="empty-state" id="postEmpty"[^>]*>[\s\S]*?<p class="empty-state-helper">\s*<a class="empty-state-link" href=")[^"]*("[^>]*>)[\s\S]*?(<\/a>)/,
     (matched, prefix, middle, suffix) => `${prefix}/blog.html${middle}${escapeHtml(linkText)}${suffix}`,
   );
 

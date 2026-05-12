@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v3.4
+> Version: v3.5
 > Updated: 2026-05-12
 
 ## 1. Overview
@@ -32,7 +32,18 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v3.4 Highlights
+## 2. Version v3.5 Highlights
+
+v3.5 closes the remaining mobile Brave/vivo UI compatibility gap after the v3.4 article-width fix.
+
+- Static CSS/JS references now carry `?v=20260512-mobile-compat` so mobile Brave/vivo cannot keep rendering an older cached stylesheet after an HTML refresh.
+- `js/site-utils.js` syncs `html.is-mobile-device-viewport` from touch capability plus narrow viewport width, giving Android browsers a fallback when `(hover: none) and (pointer: coarse)` is misreported.
+- The mobile home title can wrap safely instead of forcing a single line that may overflow on narrow phones.
+- `blog.html` uses `type="search"` for the list search input so mobile browsers expose the expected search keyboard and clear affordance.
+- `package.json` adds `dev:bg` and `stop:bg`, backed by detached Node launch/stop scripts, so Codex and other agents can start the local server without hanging on inherited Windows stdout/stderr handles.
+- `scripts/smoke-check.mjs` asserts cache-busted assets, the mobile compatibility class, the search input type, and the mobile article/list fallback rules.
+
+### v3.4 Highlights
 
 v3.4 is a mobile article compatibility hotfix for long URLs and browser-specific layout width handling.
 
@@ -198,6 +209,8 @@ Read-only public APIs reject non-`GET` methods with `405` and `Cache-Control: no
 
 `vercel.json` does not set an API-wide `Cache-Control`; individual handlers own their cache policy so `/api/image` can stay edge-cacheable while data and SSR routes stay non-cacheable. Do not add a catch-all `/api/*` `Cache-Control` header in `vercel.json`.
 
+Static HTML must keep adding a cache-busting query string to changed CSS/JS paths when a mobile layout fix ships, because some Android browsers continue to use stale assets during the `stale-while-revalidate` window.
+
 Client-side `notion-api.js` keeps a short bounded in-memory post-list response cache for fast repeated listing transitions. It also keeps up to 200 post summaries in memory plus `sessionStorage` for bookmark hydration.
 
 ## 6. Security
@@ -207,6 +220,7 @@ Client-side `notion-api.js` keeps a short bounded in-memory post-list response c
 - SSR article pages generate request-scoped nonces for CSP, JSON-LD, and initial post data.
 - `connect-src` remains same-origin so browser data requests continue through semantic API routes.
 - `/api/image` only accepts `https:` upstream URLs, rejects localhost/private literal hosts and private DNS results, pins the validated DNS answer to the actual HTTPS request through a custom lookup, validates every redirect hop manually, enforces image content types, limits image size, applies a timeout, and sends `X-Content-Type-Options: nosniff`.
+- Embed iframes intentionally use a permissive sandbox subset (`allow-scripts`, `allow-same-origin`, popups, forms, and presentation) so trusted providers such as YouTube, Bilibili, Figma, and CodePen can render; this is a deliberate usability tradeoff, while page-level `frame-src`, same-origin API boundaries, and `frame-ancestors 'none'` still constrain where embeds can load and how this site can be framed.
 - Public error details are hidden unless `EXPOSE_PUBLIC_ERROR_DETAILS=true` is set for local debugging.
 
 ## 7. Repository Structure
@@ -378,6 +392,18 @@ npm.cmd run dev
 ```
 
 This starts `scripts/local-server.mjs` on `127.0.0.1:4173` by default and supports static assets plus semantic API routes including `/api/image`, `/api/post`, `/api/post-data`, `/api/posts-data`, and `/api/sitemap`.
+
+For agent-driven local previews on Windows, prefer:
+
+```powershell
+npm.cmd run dev:bg
+```
+
+This starts the same local server through `scripts/start-dev-bg.mjs` as a detached background process and returns immediately. Stop it with:
+
+```powershell
+npm.cmd run stop:bg
+```
 
 Use:
 
