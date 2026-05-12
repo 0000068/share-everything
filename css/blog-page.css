@@ -441,6 +441,8 @@
     display: grid;
     grid-template-rows: minmax(0, 0.54fr) minmax(0, 0.46fr);
     aspect-ratio: 1 / 1;
+    content-visibility: auto;
+    contain-intrinsic-size: 180px 180px;
     border-radius: 20px;
     background: rgba(255, 255, 255, 0.055);
     border-color: rgba(255, 255, 255, 0.09);
@@ -491,9 +493,12 @@
     align-self: flex-start;
     width: auto;
     max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    line-height: 1.1;
     margin-bottom: 6px;
     padding: 3px 8px;
     font-size: 0.58rem;
@@ -608,8 +613,12 @@
   .blog-card-category {
     display: inline-flex;
     width: auto;
-    max-width: none;
-    overflow: visible;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.1;
     margin-bottom: 5px;
     padding: 2px 8px;
     font-size: 0.55rem;
@@ -724,6 +733,8 @@ html.is-mobile-device-viewport .blog-card {
   display: grid;
   grid-template-rows: minmax(0, 0.54fr) minmax(0, 0.46fr);
   aspect-ratio: 1 / 1;
+  content-visibility: auto;
+  contain-intrinsic-size: 180px 180px;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.055);
   border-color: rgba(255, 255, 255, 0.09);
@@ -774,9 +785,12 @@ html.is-mobile-device-viewport .blog-card-category {
   align-self: flex-start;
   width: auto;
   max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.1;
   margin-bottom: 5px;
   padding: 2px 8px;
   font-size: 0.55rem;

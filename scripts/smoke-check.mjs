@@ -4,6 +4,8 @@ import { runImageProxyChecks } from "./smoke-check/image-proxy.mjs";
 import { runNotionApiClientChecks } from "./smoke-check/notion-api-client.mjs";
 import { runPublicContentAndNotionChecks } from "./smoke-check/public-content-notion.mjs";
 import { runRoutingAndVercelChecks } from "./smoke-check/routing-vercel.mjs";
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
 import {
   assert,
   Buffer,
@@ -58,6 +60,7 @@ const indexHtml = read("index.html");
 const blogHtml = read("blog.html");
 const postHtml = read("post.html");
 const gitAttributes = read(".gitattributes");
+const gitIgnore = read(".gitignore");
 const kiroGitRules = read(".kiro/steering/git-rules.md");
 const packageJson = read("package.json");
 const readmeMd = read("README.md");
@@ -66,9 +69,6 @@ const vercelJson = read("vercel.json");
 const envExample = read(".env.example");
 const licenseText = read("LICENSE");
 const localServerJs = read("scripts/local-server.mjs");
-const startDevBgJs = read("scripts/start-dev-bg.mjs");
-const stopDevBgJs = read("scripts/stop-dev-bg.mjs");
-const agentsMd = read("AGENTS.md");
 const styleCss = read("css/style.css");
 const blogPageCss = read("css/blog-page.css");
 const postPageCss = read("css/post-page.css");
@@ -139,7 +139,63 @@ const {
   "renderPostContent",
 ]);
 
-const assetVersion = "v=20260512-mobile-compat";
+const assetVersionValue = "20260512-mobile-compat";
+const assetVersion = `v=${assetVersionValue}`;
+const productionDomainPattern = /0000068\.xyz/;
+const allowedProductionDomainFiles = new Set([
+  "FIX_TODO.md",
+  "README.md",
+  "SITE_ARCHITECTURE.md",
+  "blog.html",
+  "index.html",
+  "post.html",
+  "robots.txt",
+  "scripts/smoke-check.mjs",
+  "server/notion-server.js",
+  "同步.md",
+  "统计待修复清单.MD",
+]);
+const skippedScanDirectories = new Set([".git", ".vercel", "node_modules"]);
+const skippedScanExtensions = new Set([".ico", ".jpeg", ".jpg", ".png", ".webp"]);
+
+function toProjectPath(filePath) {
+  return path.relative(process.cwd(), filePath).replace(/\\/g, "/");
+}
+
+function listProjectTextFiles(directory = process.cwd()) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    if (skippedScanDirectories.has(entry.name)) {
+      return [];
+    }
+
+    const absolutePath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      return listProjectTextFiles(absolutePath);
+    }
+
+    if (skippedScanExtensions.has(path.extname(entry.name).toLowerCase())) {
+      return [];
+    }
+
+    return [toProjectPath(absolutePath)];
+  });
+}
+
+function collectVersionedStaticAssetVersions(htmlSource) {
+  return Array.from(
+    String(htmlSource).matchAll(/\b(?:href|src)="\/(?:css|js)\/[^"]+\?v=([^"&]+)"/g),
+    (match) => match[1],
+  );
+}
+
+const productionDomainFiles = listProjectTextFiles().filter((filePath) => (
+  productionDomainPattern.test(readFileSync(filePath, "utf8"))
+));
+assert.deepEqual(
+  productionDomainFiles.filter((filePath) => !allowedProductionDomainFiles.has(filePath)),
+  [],
+  "production domain hardcoding should stay constrained to documented SEO fallback files",
+);
 
 expectIncludes(indexHtml, 'property="og:image"', "index.html should declare og:image");
 expectIncludes(blogHtml, 'property="og:image"', "blog.html should declare og:image");
@@ -171,6 +227,24 @@ const pageHtmlByLabel = [
   ["blog.html", blogHtml],
   ["post.html", postHtml],
 ];
+const staticAssetVersions = new Set();
+pageHtmlByLabel.forEach(([label, htmlSource]) => {
+  const versions = collectVersionedStaticAssetVersions(htmlSource);
+  assert.ok(versions.length > 0, `${label} should include versioned CSS/JS assets`);
+  versions.forEach((version) => {
+    staticAssetVersions.add(version);
+    assert.equal(
+      version,
+      assetVersionValue,
+      `${label} should use the shared static CSS/JS asset version`,
+    );
+  });
+});
+assert.equal(
+  staticAssetVersions.size,
+  1,
+  "static CSS/JS assets should not carry multiple cache-busting versions",
+);
 const sharedRuntimeScriptSources = [
   `/js/font-loader.js?${assetVersion}`,
   `/js/notion-content.js?${assetVersion}`,
@@ -208,14 +282,11 @@ expectIncludes(blogHtml, 'type="search" id="blogSearch"', "blog search input sho
 expectIncludes(indexHtml, `href="/css/style.css?${assetVersion}"`, "index.html should cache-bust shared CSS");
 expectIncludes(blogHtml, `href="/css/blog-page.css?${assetVersion}"`, "blog.html should cache-bust blog-page.css");
 expectIncludes(postHtml, `href="/css/post-page.css?${assetVersion}"`, "post.html should cache-bust post-page.css");
-expectIncludes(packageJson, '"dev:bg": "node scripts/start-dev-bg.mjs"', "package.json should provide a detached dev server launcher");
-expectIncludes(packageJson, '"stop:bg": "node scripts/stop-dev-bg.mjs"', "package.json should provide a tracked dev server stopper");
-expectIncludes(startDevBgJs, "detached: true", "background dev launcher should detach the local server process");
-expectIncludes(startDevBgJs, "child.unref();", "background dev launcher should let the parent process exit immediately");
-expectIncludes(startDevBgJs, "portInUse", "background dev launcher should no-op when the dev server port is already listening");
-expectIncludes(stopDevBgJs, "process.kill(pid)", "background dev stopper should terminate the tracked server pid");
-expectIncludes(agentsMd, "npm run dev:bg", "agent notes should tell future agents to use the detached dev server launcher");
+expectNotIncludes(packageJson, '"dev:bg"', "package.json should keep local dev scripts simple");
+expectNotIncludes(readmeMd, "dev:bg", "README should not mention removed background dev scripts");
 expectIncludes(gitAttributes, "*.mjs text eol=lf", ".gitattributes should normalize .mjs files to LF");
+expectIncludes(gitIgnore, ".vscode/", ".gitignore should keep empty editor-local folders out of the repo");
+expectIncludes(gitIgnore, "node_modules/", ".gitignore should keep local dependency folders out of the repo");
 assert.ok(!styleCss.includes("\r\n"), "style.css should use LF line endings");
 assert.ok(!blogPageCss.includes("\r\n"), "blog-page.css should use LF line endings");
 assert.ok(!postPageCss.includes("\r\n"), "post-page.css should use LF line endings");
@@ -249,7 +320,8 @@ expectIncludes(blogPageCss, "pointer-events: none;\n}", "blog card cover media s
 expectIncludes(blogPageCss, "z-index: 3;\n  display: inline-flex;", "blog card bookmark button should stay above the card link layer");
 expectIncludes(commonJs, "DESKTOP_PARTICLE_COUNT = 350", "particle runtime should preserve the desktop particle density");
 expectIncludes(commonJs, "MOBILE_PARTICLE_COUNT = 28", "particle runtime should use the ultra-light mobile-only particle density");
-expectIncludes(commonJs, "MOBILE_PARTICLE_FRAME_INTERVAL_MS = 66", "particle runtime should throttle mobile-only particle drawing");
+expectIncludes(commonJs, "staticFrame: isMobile && !disabled", "particle runtime should render mobile home particles as a static frame");
+expectIncludes(commonJs, "if (particleProfile.staticFrame)", "particle runtime should skip the animation loop for mobile static particles");
 expectIncludes(commonJs, 'MOBILE_PARTICLE_DISABLED_PAGES = new Set(["blog", "post"])', "particle runtime should disable mobile particles on list and article pages");
 expectIncludes(commonJs, "class MobileParticle", "particle runtime should use a cheaper mobile-only particle model");
 expectIncludes(commonJs, "particleProfile.isMobile ? MobileParticle : Particle", "particle runtime should keep the desktop particle class separate from the mobile renderer");
@@ -278,9 +350,10 @@ expectIncludes(postPageJs, "siteUtils.isMobileDeviceViewport", "post page should
 expectIncludes(styleCss, "@media (hover: none) and (pointer: coarse)", "cursor glow should be disabled only for touch-first pointers");
 expectNotIncludes(styleCss, "@media (hover: none), (pointer: coarse)", "cursor glow touch fallback should not use a broad OR media query");
 assert.ok(
-  !/@media\s*\(max-width:\s*(?:768|540|360)px\)\s*\{/.test(`${styleCss}\n${blogPageCss}\n${postPageCss}`),
-  "mobile CSS breakpoints should include the real-mobile pointer/hover gate",
+  !/@media\s*\(max-width:\s*768px\)\s*\{/.test(`${styleCss}\n${blogPageCss}\n${postPageCss}`),
+  "primary mobile CSS breakpoints should include the real-mobile pointer/hover gate",
 );
+expectIncludes(styleCss, "@media (max-width: 540px) {", "shared CSS may add narrow fallback refinements behind the mobile compatibility class");
 expectNotIncludes(postPageJs, 'createMediaQueryList("(max-width: 768px)")', "post page should not treat narrow desktop windows as mobile");
 expectIncludes(blogPageCss, "opacity 0.3s ease", "blog cards should use shorter reveal transitions on mobile");
 expectIncludes(blogPageJs, 'window.scrollTo({ top: 0, behavior: "auto" });', "blog pagination should avoid smooth-scroll jank on mobile");
@@ -581,7 +654,8 @@ assert.equal(
 );
 
 expectIncludes(runtimeCoreJs, 'application/ld+json', "runtime-core.js should own structured data script management");
-expectIncludes(runtimeCoreJs, "readStructuredDataNonce", "runtime-core.js should only create JSON-LD nodes when a request nonce is available");
+expectIncludes(runtimeCoreJs, "readStructuredDataNonce", "runtime-core.js should preserve a request nonce on JSON-LD nodes when one is available");
+expectIncludes(runtimeCoreJs, "if (nonce)", "runtime-core.js should not require a nonce before restoring SPA JSON-LD");
 expectIncludes(runtimeCoreJs, "syncStructuredDataFromDocument", "runtime-core.js should preserve fetched SSR JSON-LD during SPA swaps");
 expectIncludes(runtimeCoreJs, "syncFromDocument", "runtime-core.js should expose structured-data document syncing");
 expectIncludes(runtimeCoreJs, "document.head?.querySelector", "runtime-core.js should only trust nonce-bearing scripts already present in the active document head");

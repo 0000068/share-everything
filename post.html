@@ -78,7 +78,7 @@
     <div class="post-container">
       <article class="post-article" id="postArticle">
         <!-- Back -->
-        <button class="post-back" id="postBack" type="button">
+        <button class="post-back" id="postBack" type="button" aria-label="返回博客列表">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="19" y1="12" x2="5" y2="12"></line>
             <polyline points="12 19 5 12 12 5"></polyline>
@@ -100,6 +100,18 @@
 
         <!-- Post Content (rendered by JS) -->
         <div id="postContent" style="display: none;"></div>
+
+        <!-- Empty State -->
+        <div class="empty-state" id="postEmpty" style="display: none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+          </svg>
+          <p>文章不存在</p>
+          <p class="empty-state-helper">
+            <a class="empty-state-link" href="/blog.html">返回博客列表</a>
+          </p>
+        </div>
       </article>
     </div>
 
@@ -113,17 +125,6 @@
 
     <div class="visually-hidden" id="postStatus" role="status" aria-live="polite" aria-atomic="true"></div>
 
-    <!-- Empty State -->
-    <div class="empty-state" id="postEmpty" style="display: none;">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-        <polyline points="14 2 14 8 20 8"></polyline>
-      </svg>
-      <p>文章不存在</p>
-      <p class="empty-state-helper">
-        <a class="empty-state-link" href="/blog.html">返回博客列表</a>
-      </p>
-    </div>
     </div> <!-- End Page Transition Wrapper -->
     </main>
 

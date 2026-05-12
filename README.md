@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-3.5.0-00e5ff?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/version-3.8.0-00e5ff?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/deploy-Vercel-000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel" />
   <img src="https://img.shields.io/badge/CMS-Notion-000?style=flat-square&logo=notion&logoColor=white" alt="Notion" />
@@ -69,7 +69,7 @@
 - SPA 路由 HTML 缓存（5 分钟 / 最多 6 页）
 - 悬停 + 聚焦预取（尊重 `saveData` 和 2G 网络）
 - 服务端六层缓存体系 + 三层请求去重
-- 真实移动首页粒子 28 个（桌面 350 个），列表页和文章页移动端禁用粒子，窄屏电脑不降级
+- 真实移动首页静态粒子 28 个（桌面 350 个动态粒子），列表页和文章页移动端禁用粒子，窄屏电脑不降级
 
 ### 🔒 安全
 
@@ -152,8 +152,6 @@ Notion Database
 │   └── post-page.css       文章页样式
 ├── scripts/
 │   ├── local-server.mjs    本地开发服务器
-│   ├── start-dev-bg.mjs    后台启动本地服务器
-│   ├── stop-dev-bg.mjs     停止后台本地服务器
 │   └── smoke-check.mjs     冒烟测试（3000+ 行测试 / 约 540 个断言）
 └── vercel.json             路由、缓存、安全头
 ```
@@ -205,12 +203,12 @@ IMAGE_PROXY_MAX_REDIRECTS=4
 ### 3. 本地开发
 
 ```powershell
-npm.cmd run dev:bg
+npm.cmd run dev
 ```
 
 浏览器打开 `http://127.0.0.1:4173`
 
-如果需要前台日志，可改用 `npm.cmd run dev`；后台服务可用 `npm.cmd run stop:bg` 停止。
+保持该终端窗口打开即可查看本地服务日志；停止时按 `Ctrl+C`。
 
 ### 4. 运行测试
 

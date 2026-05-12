@@ -514,7 +514,7 @@
     }
 
     function revealRenderedCards() {
-      const shouldAnimateCards = !didCompleteInitialRender;
+      const shouldAnimateCards = !didCompleteInitialRender && !isMobileDeviceViewport();
       didCompleteInitialRender = true;
 
       if (!shouldAnimateCards) {

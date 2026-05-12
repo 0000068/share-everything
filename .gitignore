@@ -13,6 +13,7 @@ Desktop.ini
 
 # Editor directories and files
 .idea/
+.vscode/
 *.swp
 *.swo
 *~
@@ -20,6 +21,7 @@ Desktop.ini
 # Logs
 *.log
 npm-debug.log*
+.local-server.pid
 
 # Vercel
 .vercel/

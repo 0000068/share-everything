@@ -225,7 +225,11 @@
           loadedScripts.add(resolvedSrc);
           resolve();
         };
-        script.onerror = reject;
+        script.onerror = () => {
+          const error = new Error(`Failed to load SPA script: ${resolvedSrc}`);
+          error.url = resolvedSrc;
+          reject(error);
+        };
         document.head.appendChild(script);
       });
     }

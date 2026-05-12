@@ -68,8 +68,12 @@ function replaceMarkup(html, pattern, markup, label) {
 }
 
 function insertMarkupBefore(html, pattern, markup, indentation = "", label = "") {
-  const result = html.replace(pattern, (matched) => `${markup}\n${indentation}${matched}`);
-  if (label && result === html) {
+  let didMatch = false;
+  const result = html.replace(pattern, (matched) => {
+    didMatch = true;
+    return `${markup}\n${indentation}${matched}`;
+  });
+  if (label && !didMatch) {
     console.warn(`SSR: Pattern for "${label}" did not match template. The post.html structure may have changed.`);
   }
   return result;

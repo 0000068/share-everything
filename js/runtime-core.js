@@ -15,14 +15,12 @@
     let script = document.head?.querySelector(selector);
     if (!script) {
       const nonce = readStructuredDataNonce();
-      if (!nonce) {
-        return null;
-      }
-
       script = document.createElement("script");
       script.type = "application/ld+json";
       script.setAttribute("data-structured-data", key);
-      script.setAttribute("nonce", nonce);
+      if (nonce) {
+        script.setAttribute("nonce", nonce);
+      }
       document.head?.appendChild(script);
     }
     return script;

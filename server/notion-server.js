@@ -860,6 +860,7 @@ async function fetchPublicPost(pageId) {
     ]);
     const publicPage = assertPublicPage(page, metadata.publicAccessPolicy);
     const summary = mapNotionPage(publicPage, {
+      includeSearchText: true,
       schema: metadata.contentSchema,
     });
     const blocks = await fetchAllBlockChildren(publicPage.id);

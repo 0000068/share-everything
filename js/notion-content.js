@@ -1399,7 +1399,11 @@
       return "";
     }
 
-    return `<span>${tags.map((tag) => `#${escapeHtml(tag)}`).join(" ")}</span>`;
+    const tagItems = tags
+      .map((tag) => `<span class="post-tag">#${escapeHtml(tag)}</span>`)
+      .join(" ");
+
+    return `<span class="post-tags" aria-label="标签">${tagItems}</span>`;
   }
 
   function renderPostArticle(post, { baseOrigin, renderedContent } = {}) {

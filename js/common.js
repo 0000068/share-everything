@@ -17,7 +17,6 @@ let targetMouseX = 0;
 let targetMouseY = 0;
 const MOBILE_PARTICLE_BREAKPOINT = 768;
 const MOBILE_PARTICLE_COUNT = 28;
-const MOBILE_PARTICLE_FRAME_INTERVAL_MS = 66;
 const DESKTOP_PARTICLE_COUNT = 350;
 const MOBILE_SCROLL_PARTICLE_PAUSE_MS = 240;
 const MOBILE_PARTICLE_DISABLED_PAGES = new Set(["blog", "post"]);
@@ -54,8 +53,9 @@ function getParticleProfileForViewport() {
   return {
     isMobile,
     disabled,
+    staticFrame: isMobile && !disabled,
     count: disabled ? 0 : isMobile ? MOBILE_PARTICLE_COUNT : DESKTOP_PARTICLE_COUNT,
-    frameInterval: isMobile ? MOBILE_PARTICLE_FRAME_INTERVAL_MS : 0,
+    frameInterval: 0,
   };
 }
 
@@ -64,6 +64,7 @@ function refreshParticleProfile() {
   const didChange =
     nextProfile.isMobile !== particleProfile.isMobile ||
     nextProfile.disabled !== particleProfile.disabled ||
+    nextProfile.staticFrame !== particleProfile.staticFrame ||
     nextProfile.count !== particleProfile.count;
   particleProfile = nextProfile;
   particleCount = nextProfile.count;
@@ -287,7 +288,7 @@ function clearParticleBootstrapTimer() {
 }
 
 function animateParticles() {
-  if (!ctx || particlesPausedForScroll || particleProfile.disabled) return;
+  if (!ctx || particlesPausedForScroll || particleProfile.disabled || particleProfile.staticFrame) return;
   const now = typeof performance !== "undefined" && typeof performance.now === "function"
     ? performance.now()
     : Date.now();
@@ -325,6 +326,10 @@ function bootstrapParticles(force = false) {
 
   drawParticlesFrame(false);
   lastParticleFrameTime = 0;
+  if (particleProfile.staticFrame) {
+    return true;
+  }
+
   if (particlesPausedForScroll) {
     return true;
   }
@@ -370,6 +375,7 @@ function clearScrollParticleResumeTimer() {
 function pauseMobileParticlesDuringScroll() {
   if (!isMobileParticleViewport()) return;
   if (particleProfile.disabled) return;
+  if (particleProfile.staticFrame) return;
 
   particlesPausedForScroll = true;
   stopParticles();

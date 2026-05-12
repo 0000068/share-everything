@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v3.5
+> Version: v3.8
 > Updated: 2026-05-12
 
 ## 1. Overview
@@ -32,15 +32,24 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v3.5 Highlights
+## 2. Version v3.8 Highlights
+
+v3.8 packages the current mobile compatibility and maintenance work into a release commit while preserving the desktop UI and particle behavior.
+
+- `package.json` and README release metadata now match the `v3.8` release tag convention.
+- `scripts/smoke-check.mjs` now enforces a single static CSS/JS `?v=` value across HTML entrypoints.
+- Production-domain fallback references to `0000068.xyz` are constrained by a smoke-check whitelist so hardcoded SEO URLs do not spread accidentally.
+- Local repository residue is cleaned up: the ignored `node_modules/` folder is removed, `.local-server.pid` is ignored, and no root log files are left behind.
+- Browser verification covered `390x844` mobile home/list/article states and `1280x720` desktop home particles without changing PC UI or desktop particle logic.
+
+### v3.5 Highlights
 
 v3.5 closes the remaining mobile Brave/vivo UI compatibility gap after the v3.4 article-width fix.
 
 - Static CSS/JS references now carry `?v=20260512-mobile-compat` so mobile Brave/vivo cannot keep rendering an older cached stylesheet after an HTML refresh.
 - `js/site-utils.js` syncs `html.is-mobile-device-viewport` from touch capability plus narrow viewport width, giving Android browsers a fallback when `(hover: none) and (pointer: coarse)` is misreported.
-- The mobile home title can wrap safely instead of forcing a single line that may overflow on narrow phones.
+- The mobile home title keeps the product phrase on one line with phone-specific sizing, matching the current mobile hero art direction without touching the desktop hero.
 - `blog.html` uses `type="search"` for the list search input so mobile browsers expose the expected search keyboard and clear affordance.
-- `package.json` adds `dev:bg` and `stop:bg`, backed by detached Node launch/stop scripts, so Codex and other agents can start the local server without hanging on inherited Windows stdout/stderr handles.
 - `scripts/smoke-check.mjs` asserts cache-busted assets, the mobile compatibility class, the search input type, and the mobile article/list fallback rules.
 
 ### v3.4 Highlights
@@ -56,7 +65,7 @@ v3.4 is a mobile article compatibility hotfix for long URLs and browser-specific
 v3.3 focuses the mobile experience on stable reading and lighter rendering while preserving the desktop particle UI.
 
 - `js/common.js` keeps the old desktop particle class, 350-particle density, and desktop frame cadence unchanged.
-- Real mobile home pages now use a separate `MobileParticle` model, 28 particles, and a 66ms draw interval to reduce phone CPU/GPU cost.
+- Real mobile home pages now use a separate `MobileParticle` model and draw 28 particles once as a static frame to reduce phone CPU/GPU cost.
 - Real mobile blog and article pages disable the particle canvas entirely and use a unified static background layer to avoid zoom/address-bar background breaks.
 - Mobile UI and performance overrides still require `(max-width: 768px) and (hover: none) and (pointer: coarse)`, so a narrow desktop browser window keeps desktop particles and desktop layout behavior.
 - Real mobile article pages hide the bottom dock and article bookmark entry so reading content is not covered by floating controls.
@@ -392,18 +401,6 @@ npm.cmd run dev
 ```
 
 This starts `scripts/local-server.mjs` on `127.0.0.1:4173` by default and supports static assets plus semantic API routes including `/api/image`, `/api/post`, `/api/post-data`, `/api/posts-data`, and `/api/sitemap`.
-
-For agent-driven local previews on Windows, prefer:
-
-```powershell
-npm.cmd run dev:bg
-```
-
-This starts the same local server through `scripts/start-dev-bg.mjs` as a detached background process and returns immediately. Stop it with:
-
-```powershell
-npm.cmd run stop:bg
-```
 
 Use:
 
