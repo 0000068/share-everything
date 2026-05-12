@@ -1091,6 +1091,8 @@ body.has-cursor-glow .cursor-glow {
   body[data-page="blog"],
   body[data-page="post"] {
     background-color: #111528;
+    max-width: 100%;
+    overflow-x: hidden;
   }
 
   body[data-page="blog"] .ambient-background,
@@ -1122,6 +1124,7 @@ body.has-cursor-glow .cursor-glow {
   body[data-page="post"] .post-container {
     padding: clamp(64px, 10vw, 90px) clamp(16px, 4.8vw, 24px) calc(70px + env(safe-area-inset-bottom));
   }
+
 }
 
 @media (hover: none) and (pointer: coarse) {

@@ -2,16 +2,20 @@
 .post-container {
   position: relative;
   z-index: 10;
+  width: 100%;
+  max-width: 100%;
   min-height: 100vh;
   padding: 100px 24px 80px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  overflow-x: hidden;
 }
 
 .post-article {
   width: 100%;
   max-width: 780px;
+  min-width: 0;
 }
 
 .post-back {
@@ -93,9 +97,14 @@
 
 /* ===== Post Content (Notion Blocks) ===== */
 .post-content {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   font-size: 1.05rem;
   line-height: 1.85;
   color: var(--text-primary);
+  overflow-wrap: anywhere;
+  word-wrap: break-word;
   user-select: text;
   -webkit-user-select: text;
 }
@@ -126,12 +135,19 @@
 
 .post-content p {
   margin-bottom: 24px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  word-wrap: break-word;
 }
 
 .post-content a {
   color: var(--accent-cyan);
   text-decoration: none;
   border-bottom: 1px solid var(--accent-cyan-border);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  word-wrap: break-word;
   transition: border-color 0.3s ease;
 }
 
@@ -147,6 +163,9 @@
 
 .post-content li {
   margin-bottom: 8px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  word-wrap: break-word;
 }
 
 .post-content blockquote {
@@ -636,6 +655,17 @@
 }
 
 @media (max-width: 768px) and (hover: none) and (pointer: coarse) {
+  body[data-page="post"] #spa-content,
+  body[data-page="post"] .page-transition-wrapper,
+  body[data-page="post"] .post-container,
+  body[data-page="post"] .post-article,
+  body[data-page="post"] .post-content {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
   .post-article {
     max-width: 100%;
   }

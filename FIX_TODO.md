@@ -65,6 +65,11 @@
   - PC：保留现有浮动收藏按钮。
   - 相关文件：`js/post-page.js`、`css/post-page.css`
 
+- [x] 修复移动端文章长 URL 撑宽导致的正文宽窄不一致和 Brave/vivo 错位。
+  - 当前现象：文章开头的知乎长链接会把布局撑出视口，导致前几行特别宽、后文变窄，部分移动浏览器出现右侧背景断层和 UI 错移。
+  - 修复方向：正文、链接、列表项强制长词断行；文章容器和移动端 wrapper 限制在 `100%` 宽度内，禁止横向布局外溢。
+  - 相关文件：`css/post-page.css`、`css/style.css`
+
 - [ ] 保留文章页移动端“返回列表”入口，并优化为清爽阅读按钮。
   - 影响：移动端文章页基本导航。
   - 相关文件：`post.html`、`css/post-page.css`、`js/post-page.js`
@@ -85,7 +90,7 @@
 
 - [x] 统一 `SITE_ARCHITECTURE.md`、`README.md`、`package.json` 的版本描述。
   - 影响：读者理解、发布规则一致性。
-  - 当前状态：已按最新发布顺序从 `v3.2` 推进到 `v3.3`；`package.json` 和 README 使用 `3.3.0`，`SITE_ARCHITECTURE.md` 使用 `v3.3`；当前仓库根目录未发现 `git-rules.md`。
+  - 当前状态：已按最新发布顺序从 `v3.3` 推进到 `v3.4`；`package.json` 和 README 使用 `3.4.0`，`SITE_ARCHITECTURE.md` 使用 `v3.4`；当前仓库根目录未发现 `git-rules.md`。
   - 相关文件：`SITE_ARCHITECTURE.md`、`README.md`、`package.json`、`scripts/smoke-check.mjs`
 
 - [ ] 让本地 dev server 挂载 `/api/notion` 并返回与生产一致的 `410`。

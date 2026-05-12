@@ -212,6 +212,8 @@ expectNotIncludes(styleCss, ".post-content {", "style.css should not ship post c
 expectNotIncludes(styleCss, ".fab-bookmark {", "style.css should not ship the floating post bookmark styles anymore");
 expectIncludes(blogPageCss, ".blog-grid {", "blog-page.css should own the blog grid layout");
 expectIncludes(postPageCss, ".post-content {", "post-page.css should own the post content styles");
+expectIncludes(postPageCss, "overflow-wrap: anywhere;", "post content should break long URLs before they widen mobile layout");
+expectIncludes(postPageCss, "word-break: break-word;", "post content should include legacy long-word wrapping fallback");
 expectIncludes(postPageCss, ".fab-bookmark {", "post-page.css should own the floating bookmark styles");
 expectNotIncludes(postPageCss, "body[data-page=\"post\"] .fab-bookmark", "post-page CSS should not override bookmark visibility that JavaScript owns");
 expectNotIncludes(postPageCss, "display: none !important", "post-page CSS should avoid forcing bookmark controls against JavaScript state");
@@ -248,6 +250,7 @@ expectIncludes(blogPageCss, "@media (max-width: 768px) and (hover: none) and (po
 expectIncludes(postPageCss, "@media (max-width: 768px) and (hover: none) and (pointer: coarse)", "post mobile CSS should not affect narrow desktop windows");
 expectIncludes(styleCss, 'body[data-page="post"] .top-actions', "post mobile CSS should explicitly target the article dock");
 expectIncludes(styleCss, "display: none;", "post mobile dock should be hidden for clean reading");
+expectIncludes(postPageCss, 'body[data-page="post"] .page-transition-wrapper', "post mobile CSS should clamp article layout wrappers to the viewport");
 expectIncludes(postPageJs, "if (mobileNavQuery.matches || element === navBookmark)", "post page should hide article bookmark controls on mobile through JavaScript state");
 expectIncludes(styleCss, "@media (hover: none) and (pointer: coarse)", "cursor glow should be disabled only for touch-first pointers");
 expectNotIncludes(styleCss, "@media (hover: none), (pointer: coarse)", "cursor glow touch fallback should not use a broad OR media query");

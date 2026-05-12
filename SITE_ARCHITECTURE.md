@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v3.3
+> Version: v3.4
 > Updated: 2026-05-12
 
 ## 1. Overview
@@ -32,7 +32,15 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v3.3 Highlights
+## 2. Version v3.4 Highlights
+
+v3.4 is a mobile article compatibility hotfix for long URLs and browser-specific layout width handling.
+
+- `css/post-page.css` now forces article content, paragraphs, links, and list items to break long URL-like strings before they widen the layout.
+- Mobile article wrappers are clamped to `100%` width with `min-width: 0` to avoid Brave/vivo-style horizontal overflow and right-side background seams.
+- `scripts/smoke-check.mjs` now asserts the long-word wrapping and mobile article wrapper clamp rules.
+
+### v3.3 Highlights
 
 v3.3 focuses the mobile experience on stable reading and lighter rendering while preserving the desktop particle UI.
 
