@@ -21,10 +21,6 @@ Desktop.ini
 *.log
 npm-debug.log*
 
-# Local background dev-server tracking
-.local-server.pid
-.codex-local-server.*.log
-
 # Vercel
 .vercel/
 

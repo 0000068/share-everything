@@ -10,8 +10,6 @@
   },
   "scripts": {
     "check": "node scripts/smoke-check.mjs",
-    "dev": "node scripts/local-server.mjs",
-    "dev:bg": "powershell -ExecutionPolicy Bypass -File scripts/start-dev-bg.ps1",
-    "stop:bg": "powershell -ExecutionPolicy Bypass -File scripts/stop-dev-bg.ps1"
+    "dev": "node scripts/local-server.mjs"
   }
 }
