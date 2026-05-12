@@ -1,7 +1,7 @@
 # Share Everything Site Architecture
 
-> Version: v3.2
-> Updated: 2026-05-11
+> Version: v3.3
+> Updated: 2026-05-12
 
 ## 1. Overview
 
@@ -32,16 +32,26 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v3.2 Highlights
+## 2. Version v3.3 Highlights
+
+v3.3 focuses the mobile experience on stable reading and lighter rendering while preserving the desktop particle UI.
+
+- `js/common.js` keeps the old desktop particle class, 350-particle density, and desktop frame cadence unchanged.
+- Real mobile home pages now use a separate `MobileParticle` model, 28 particles, and a 66ms draw interval to reduce phone CPU/GPU cost.
+- Real mobile blog and article pages disable the particle canvas entirely and use a unified static background layer to avoid zoom/address-bar background breaks.
+- Mobile UI and performance overrides still require `(max-width: 768px) and (hover: none) and (pointer: coarse)`, so a narrow desktop browser window keeps desktop particles and desktop layout behavior.
+- Real mobile article pages hide the bottom dock and article bookmark entry so reading content is not covered by floating controls.
+- Real mobile blog cover placeholders suppress the notebook emoji fallback so slow or failed covers do not flash a jarring icon.
+
+### v3.2 Highlights
 
 v3.2 fixes Notion formula rendering and adds a mobile-only particle performance profile while preserving desktop animation behavior.
 
 - `js/notion-content.js` renders Notion block and inline equations as local MathML, keeping the original TeX only in hidden `application/x-tex` annotations for accessibility and copy/debug use.
 - `css/post-page.css` styles rendered math directly, removing the previous visible `<code>` treatment that made formulas look like raw LaTeX source.
 - `js/common.js` keeps the old desktop particle class, 350-particle density, and frame cadence unchanged.
-- Real mobile devices now use a separate `MobileParticle` model, 72 particles, and a 50ms draw interval to reduce phone CPU/GPU cost.
-- Mobile UI and performance overrides still require `(max-width: 768px) and (hover: none) and (pointer: coarse)`, so a narrow desktop browser window keeps desktop particles and desktop layout behavior.
-- Article pages keep the v3.1 mobile dock safe-area layout and ultra-narrow icon fallback.
+- Real mobile devices use a separate `MobileParticle` model to reduce phone CPU/GPU cost.
+- Mobile UI and performance overrides require `(max-width: 768px) and (hover: none) and (pointer: coarse)`, so a narrow desktop browser window keeps desktop particles and desktop layout behavior.
 
 ### v3.1 Highlights
 
@@ -132,7 +142,7 @@ v2.3 restores the v1.6-style whole-page SPA route motion while keeping the v2.0 
 - Blog cover media is non-interactive so clicks always reach the card link, while bookmark buttons remain above the link layer.
 - Article content prioritizes the first image with eager loading and high fetch priority.
 - Remote display images can be routed through the same-origin `/api/image` proxy for better cache behavior.
-- Mobile particle rendering now uses the v3.2 lightweight profile on real mobile devices only, and particles pause briefly while scrolling on mobile.
+- Mobile particle rendering uses a lightweight profile on real mobile devices only, and particles pause briefly while scrolling on mobile pages where they are enabled.
 - Mobile UI and performance overrides are gated by the shared real-mobile media query rather than width alone, keeping PC behavior stable even in narrow browser windows.
 - SPA page HTML requests are coalesced, while route swaps keep the v1.6-style 150ms visual exit cue.
 - SPA article navigation uses `/post.html?id=...` first on local dev origins and falls back to it when another server does not support `/posts/:id` rewrites.

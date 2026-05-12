@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.8.0-00e5ff?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/version-3.3.0-00e5ff?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/deploy-Vercel-000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel" />
   <img src="https://img.shields.io/badge/CMS-Notion-000?style=flat-square&logo=notion&logoColor=white" alt="Notion" />
@@ -38,7 +38,7 @@
 - ⚡ **零构建步骤**，没有 React/Vue/Next.js，纯 HTML + CSS + JS
 - 🖥️ **SSR + SPA 混合**，首屏服务端渲染，后续导航丝滑无刷新
 - 🔒 **生产级安全**，CSP nonce、SSRF 防护、XSS 白名单过滤
-- 📱 **极致移动端体验**，粒子降密度、滚动暂停、手势友好
+- 📱 **极致移动端体验**，首页极轻粒子，列表和文章页移动端静态背景优先阅读
 
 ---
 
@@ -69,7 +69,7 @@
 - SPA 路由 HTML 缓存（5 分钟 / 最多 6 页）
 - 悬停 + 聚焦预取（尊重 `saveData` 和 2G 网络）
 - 服务端六层缓存体系 + 三层请求去重
-- 真实移动设备粒子 72 个（桌面 350 个），手机使用轻量粒子和降帧绘制，窄屏电脑不降级
+- 真实移动首页粒子 28 个（桌面 350 个），列表页和文章页移动端禁用粒子，窄屏电脑不降级
 
 ### 🔒 安全
 

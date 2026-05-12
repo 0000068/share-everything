@@ -229,8 +229,9 @@ expectIncludes(blogPageCss, "z-index: 2;\n  border-radius: inherit;", "blog card
 expectIncludes(blogPageCss, "pointer-events: none;\n}", "blog card cover media should not swallow clicks meant for the card link");
 expectIncludes(blogPageCss, "z-index: 3;\n  display: inline-flex;", "blog card bookmark button should stay above the card link layer");
 expectIncludes(commonJs, "DESKTOP_PARTICLE_COUNT = 350", "particle runtime should preserve the desktop particle density");
-expectIncludes(commonJs, "MOBILE_PARTICLE_COUNT = 72", "particle runtime should use the lighter v3.2 mobile-only particle density");
-expectIncludes(commonJs, "MOBILE_PARTICLE_FRAME_INTERVAL_MS = 50", "particle runtime should throttle mobile-only particle drawing");
+expectIncludes(commonJs, "MOBILE_PARTICLE_COUNT = 28", "particle runtime should use the ultra-light mobile-only particle density");
+expectIncludes(commonJs, "MOBILE_PARTICLE_FRAME_INTERVAL_MS = 66", "particle runtime should throttle mobile-only particle drawing");
+expectIncludes(commonJs, 'MOBILE_PARTICLE_DISABLED_PAGES = new Set(["blog", "post"])', "particle runtime should disable mobile particles on list and article pages");
 expectIncludes(commonJs, "class MobileParticle", "particle runtime should use a cheaper mobile-only particle model");
 expectIncludes(commonJs, "particleProfile.isMobile ? MobileParticle : Particle", "particle runtime should keep the desktop particle class separate from the mobile renderer");
 expectIncludes(commonJs, "siteUtils.isMobileDeviceViewport", "particle runtime should use the shared real-mobile gate before changing density");
@@ -245,9 +246,9 @@ expectIncludes(siteUtilsJs, "createMobileDeviceQueryList", "site utils should ex
 expectIncludes(styleCss, "@media (max-width: 768px) and (hover: none) and (pointer: coarse)", "shared mobile CSS should not affect narrow desktop windows");
 expectIncludes(blogPageCss, "@media (max-width: 768px) and (hover: none) and (pointer: coarse)", "blog mobile CSS should not affect narrow desktop windows");
 expectIncludes(postPageCss, "@media (max-width: 768px) and (hover: none) and (pointer: coarse)", "post mobile CSS should not affect narrow desktop windows");
-expectIncludes(styleCss, 'body[data-page="post"] .action-btn span', "post mobile dock should constrain labels so the bar stays fully visible");
-expectIncludes(styleCss, "max(12px, env(safe-area-inset-left))", "post mobile dock should respect horizontal safe areas on narrow phones");
-expectIncludes(styleCss, "@media (max-width: 360px) and (hover: none) and (pointer: coarse)", "post mobile dock should have an icon-only fallback for very narrow phones");
+expectIncludes(styleCss, 'body[data-page="post"] .top-actions', "post mobile CSS should explicitly target the article dock");
+expectIncludes(styleCss, "display: none;", "post mobile dock should be hidden for clean reading");
+expectIncludes(postPageJs, "if (mobileNavQuery.matches || element === navBookmark)", "post page should hide article bookmark controls on mobile through JavaScript state");
 expectIncludes(styleCss, "@media (hover: none) and (pointer: coarse)", "cursor glow should be disabled only for touch-first pointers");
 expectNotIncludes(styleCss, "@media (hover: none), (pointer: coarse)", "cursor glow touch fallback should not use a broad OR media query");
 assert.ok(
@@ -968,7 +969,7 @@ expectIncludes(postPageJs, 'console.warn("NotionAPI is unavailable on post page.
 expectNotIncludes(postPageJs, 'console.error("NotionAPI is unavailable on post page.")', "post page should not write expected SSR fallback to stderr as an error");
 expectIncludes(postPageJs, "canBookmarkFromInitialData", "post page should recover bookmark controls from SSR initial data when the client API is unavailable");
 expectIncludes(postPageJs, "initBookmark(initialPostData);", "post page should still wire bookmark controls from SSR summary data in fallback mode");
-expectIncludes(postPageJs, 'element.style.display = mobileNavQuery.matches ? "none" : "flex";', "post page should hide the floating bookmark control on mobile through JavaScript state");
+expectIncludes(postPageJs, "if (mobileNavQuery.matches || element === navBookmark)", "post page should hide article bookmark controls on mobile through JavaScript state");
 expectIncludes(postPageJs, "createMobileDeviceQueryList", "post page should use the shared real-mobile query for bookmark control placement");
 assert.ok(
   postPageJs.indexOf("const postId = getCurrentPostId();") < postPageJs.indexOf('if (!notionApi)'),

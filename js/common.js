@@ -16,10 +16,11 @@ let mouseY = 0;
 let targetMouseX = 0;
 let targetMouseY = 0;
 const MOBILE_PARTICLE_BREAKPOINT = 768;
-const MOBILE_PARTICLE_COUNT = 72;
-const MOBILE_PARTICLE_FRAME_INTERVAL_MS = 50;
+const MOBILE_PARTICLE_COUNT = 28;
+const MOBILE_PARTICLE_FRAME_INTERVAL_MS = 66;
 const DESKTOP_PARTICLE_COUNT = 350;
 const MOBILE_SCROLL_PARTICLE_PAUSE_MS = 240;
+const MOBILE_PARTICLE_DISABLED_PAGES = new Set(["blog", "post"]);
 let particleProfile = getParticleProfileForViewport();
 let particleCount = particleProfile.count;
 const colors = [
@@ -39,11 +40,21 @@ function isMobileParticleViewport() {
     && window.matchMedia?.("(hover: none) and (pointer: coarse)")?.matches;
 }
 
+function getCurrentPageId() {
+  return document.body?.dataset?.page || "";
+}
+
+function shouldDisableMobileParticles() {
+  return isMobileParticleViewport() && MOBILE_PARTICLE_DISABLED_PAGES.has(getCurrentPageId());
+}
+
 function getParticleProfileForViewport() {
   const isMobile = isMobileParticleViewport();
+  const disabled = isMobile && shouldDisableMobileParticles();
   return {
     isMobile,
-    count: isMobile ? MOBILE_PARTICLE_COUNT : DESKTOP_PARTICLE_COUNT,
+    disabled,
+    count: disabled ? 0 : isMobile ? MOBILE_PARTICLE_COUNT : DESKTOP_PARTICLE_COUNT,
     frameInterval: isMobile ? MOBILE_PARTICLE_FRAME_INTERVAL_MS : 0,
   };
 }
@@ -52,6 +63,7 @@ function refreshParticleProfile() {
   const nextProfile = getParticleProfileForViewport();
   const didChange =
     nextProfile.isMobile !== particleProfile.isMobile ||
+    nextProfile.disabled !== particleProfile.disabled ||
     nextProfile.count !== particleProfile.count;
   particleProfile = nextProfile;
   particleCount = nextProfile.count;
@@ -204,7 +216,7 @@ let scrollParticleResumeTimer = null;
 let lastParticleFrameTime = 0;
 
 function drawParticlesFrame(advance = true) {
-  if (!ctx || !width || !height) return;
+  if (!ctx || !width || !height || particleProfile.disabled) return;
   ctx.clearRect(0, 0, width, height);
 
   if (advance) {
@@ -249,6 +261,24 @@ function stopParticles() {
   }
 }
 
+function clearParticleCanvas() {
+  if (!ctx || !canvas) return;
+  ctx.clearRect(0, 0, canvas.width || width || 0, canvas.height || height || 0);
+}
+
+function syncParticleCanvasState() {
+  if (!canvas) return;
+
+  if (particleProfile.disabled) {
+    canvas.dataset.particlesDisabled = "true";
+    canvas.style.display = "none";
+    return;
+  }
+
+  canvas.dataset.particlesDisabled = "false";
+  canvas.style.display = "";
+}
+
 function clearParticleBootstrapTimer() {
   if (particleBootstrapTimer) {
     clearTimeout(particleBootstrapTimer);
@@ -257,7 +287,7 @@ function clearParticleBootstrapTimer() {
 }
 
 function animateParticles() {
-  if (!ctx || particlesPausedForScroll) return;
+  if (!ctx || particlesPausedForScroll || particleProfile.disabled) return;
   const now = typeof performance !== "undefined" && typeof performance.now === "function"
     ? performance.now()
     : Date.now();
@@ -276,9 +306,17 @@ function bootstrapParticles(force = false) {
   if (refreshParticleProfile()) {
     rebuildParticleBuffers();
   }
+  syncParticleCanvasState();
 
   const hasViewport = resize();
   if (!hasViewport) return false;
+
+  if (particleProfile.disabled) {
+    particles = [];
+    particlesBootstrapped = false;
+    clearParticleCanvas();
+    return true;
+  }
 
   if (force || !particlesBootstrapped || particles.length !== particleCount) {
     initParticles();
@@ -331,6 +369,7 @@ function clearScrollParticleResumeTimer() {
 
 function pauseMobileParticlesDuringScroll() {
   if (!isMobileParticleViewport()) return;
+  if (particleProfile.disabled) return;
 
   particlesPausedForScroll = true;
   stopParticles();
@@ -347,6 +386,14 @@ function pauseMobileParticlesDuringScroll() {
 window.ParticlesRuntime = Object.freeze({
   setPointerTarget,
 });
+
+function handleParticleContextChange() {
+  stopParticles();
+  clearParticleBootstrapTimer();
+  clearScrollParticleResumeTimer();
+  particlesPausedForScroll = false;
+  scheduleParticleBootstrap(true);
+}
 
 let resizeTimer = null;
 window.addEventListener("resize", () => {
@@ -403,6 +450,14 @@ document.addEventListener("visibilitychange", () => {
     scheduleParticleBootstrap(!particlesBootstrapped || !rafId);
   }
 });
+
+if (document.body && typeof MutationObserver === "function") {
+  const bodyObserver = new MutationObserver(handleParticleContextChange);
+  bodyObserver.observe(document.body, {
+    attributes: true,
+    attributeFilter: ["data-page"],
+  });
+}
 
 window.addEventListener("scroll", pauseMobileParticlesDuringScroll, {
   passive: true,

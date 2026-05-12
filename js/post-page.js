@@ -125,11 +125,12 @@
           return;
         }
 
-        if (element === navBookmark) {
-          element.style.display = mobileNavQuery.matches ? "inline-flex" : "none";
-        } else {
-          element.style.display = mobileNavQuery.matches ? "none" : "flex";
+        if (mobileNavQuery.matches || element === navBookmark) {
+          element.style.display = "none";
+          return;
         }
+
+        element.style.display = "flex";
       });
     }
 
