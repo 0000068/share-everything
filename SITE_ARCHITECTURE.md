@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v4.0
+> Version: v4.2
 > Updated: 2026-05-13
 
 ## 1. Overview
@@ -33,11 +33,11 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v4.0 Highlights
+## 2. Version v4.2 Highlights
 
-v4.0 packages the latest mobile hero and production-domain maintenance work while preserving the desktop UI and desktop particle behavior.
+v4.2 packages the latest Notion content module split, release verification, and production-domain maintenance work while preserving the desktop UI and desktop particle behavior.
 
-- `package.json`, README, and architecture release metadata now match the `v4.0` release tag convention.
+- `package.json`, README, and architecture release metadata now match the `v4.2` release tag convention.
 - Mobile pages now disable the particle canvas entirely after real-device frame-rate checks, while desktop home keeps the 350-particle animation.
 - Blog cover placeholders no longer render the notebook emoji; slow or failed covers fall back to quiet gradients.
 - Browser icons prefer the crisp `favicon.svg`, with a refreshed `favicon.png?v=3` fallback for sharing and older clients.
@@ -45,6 +45,9 @@ v4.0 packages the latest mobile hero and production-domain maintenance work whil
 - Mobile blog card bookmark buttons are kept at the smaller 26px visual size so the card action does not dominate the title row.
 - `scripts/smoke-check.mjs` now enforces a single static CSS/JS `?v=` value across HTML entrypoints.
 - Production-domain fallback references to `0000068.xyz` are centralized around `site.config.json`; `server/notion-server.js`, `/api/sitemap`, and `/api/robots` read the configured origin instead of duplicating the domain literal.
+- `server/notion-config.js` and `server/category-navigation.js` split stable configuration and category presentation helpers out of `server/notion-server.js`.
+- `js/notion-content-utils.js` split pure schema, property lookup, escaping, and search-text helpers out of `js/notion-content.js`; HTML entrypoints load it before the renderer.
+- `js/notion-content-shared.js`, `js/notion-content-url.js`, and `js/notion-article-renderer.js` further isolate category constants, URL/image policy, and article shell markup from the central Notion renderer.
 - `/robots.txt` is served dynamically through `/api/robots` in both Vercel and the local development server.
 - Local repository residue is cleaned up: the ignored `node_modules/` folder is removed, `.local-server.pid` is ignored, and no root log files are left behind.
 - Static checks cover the mobile hero gradient, mobile particle removal, small card bookmark action, cache-busting asset version, dynamic robots output, and controlled production-domain hardcoding.
@@ -274,9 +277,15 @@ Client-side `notion-api.js` keeps a short bounded in-memory post-list response c
 |   `-- notion.js
 |-- server/
 |   |-- notion-server.js
+|   |-- notion-config.js
+|   |-- category-navigation.js
 |   |-- public-content.js
 |   `-- security-policy.js
 |-- js/
+|   |-- notion-content-shared.js
+|   |-- notion-content-utils.js
+|   |-- notion-content-url.js
+|   |-- notion-article-renderer.js
 |   |-- notion-content.js
 |   |-- runtime-core.js
 |   |-- site-utils.js
@@ -313,6 +322,10 @@ Client-side `notion-api.js` keeps a short bounded in-memory post-list response c
 All three HTML entry pages load shared runtime scripts marked with `data-spa-runtime`:
 
 - `font-loader.js`
+- `notion-content-shared.js`
+- `notion-content-utils.js`
+- `notion-content-url.js`
+- `notion-article-renderer.js`
 - `notion-content.js`
 - `runtime-core.js`
 - `site-utils.js`
@@ -340,7 +353,24 @@ following graph shows which `window.*` globals each script exposes (▸) and con
   font-loader.js
     (no dependencies — safe to load at any position)
 
+  notion-content-shared.js
+    ▸ window.NotionContentShared
+
+  notion-content-utils.js
+    ▸ window.NotionContentUtils
+
+  notion-content-url.js
+    ◂ window.NotionContentUtils
+    ▸ window.NotionContentUrl
+
+  notion-article-renderer.js
+    ▸ window.NotionArticleRenderer
+
   notion-content.js
+    ◂ window.NotionContentShared
+    ◂ window.NotionContentUtils
+    ◂ window.NotionContentUrl
+    ◂ window.NotionArticleRenderer
     ▸ window.NotionContent
 
   runtime-core.js
@@ -371,10 +401,22 @@ Page-specific scripts (`notion-api.js`, `bookmark.js`, `blog-page.js`, `post-pag
 `index-page.js`) are loaded after the runtime set and may safely reference any of the
 globals listed above.
 
+`notion-content-utils.js` must load before `notion-content-url.js` and `notion-content.js`
+because URL helpers and the renderer use the extracted origin, schema, property lookup,
+escaping, and search-text helpers in both browser and CommonJS runtimes.
+
 `spa-router.js` MUST be loaded **last** among the runtime scripts because it initializes
 link interception immediately on load and depends on all preceding globals.
 
 `spa-router.js` keeps canonical URLs in the address bar, but can load `/post.html?id=...` as a compatibility fallback when a server returns `404` for `/posts/:id`. On local dev origins such as `127.0.0.1` and `localhost`, it loads that static post template first because the local static server does not rewrite `/posts/:id`. Route changes use the v1.6-style whole-page opacity/transform cadence with a short 150ms visual exit cue, then suppress nested first-load animations after the swap so the transition reads as one calm page movement. Same-path hash-only changes are intentionally passed through to native browser handling; `blog-page.js` owns the `hashchange` flow for `/blog.html#bookmarks`. If a route remains in its exit state too long, the router falls back to a local-compatible full navigation instead of leaving the page transparent or non-clickable.
+
+`notion-content-shared.js` owns shared category constants, default category colors, cover gradients, and category fallback helpers.
+
+`notion-content-utils.js` owns reusable pure content helpers such as schema resolution, page-property lookup, HTML escaping, CSS color sanitization, and post search-text normalization.
+
+`notion-content-url.js` owns display-safe URL and image proxy helpers, including CSP-aligned image protocol checks, remote image proxy URL construction, embeddable URL normalization, and stable share-image selection.
+
+`notion-article-renderer.js` owns the article header and shell HTML while receiving lower-level dependencies from `notion-content.js`.
 
 `notion-content.js` renders Notion blocks through a `block.type` -> renderer registry built by `createBlockRenderers()`. New block types should be added as focused renderer entries so SSR and browser rendering stay aligned without expanding a central switch.
 
@@ -395,13 +437,22 @@ Cover images and fallback layers set `pointer-events: none`; the full-card link 
 
 `server/notion-server.js` handles:
 
-- Database metadata and schema resolution.
+- Database metadata, Notion request orchestration, and schema resolution.
 - Public content access policy.
 - Post list querying, filtering, search, and pagination.
 - Single post fetching.
 - Recursive block fetching with concurrency limits.
 - SSR article content and structured data preparation.
 - Notion error classification by resource type.
+
+`server/notion-config.js` owns environment and site-origin normalization, checked-in
+`site.config.json` loading, Notion path-id encoding, numeric env parsing, and the shared
+async concurrency limiter.
+
+`server/category-navigation.js` owns Notion-driven category presentation. It reads select
+options from database metadata, merges category values found in post summaries, pins the
+all-posts and featured categories, and applies display labels, emojis, colors, and cover
+gradients from `site.config.json`.
 
 Main server-side caches:
 
@@ -458,6 +509,12 @@ Optional:
 
 | Variable | Default | Description |
 |---|---|---|
+| `NOTION_TITLE_PROPERTY_NAMES` | `Name,Title,标题` | Candidate title property names |
+| `NOTION_CATEGORY_PROPERTY_NAMES` | `Category,分类` | Candidate category property names |
+| `NOTION_TAGS_PROPERTY_NAMES` | `Tags,Tag,标签` | Candidate tag property names |
+| `NOTION_EXCERPT_PROPERTY_NAMES` | `Excerpt,Summary,Description,摘要` | Candidate excerpt property names |
+| `NOTION_DATE_PROPERTY_NAMES` | `Date,Published At,Publish Date,发布日期,发布时间` | Candidate date property names |
+| `NOTION_READ_TIME_PROPERTY_NAMES` | `ReadTime,Read Time,Reading Time,阅读时间,阅读时长` | Candidate reading-time property names |
 | `DATABASE_METADATA_TTL_MS` | `300000` | Database metadata cache TTL |
 | `PUBLIC_PAGE_SUMMARY_CACHE_TTL_MS` | `120000` | Public list summary cache TTL |
 | `PUBLIC_POST_CACHE_TTL_MS` | `60000` | Single post cache TTL |
@@ -469,6 +526,10 @@ Optional:
 | `EXPOSE_PUBLIC_ERROR_DETAILS` | `false` | Expose upstream error detail for local debugging only |
 
 The server exposes the entire configured Notion database. This is the deliberate long-term project policy and matches v2.5 behavior. Keep drafts in a separate Notion database; `Status`, `Public`, and similar public/published fields are ignored by the runtime.
+
+The content schema resolver only requires a Notion title property, with `Name`, `Title`, and `标题` detected by default. Category, tags, excerpt, date, and reading-time properties are optional enhancements and can be renamed through the `NOTION_*_PROPERTY_NAMES` environment variables.
+
+Category navigation is Notion-driven. The server reads the resolved `Category` / `分类` select property from database metadata and builds navigation from its select options, then merges any category values found in post summaries. `全部` and the configured featured category, defaulting to `精选`, are pinned. `site.config.json` only controls category presentation: featured category name, sort priority, display labels, emoji, card colors, and cover gradients. Browser code consumes the `categories` array returned by `/api/posts-data`; it no longer treats `js/notion-content.js` as the category source except for the initial `全部` / `精选` fallback before the first API response.
 
 `site.config.json` is the single checked-in production-origin fallback used by server rendering, dynamic sitemap, and dynamic robots output. Static HTML fallback canonical and OG URLs are smoke-checked against the same config until a build-time replacement step exists.
 
@@ -482,15 +543,19 @@ The server exposes the entire configured Notion database. This is the deliberate
 
 ## 14. Checks
 
-`scripts/smoke-check.mjs` is the single `npm.cmd run check` entrypoint. Shared harness utilities and heavier domain checks live in focused modules under `scripts/smoke-check/`:
+`scripts/smoke-check.mjs` is the single `npm.cmd run check` entrypoint. `npm.cmd run verify:release` runs the smoke suite plus `visual-regression.mjs` with `VISUAL_STRICT=1`, and the same command is wired into `.github/workflows/release-check.yml` for push and pull request validation. Shared harness utilities and heavier domain checks live in focused modules under `scripts/smoke-check/`:
 
 - `harness.mjs` for VM/module loading helpers, fake DOM primitives, and common assertions.
+- `api-contracts.mjs` for final API handler payload contracts such as `/api/posts-data` category presentation metadata.
 - `blog-page.mjs` for blog listing, filtering, bookmark hash, and pagination behavior.
+- `content-modules.mjs` for shared Notion content module boundaries and renderer helpers.
 - `notion-api-client.mjs` for browser-side Notion client summary caching and session fallback behavior.
 - `image-proxy.mjs` for `/api/image` SSRF, MIME, size, redirect, and method checks.
 - `public-content-notion.mjs` for public error mapping and server-side Notion data behavior.
 - `routing-vercel.mjs` for disabled legacy proxy, robots, sitemap, and Vercel header rules.
+- `server-modules.mjs` for Notion server configuration and category navigation boundaries.
 - `visual-regression.mjs` for real-browser screenshot checks outside the default smoke suite.
+- `notion-live-check.mjs` for optional live Notion database integration checks when `NOTION_TOKEN` and `NOTION_DATABASE_ID` are available.
 
 The smoke suite currently covers:
 
@@ -514,7 +579,7 @@ The smoke suite currently covers:
 - Structured data shared helpers.
 - SSR article injection fallback behavior.
 - Mobile particle performance constraints.
-- Real-browser visual regression via `npm.cmd run visual:check` for mobile/desktop screenshots and particle/title/card/dock checks.
+- Real-browser visual regression via `npm.cmd run visual:check` for mobile/desktop screenshots and particle/title/card/dock checks; release checks require strict visual mode.
 - Disabled `/api/notion` behavior.
 - Notion path parameter encoding.
 - Invalid TTL environment variable fallback behavior.

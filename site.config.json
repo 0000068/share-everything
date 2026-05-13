@@ -1,3 +1,22 @@
 {
-  "siteUrl": "https://www.0000068.xyz"
+  "siteUrl": "https://www.0000068.xyz",
+  "categoryNavigation": {
+    "featured": {
+      "name": "精选",
+      "emoji": "🌟",
+      "label": "精选",
+      "color": {
+        "bg": "rgba(255, 64, 129, 0.1)",
+        "text": "#ff4081",
+        "border": "rgba(255, 64, 129, 0.2)",
+        "gradient": "linear-gradient(135deg, #3b0a45, #6d1a7e)"
+      }
+    },
+    "order": [
+      "精选"
+    ],
+    "displayNames": {},
+    "emojis": {},
+    "colors": {}
+  }
 }

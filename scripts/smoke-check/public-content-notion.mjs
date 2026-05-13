@@ -185,6 +185,42 @@ assert.equal(
   null,
   "category prefilter should disable itself instead of breaking requests when the Notion schema drifts",
 );
+const dynamicPublicCategories = serverNotionHelpers.buildPublicCategories({
+  database: {
+    properties: {
+      Category: {
+        id: "category",
+        name: "Category",
+        type: "select",
+        select: {
+          options: [
+            { name: "AI", color: "blue" },
+            { name: "读书", color: "green" },
+          ],
+        },
+      },
+    },
+  },
+  schema: {
+    category: { id: "category", name: "Category", type: "select" },
+  },
+  posts: [
+    { category: "项目记录" },
+  ],
+});
+assert.equal(
+  JSON.stringify(dynamicPublicCategories.map((category) => category.name)),
+  JSON.stringify(["全部", "精选", "AI", "读书", "项目记录"]),
+  "server notion layer should build category navigation from Notion select options plus used post categories while pinning featured",
+);
+assert.equal(
+  serverNotionHelpers.decoratePostSummary({ id: "custom-category", category: "AI" }, new Map([[
+    "ai",
+    { name: "AI", notionColor: "blue", optionIndex: 0 },
+  ]])).categoryLabel,
+  "AI",
+  "server notion layer should attach category presentation metadata to post summaries",
+);
 const databaseWideDefaultPublicAccessPolicy = withEnvOverrides({}, () => serverNotionHelpers.buildPublicAccessPolicyFromDatabase());
 assert.equal(
   databaseWideDefaultPublicAccessPolicy.propertyType,
@@ -284,7 +320,17 @@ const queryCacheServerNotion = loadCommonJsModule("server/notion-server.js", [],
           Name: { id: "title", name: "Name", type: "title" },
           Excerpt: { id: "excerpt", name: "Excerpt", type: "rich_text" },
           Tags: { id: "tags", name: "Tags", type: "multi_select" },
-          Category: { id: "category", name: "Category", type: "select" },
+          Category: {
+            id: "category",
+            name: "Category",
+            type: "select",
+            select: {
+              options: [
+                { name: "Tech", color: "blue" },
+                { name: "AI", color: "purple" },
+              ],
+            },
+          },
         },
       });
     }
@@ -406,6 +452,16 @@ assert.equal(
   firstCachedQuery.total,
   1,
   "server notion layer should still apply local search filtering after the category-prefiltered query returns",
+);
+assert.equal(
+  JSON.stringify(firstCachedQuery.categories.map((category) => category.name)),
+  JSON.stringify(["全部", "精选", "Tech", "AI"]),
+  "server notion layer should include Notion select options in public list category navigation",
+);
+assert.equal(
+  firstCachedQuery.results[0]?.categoryColor?.color,
+  "#2979ff",
+  "server notion layer should decorate list results with category colors derived from Notion/category config",
 );
 assert.equal(
   secondCachedQuery.results[0]?.id,

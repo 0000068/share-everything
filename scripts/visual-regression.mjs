@@ -181,6 +181,8 @@ function startLocalServer(port) {
 function buildBrowserBaseArgs({ profileDir, viewport, mobile = false } = {}) {
   const args = [
     "--headless=new",
+    "--disable-gpu",
+    "--disable-gpu-compositing",
     "--disable-accelerated-2d-canvas",
     "--disable-accelerated-video-decode",
     "--disable-background-networking",
@@ -190,16 +192,15 @@ function buildBrowserBaseArgs({ profileDir, viewport, mobile = false } = {}) {
     "--disable-sync",
     "--disable-features=CalculateNativeWinOcclusion,VizDisplayCompositor",
     "--disable-gpu-sandbox",
+    "--disable-software-rasterizer",
     "--disable-breakpad",
     "--disable-crash-reporter",
-    "--enable-unsafe-swiftshader",
     "--metrics-recording-only",
     "--mute-audio",
+    "--no-sandbox",
     "--no-first-run",
     "--no-default-browser-check",
     "--remote-allow-origins=*",
-    "--use-angle=swiftshader",
-    "--use-gl=swiftshader",
   ];
 
   if (profileDir) {
@@ -732,7 +733,12 @@ async function evaluate(client, expression) {
   });
 
   if (result.exceptionDetails) {
-    throw new Error(result.exceptionDetails.text || "Browser evaluation failed");
+    const exceptionDescription =
+      result.exceptionDetails.exception?.description
+      || result.exceptionDetails.exception?.value
+      || result.exceptionDetails.text
+      || "Browser evaluation failed";
+    throw new Error(exceptionDescription);
   }
 
   return result.result?.value;
@@ -761,7 +767,7 @@ async function checkMobileHome(client, viewport) {
   const metrics = await evaluate(client, `(() => {
     const title = document.querySelector(".hero-title");
     const search = document.querySelector(".hero-search");
-    const ctas = document.querySelector(".hero-ctas");
+    const ctas = document.querySelector(".hero-cta-group");
     const canvas = document.getElementById("particles-canvas");
     const titleRect = title.getBoundingClientRect();
     const searchRect = search.getBoundingClientRect();
@@ -796,7 +802,7 @@ async function checkMobileHome(client, viewport) {
     }, 650));
   })()`);
 
-  assert.equal(metrics.bodyPage, "home", "mobile home should identify the home page");
+  assert.equal(metrics.bodyPage, "index", "mobile home should identify the index page");
   assert.ok(metrics.htmlClass.includes("is-mobile-device-viewport"), "mobile home should use the mobile compatibility class");
   assert.equal(metrics.titleText, "Share Everything", "mobile home should keep the product title");
   assertRectInsideViewport(metrics.titleRect, viewport, "mobile title");
@@ -862,7 +868,7 @@ async function checkMobileBlog(client, viewport) {
         width: buttonRect.width,
         height: buttonRect.height,
       },
-      cardRect: { left: cardRect.left, right: cardRect.right, width: cardRect.width },
+      cardRect: { left: cardRect.left, right: cardRect.right, width: cardRect.width, height: cardRect.height },
       buttonWidth: buttonStyle.width,
       buttonHeight: buttonStyle.height,
       canvasDisabled: canvas.dataset.particlesDisabled || "",
@@ -906,7 +912,7 @@ async function checkMobilePostEmpty(client, viewport) {
       topDisplay: topStyle.display,
       emptyDisplay: emptyStyle.display,
       skeletonDisplay: skeletonStyle.display,
-      articleRect: { left: articleRect.left, right: articleRect.right, width: articleRect.width },
+      articleRect: { left: articleRect.left, right: articleRect.right, width: articleRect.width, height: articleRect.height },
       emptyRect: { top: emptyRect.top, bottom: emptyRect.bottom, left: emptyRect.left, right: emptyRect.right, width: emptyRect.width, height: emptyRect.height },
       canvasDisabled: canvas.dataset.particlesDisabled || "",
       canvasDisplay: getComputedStyle(canvas).display,

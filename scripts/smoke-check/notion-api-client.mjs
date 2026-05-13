@@ -126,6 +126,16 @@ const summaryLruHarness = loadBrowserScript("js/notion-api.js", {
         excerpt: "",
         tags: [],
       })),
+      categories: [
+        { name: "全部", label: "全部", emoji: "📋" },
+        {
+          name: "AI",
+          label: "AI Lab",
+          emoji: "🤖",
+          categoryColor: { bg: "rgba(41, 121, 255, 0.1)", color: "#2979ff", border: "rgba(41, 121, 255, 0.2)" },
+          coverGradient: "linear-gradient(135deg, #0d1b4b, #1a3a6b)",
+        },
+      ],
       total: 201,
       totalPages: 1,
       currentPage: 1,
@@ -147,6 +157,16 @@ assert.equal(
   summaryLruHarness.window.NotionAPI.getPostSummary("lru-post-1")?.title,
   "LRU post 1",
   "notion client should retain recent summaries inside the bounded in-memory LRU",
+);
+assert.deepEqual(
+  summaryLruHarness.window.NotionAPI.getCategories().map((category) => category.label),
+  ["全部", "AI Lab"],
+  "notion client should replace hardcoded category navigation with the API-provided category list",
+);
+assert.equal(
+  summaryLruHarness.window.NotionAPI.getCategoryColor("AI").color,
+  "#2979ff",
+  "notion client should use API-provided category colors for cards",
 );
 
 }

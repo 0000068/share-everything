@@ -57,6 +57,10 @@ loadBrowserScript("js/blog-page.js", {
       getPageSize: () => 9,
       queryPosts: async () => ({
         results: [],
+        categories: [
+          { name: "All", label: "All", emoji: "📚" },
+          { name: "AI", label: "AI Lab", emoji: "🤖" },
+        ],
         total: 0,
         totalPages: 1,
         currentPage: 1,
@@ -108,6 +112,12 @@ loadBrowserScript("js/blog-page.js", {
 });
 const blogPageCleanup = registeredPages.get("blog")?.init?.();
 await Promise.resolve();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(
+  blogFiltersEl.children.some((child) => child.textContent === "🤖 AI Lab"),
+  true,
+  "blog page should refresh category filters from API-provided Notion categories",
+);
 const filterButton = {
     dataset: { category: "Tech" },
   closest(selector) {

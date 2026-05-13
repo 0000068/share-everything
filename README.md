@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-4.0.0-00e5ff?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/version-4.2.0-00e5ff?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/deploy-Vercel-000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel" />
   <img src="https://img.shields.io/badge/CMS-Notion-000?style=flat-square&logo=notion&logoColor=white" alt="Notion" />
@@ -133,12 +133,18 @@ Notion Database
 │   ├── sitemap.js          站点地图生成
 │   └── notion.js           已禁用的旧代理 (410)
 ├── server/
-│   ├── notion-server.js    Notion 通信、缓存、访问控制
+│   ├── notion-server.js    Notion 通信、缓存、查询编排
+│   ├── notion-config.js    环境变量、站点 URL、并发工具
+│   ├── category-navigation.js  Notion 分类导航与展示映射
 │   ├── security-policy.js  CSP 策略构建器
 │   └── public-content.js   错误处理、输入验证
 ├── js/
 │   ├── runtime-core.js     页面生命周期、进度条、焦点管理
 │   ├── spa-router.js       SPA 路由、预取、过渡动画
+│   ├── notion-content-shared.js  分类常量与默认展示令牌
+│   ├── notion-content-utils.js  内容 Schema、转义、搜索文本工具
+│   ├── notion-content-url.js  URL、图片代理与分享图策略
+│   ├── notion-article-renderer.js  文章头部与外壳渲染
 │   ├── notion-content.js   同构块渲染器 (SSR + 浏览器)
 │   ├── notion-api.js       客户端 API 层、缓存
 │   ├── blog-page.js        列表页逻辑
@@ -226,7 +232,13 @@ npm.cmd run check
 npm.cmd run visual:check
 ```
 
-该脚本会启动本地服务，优先使用本机 Chrome 或 Edge 的 headless + CDP 模式截图并执行布局契约断言，覆盖移动首页、移动总览、移动文章空态和桌面首页。如果当前机器无法完成真实浏览器截图，默认会生成 skipped 报告；CI 或严格验收可设置 `VISUAL_STRICT=1`，要求 CDP 契约检查可用且断言失败时直接失败。
+发布前建议运行严格检查：
+
+```powershell
+npm.cmd run verify:release
+```
+
+该命令会先运行冒烟检查，再用 `VISUAL_STRICT=1` 运行真实浏览器视觉回归。视觉脚本会启动本地服务，优先使用本机 Chrome 或 Edge 的 headless + CDP 模式截图并执行布局契约断言，覆盖移动首页、移动总览、移动文章空态和桌面首页。普通 `visual:check` 在当前机器无法完成截图时会生成 skipped 报告；`verify:release` 会把这类浏览器不可用问题视为失败。
 
 ---
 
@@ -243,16 +255,74 @@ npm.cmd run visual:check
 
 ### Notion 数据库设置
 
-在你的 Notion 数据库中，确保包含以下属性：
+本项目推荐把 `NOTION_DATABASE_ID` 指向一个专门用于公开博客的 Notion 数据库。最小可用结构其实只需要一个 `Title` 类型属性；Notion 新数据库默认的 `Name` 字段就可以，不一定要改名为 `Title`。
 
-| 属性 | 类型 | 说明 |
-|------|------|------|
-| Title | Title | 文章标题（必须） |
-| Status | Status / Select / Checkbox | 可选，仅作为 Notion 内部管理字段；站点不会用它过滤文章 |
-| Category | Select | 文章分类（可选） |
-| Tags | Multi-select | 标签（可选） |
-| Excerpt | Rich text | 摘要（可选，自动从属性名推断） |
-| Cover | Files & Media | 封面图（可选，也支持 Notion 页面封面） |
+推荐结构如下：
+
+| 用途 | 默认可识别属性名 | 类型 | 是否必须 | 说明 |
+|------|------|------|------|------|
+| 标题 | `Name` / `Title` / `标题` | Title | 必须 | 文章标题；没有匹配到时会显示 `Untitled` |
+| 分类 | `Category` / `分类` | Select | 可选 | 用于卡片分类和列表筛选；筛选栏会从 Notion 分类自动生成，见下方说明 |
+| 标签 | `Tags` / `Tag` / `标签` | Multi-select | 可选 | 用于文章页标签和搜索 |
+| 摘要 | `Excerpt` / `Summary` / `Description` / `摘要` | Rich text | 可选 | 用于卡片摘要、SEO 描述和搜索 |
+| 日期 | `Date` / `Published At` / `Publish Date` / `发布日期` / `发布时间` | Date | 可选 | 用于排序和文章元信息；没有日期时仍会展示文章 |
+| 阅读时间 | `ReadTime` / `Read Time` / `Reading Time` / `阅读时间` / `阅读时长` | Rich text | 可选 | 用于文章页元信息 |
+| 封面 | Notion 页面封面 | Page cover | 可选 | 使用 Notion 页面自带封面；不是数据库属性 |
+| 发布状态 | `Status` / `Public` / `Published` 等 | Status / Select / Checkbox | 可选 | 仅作为 Notion 内部管理字段；站点不会用它过滤文章 |
+
+如果你使用自己的字段名，可以用环境变量覆盖候选名，多个名字用英文逗号分隔：
+
+```env
+NOTION_TITLE_PROPERTY_NAMES=Name,Title,文章名
+NOTION_CATEGORY_PROPERTY_NAMES=Category,分类,栏目
+NOTION_TAGS_PROPERTY_NAMES=Tags,Tag,标签
+NOTION_EXCERPT_PROPERTY_NAMES=Excerpt,Summary,Description,摘要
+NOTION_DATE_PROPERTY_NAMES=Date,Published At,Publish Date,发布日期
+NOTION_READ_TIME_PROPERTY_NAMES=ReadTime,Read Time,Reading Time,阅读时间
+```
+
+#### 分类筛选说明
+
+分类导航现在以 Notion 为主要来源，不要求用户去改前端 JS：
+
+- `全部` 会一直显示，用来进入完整文章列表。
+- `精选` 会一直固定显示，作为项目默认的推荐入口；如果你想让文章出现在精选里，把文章的 `Category` 设为 `精选`。
+- 其他分类会优先读取 Notion 数据库里 `Category` 这个 Select 字段的选项，比如 `生活`、`读书`、`AI`、`项目记录`、`随笔`、`设计`、`摄影`。
+- 如果文章里出现了数据库选项之外的分类，列表 API 也会把它合并进分类导航。
+- 点击分类按钮时，会请求 `Category` 等于该分类名的文章。
+- 如果数据库没有 `Category` 属性，网站仍能使用，只是除了 `全部` 和固定的 `精选` 外不会生成额外分类。
+
+`site.config.json` 只负责控制分类展示方式，不再作为分类来源。你可以用它固定 `精选` 的显示，也可以给 Notion 分类补充排序、显示名、emoji 和颜色：
+
+```json
+{
+  "categoryNavigation": {
+    "featured": {
+      "name": "精选",
+      "emoji": "🌟",
+      "label": "精选"
+    },
+    "order": ["精选", "AI", "读书"],
+    "displayNames": {
+      "AI": "AI Lab"
+    },
+    "emojis": {
+      "AI": "🤖",
+      "读书": "📚"
+    },
+    "colors": {
+      "AI": {
+        "bg": "rgba(41, 121, 255, 0.1)",
+        "text": "#2979ff",
+        "border": "rgba(41, 121, 255, 0.2)",
+        "gradient": "linear-gradient(135deg, #0d1b4b, #1a3a6b)"
+      }
+    }
+  }
+}
+```
+
+如果不配置这些展示项，网站也会根据 Notion 分类自动生成基础按钮和默认颜色。
 
 > **公开策略**：本项目长期保持 v2.5 行为：默认读取并展示整个 `NOTION_DATABASE_ID` 指向的 Notion 数据库，不要求公开/发布字段，也不会根据这些字段过滤。请只把可公开内容放进这个数据库；草稿建议放到单独的 Notion 数据库。
 
@@ -265,6 +335,12 @@ npm.cmd run visual:check
 | `NOTION_TOKEN` | ✅ | — | Notion Integration Token |
 | `NOTION_DATABASE_ID` | ✅ | — | Notion 数据库 ID |
 | `SITE_URL` | ❌ | `site.config.json` | 站点根 URL；环境变量优先 |
+| `NOTION_TITLE_PROPERTY_NAMES` | ❌ | `Name,Title,标题` | 标题属性候选名 |
+| `NOTION_CATEGORY_PROPERTY_NAMES` | ❌ | `Category,分类` | 分类属性候选名 |
+| `NOTION_TAGS_PROPERTY_NAMES` | ❌ | `Tags,Tag,标签` | 标签属性候选名 |
+| `NOTION_EXCERPT_PROPERTY_NAMES` | ❌ | `Excerpt,Summary,Description,摘要` | 摘要属性候选名 |
+| `NOTION_DATE_PROPERTY_NAMES` | ❌ | `Date,Published At,Publish Date,发布日期,发布时间` | 日期属性候选名 |
+| `NOTION_READ_TIME_PROPERTY_NAMES` | ❌ | `ReadTime,Read Time,Reading Time,阅读时间,阅读时长` | 阅读时间属性候选名 |
 | `DATABASE_METADATA_TTL_MS` | ❌ | `300000` | 数据库元数据缓存时间 (ms) |
 | `PUBLIC_PAGE_SUMMARY_CACHE_TTL_MS` | ❌ | `120000` | 页面摘要缓存时间 (ms) |
 | `PUBLIC_POST_CACHE_TTL_MS` | ❌ | `60000` | 单篇文章缓存时间 (ms) |

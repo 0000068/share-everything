@@ -19,6 +19,7 @@
     const POST_SUMMARY_SESSION_MAX_TITLE_LENGTH = 160;
     const POST_SUMMARY_SESSION_MAX_EXCERPT_LENGTH = 320;
     const POST_SUMMARY_SESSION_MAX_CATEGORY_LENGTH = 48;
+    const POST_SUMMARY_SESSION_MAX_CATEGORY_LABEL_LENGTH = 64;
     const POST_SUMMARY_SESSION_MAX_READ_TIME_LENGTH = 48;
     const POST_SUMMARY_SESSION_MAX_TAGS = 8;
     const POST_SUMMARY_SESSION_MAX_TAG_LENGTH = 48;
@@ -27,10 +28,6 @@
     const FALLBACK_REMOTE_BLOG_CATEGORIES = [
       { name: "全部", emoji: "📋", color: "cyan" },
       { name: "精选", emoji: "🌟", color: "pink" },
-      { name: "技术", emoji: "💻", color: "blue" },
-      { name: "随想", emoji: "💭", color: "purple" },
-      { name: "教程", emoji: "📖", color: "green" },
-      { name: "工具", emoji: "🔧", color: "orange" },
     ];
     const sharedContent = window.NotionContent || {};
     const ALL_CATEGORY = sharedContent.ALL_CATEGORY || "全部";
@@ -38,6 +35,8 @@
       typeof sharedContent.getRemoteBlogCategories === "function"
         ? sharedContent.getRemoteBlogCategories()
         : FALLBACK_REMOTE_BLOG_CATEGORIES;
+    let categoryNavigationCache = normalizeCategoryList(REMOTE_BLOG_CATEGORIES);
+    const categoryPresentationCache = new Map();
     const pendingRequests = new Map();
     const postsResponseCache = new Map();
     const postSummaryMemoryCache = new Map();
@@ -79,6 +78,11 @@
     }
 
     function getCategoryColor(category) {
+      const cached = categoryPresentationCache.get(normalizeSearchText(category));
+      if (cached?.categoryColor) {
+        return cached.categoryColor;
+      }
+
       if (typeof sharedContent.getCategoryColor === "function") {
         return sharedContent.getCategoryColor(category);
       }
@@ -92,6 +96,71 @@
       }
 
       return "";
+    }
+
+    function normalizeCategoryColor(value) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        return null;
+      }
+
+      const bg = typeof value.bg === "string" && value.bg.trim() ? value.bg.trim() : "";
+      const color = typeof value.color === "string" && value.color.trim() ? value.color.trim() : "";
+      const border = typeof value.border === "string" && value.border.trim() ? value.border.trim() : "";
+
+      if (!bg && !color && !border) {
+        return null;
+      }
+
+      return {
+        bg: bg || fallbackCategoryColor.bg,
+        color: color || fallbackCategoryColor.color,
+        border: border || fallbackCategoryColor.border,
+      };
+    }
+
+    function normalizeCategoryItem(category) {
+      if (!category || typeof category !== "object") return null;
+      const name = truncateText(category.name, POST_SUMMARY_SESSION_MAX_CATEGORY_LENGTH);
+      if (!name) return null;
+
+      return {
+        name,
+        label: truncateText(category.label, POST_SUMMARY_SESSION_MAX_CATEGORY_LABEL_LENGTH, name),
+        emoji: truncateText(category.emoji, 8),
+        color: truncateText(category.color, 32),
+        categoryColor: normalizeCategoryColor(category.categoryColor),
+        coverGradient: truncateText(category.coverGradient, POST_SUMMARY_SESSION_MAX_GRADIENT_LENGTH),
+      };
+    }
+
+    function normalizeCategoryList(categories) {
+      if (!Array.isArray(categories)) {
+        return [];
+      }
+
+      const seen = new Set();
+      return categories
+        .map(normalizeCategoryItem)
+        .filter((category) => {
+          if (!category) return false;
+          const key = normalizeSearchText(category.name);
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+    }
+
+    function rememberCategories(categories) {
+      const nextCategories = normalizeCategoryList(categories);
+      if (nextCategories.length === 0) {
+        return categoryNavigationCache;
+      }
+
+      categoryNavigationCache = nextCategories;
+      nextCategories.forEach((category) => {
+        categoryPresentationCache.set(normalizeSearchText(category.name), category);
+      });
+      return categoryNavigationCache;
     }
 
     function renderPostArticle(post) {
@@ -266,6 +335,8 @@
         title: truncateText(summary.title, POST_SUMMARY_SESSION_MAX_TITLE_LENGTH, "Untitled"),
         excerpt: truncateText(summary.excerpt, POST_SUMMARY_SESSION_MAX_EXCERPT_LENGTH),
         category: truncateText(summary.category, POST_SUMMARY_SESSION_MAX_CATEGORY_LENGTH),
+        categoryLabel: truncateText(summary.categoryLabel, POST_SUMMARY_SESSION_MAX_CATEGORY_LABEL_LENGTH),
+        categoryColor: normalizeCategoryColor(summary.categoryColor),
         date: truncateText(summary.date, 32),
         readTime: truncateText(summary.readTime, POST_SUMMARY_SESSION_MAX_READ_TIME_LENGTH),
         coverImage: normalizeSessionCoverImage(summary.coverImage),
@@ -304,10 +375,13 @@
       const title = post.title || "Untitled";
       const excerpt = post.excerpt || "";
       const category = post.category || "";
+      const categoryLabel = truncateText(post.categoryLabel, POST_SUMMARY_SESSION_MAX_CATEGORY_LABEL_LENGTH, category);
+      const categoryColor = normalizeCategoryColor(post.categoryColor);
       const readTime = post.readTime || "";
       const coverImage = post.coverImage || null;
       const coverEmoji = post.coverEmoji || "📝";
-      const coverGradient = post.coverGradient || gradientForCategory(category);
+      const cachedCategory = categoryPresentationCache.get(normalizeSearchText(category));
+      const coverGradient = post.coverGradient || cachedCategory?.coverGradient || gradientForCategory(category);
       const tags = Array.isArray(post.tags) ? [...post.tags] : [];
 
       return {
@@ -315,6 +389,8 @@
         title,
         excerpt,
         category,
+        categoryLabel,
+        categoryColor,
         date: post.date || "",
         readTime,
         coverImage,
@@ -346,6 +422,15 @@
     function storePostSummary(post, timestamp = Date.now()) {
       const summary = normalizePostSummary(post);
       if (!summary) return null;
+
+      if (summary.category) {
+        categoryPresentationCache.set(normalizeSearchText(summary.category), {
+          name: summary.category,
+          label: summary.categoryLabel || summary.category,
+          categoryColor: summary.categoryColor,
+          coverGradient: summary.coverGradient,
+        });
+      }
 
       rememberPostSummaryInMemory(summary, timestamp);
       writeSessionCache(getPostSummaryCacheKey(summary.id), summary, timestamp);
@@ -496,6 +581,7 @@
     }
 
     function normalizePostQueryResult(data) {
+      const categories = rememberCategories(data?.categories);
       const results = Array.isArray(data?.results)
         ? data.results.map(normalizePostSummary).filter(Boolean)
         : [];
@@ -516,6 +602,7 @@
         total,
         totalPages,
         currentPage,
+        categories,
       };
     }
 
@@ -524,6 +611,7 @@
 
       return {
         ...post,
+        categoryColor: post.categoryColor ? { ...post.categoryColor } : post.categoryColor,
         tags: Array.isArray(post.tags) ? [...post.tags] : [],
       };
     }
@@ -531,6 +619,12 @@
     function clonePostQueryResult(data) {
       return {
         results: Array.isArray(data?.results) ? data.results.map(clonePostSummary) : [],
+        categories: Array.isArray(data?.categories)
+          ? data.categories.map((category) => ({
+            ...category,
+            categoryColor: category.categoryColor ? { ...category.categoryColor } : category.categoryColor,
+          }))
+          : [],
         total: Number.isFinite(Number(data?.total)) ? Number(data.total) : 0,
         totalPages: Math.max(1, Number.isFinite(Number(data?.totalPages)) ? Number(data.totalPages) : 1),
         currentPage: Math.max(1, Number.isFinite(Number(data?.currentPage)) ? Number(data.currentPage) : 1),
@@ -570,6 +664,7 @@
       const requestKey = buildPostsRequestKey(options);
       const cachedResponse = readCachedPostsResponse(requestKey);
       if (cachedResponse) {
+        rememberCategories(cachedResponse.categories);
         primePostSummaries(cachedResponse.results);
         return cachedResponse;
       }
@@ -605,7 +700,10 @@
     }
 
     return {
-      getCategories: () => REMOTE_BLOG_CATEGORIES.map((category) => ({ ...category })),
+      getCategories: () => categoryNavigationCache.map((category) => ({
+        ...category,
+        categoryColor: category.categoryColor ? { ...category.categoryColor } : category.categoryColor,
+      })),
       queryPosts: (options = {}) => liveQueryDatabase(options),
       getPost: (pageId) => liveGetPage(pageId),
       getPostSummary,

@@ -1,5 +1,3 @@
-const fs = require("node:fs");
-const path = require("node:path");
 const {
   DEFAULT_NOTION_CONTENT_PROPERTY_CANDIDATES,
   buildArticleStructuredData: buildSharedArticleStructuredData,
@@ -14,19 +12,38 @@ const {
   resolveNotionContentSchema,
   resolveShareImageUrl,
 } = require("../js/notion-content");
+const {
+  ALL_CATEGORY,
+  PUBLIC_CATEGORY_QUERY_MAX_LENGTH,
+  buildCategoryOptionLookup,
+  createCategoryNavigation,
+  readCategorySelectOptions,
+} = require("./category-navigation");
+const {
+  SAFE_FALLBACK_SITE_ORIGIN,
+  createAsyncLimiter,
+  encodeNotionPathId,
+  normalizeName,
+  normalizeNonNegativeNumber,
+  normalizeNotionId,
+  normalizePositiveNumber,
+  normalizeSiteOrigin,
+  readConfiguredSiteOrigin,
+  readCsvEnv,
+  readSiteConfig,
+} = require("./notion-config");
 
 const NOTION_BASE = "https://api.notion.com/v1";
 const NOTION_VERSION = "2022-06-28";
 const MAX_BLOCK_RECURSION_DEPTH = 10;
 const MAX_PAGINATION_ROUNDS = 50;
-const SAFE_FALLBACK_SITE_ORIGIN = "https://example.com";
-const CONFIGURED_SITE_ORIGIN = readConfiguredSiteOrigin();
+const SITE_CONFIG = readSiteConfig();
+const CONFIGURED_SITE_ORIGIN = readConfiguredSiteOrigin(SITE_CONFIG);
 const DEFAULT_SITE_ORIGIN = normalizeSiteOrigin(
   process.env.SITE_URL,
   CONFIGURED_SITE_ORIGIN || SAFE_FALLBACK_SITE_ORIGIN,
 );
 const DEFAULT_POST_PAGE_SIZE = 9;
-const PUBLIC_CATEGORY_QUERY_MAX_LENGTH = 128;
 const PUBLIC_SEARCH_QUERY_MAX_LENGTH = 256;
 const DATABASE_METADATA_TTL_MS = normalizeNonNegativeNumber(process.env.DATABASE_METADATA_TTL_MS, 300_000);
 const PUBLIC_PAGE_SUMMARY_CACHE_TTL_MS = normalizeNonNegativeNumber(process.env.PUBLIC_PAGE_SUMMARY_CACHE_TTL_MS, 120_000);
@@ -35,7 +52,12 @@ const PUBLIC_POST_CACHE_TTL_MS = normalizeNonNegativeNumber(process.env.PUBLIC_P
 const PUBLIC_POST_CACHE_MAX_ENTRIES = 20;
 const NOTION_REQUEST_TIMEOUT_MS = normalizePositiveNumber(process.env.NOTION_REQUEST_TIMEOUT_MS, 12_000);
 const NOTION_BLOCK_CHILD_CONCURRENCY = normalizePositiveNumber(process.env.NOTION_BLOCK_CHILD_CONCURRENCY, 4);
-const ALL_CATEGORY = "\u5168\u90e8";
+const CATEGORY_NAVIGATION = createCategoryNavigation(SITE_CONFIG?.categoryNavigation);
+const {
+  buildCategoryPresentation,
+  buildPublicCategories,
+  decoratePostSummary,
+} = CATEGORY_NAVIGATION;
 const CONTENT_PROPERTY_ENV_NAMES = Object.freeze({
   title: ["NOTION_TITLE_PROPERTY_NAMES", "NOTION_TITLE_PROPERTY_NAME"],
   excerpt: ["NOTION_EXCERPT_PROPERTY_NAMES", "NOTION_EXCERPT_PROPERTY_NAME"],
@@ -52,108 +74,6 @@ const publicPageQueryCache = new Map();
 const publicPostCache = new Map();
 const pendingPublicPostRequests = new Map();
 const POST_SEARCH_TEXT_SYMBOL = Symbol("postSearchText");
-
-function readCsvEnv(names, defaults = []) {
-  const keys = Array.isArray(names) ? names : [names];
-
-  for (const key of keys) {
-    const rawValue = process.env[key];
-    if (typeof rawValue !== "string") {
-      continue;
-    }
-
-    const values = rawValue
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean);
-
-    if (values.length > 0) {
-      return values;
-    }
-  }
-
-  return Array.isArray(defaults) ? defaults.slice() : [];
-}
-
-function normalizeName(value) {
-  return typeof value === "string" ? value.trim().toLowerCase() : "";
-}
-
-function normalizeNotionId(value) {
-  return typeof value === "string" ? value.replace(/-/g, "").toLowerCase() : "";
-}
-
-function encodeNotionPathId(value) {
-  const normalized = typeof value === "string" ? value.trim() : String(value ?? "");
-  return encodeURIComponent(normalized);
-}
-
-function normalizePositiveNumber(value, fallback) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function normalizeNonNegativeNumber(value, fallback) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
-}
-
-function readConfiguredSiteOrigin() {
-  try {
-    const configPath = path.resolve(__dirname, "../site.config.json");
-    const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-    return typeof config.siteUrl === "string" ? config.siteUrl : "";
-  } catch {
-    return "";
-  }
-}
-
-function normalizeSiteOrigin(value, fallback = SAFE_FALLBACK_SITE_ORIGIN) {
-  const candidate = typeof value === "string" && value.trim() ? value.trim() : fallback;
-
-  try {
-    const parsed = new URL(candidate);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      throw new Error("SITE_URL must use http or https");
-    }
-    parsed.username = "";
-    parsed.password = "";
-    parsed.search = "";
-    parsed.hash = "";
-    return parsed.href.replace(/\/+$/, "");
-  } catch (error) {
-    if (candidate !== fallback) {
-      console.warn(`Invalid SITE_URL "${candidate}", falling back to ${fallback}.`);
-    }
-    return fallback.replace(/\/+$/, "");
-  }
-}
-
-function createAsyncLimiter(limit) {
-  const safeLimit = Math.max(1, Math.trunc(normalizePositiveNumber(limit, 1)));
-  let activeCount = 0;
-  const pendingResolvers = [];
-
-  return async function runWithLimit(task) {
-    if (activeCount >= safeLimit) {
-      await new Promise((resolve) => {
-        pendingResolvers.push(resolve);
-      });
-    }
-
-    activeCount += 1;
-
-    try {
-      return await task();
-    } finally {
-      activeCount -= 1;
-      const next = pendingResolvers.shift();
-      if (next) {
-        next();
-      }
-    }
-  };
-}
 
 const runWithBlockChildConcurrency = createAsyncLimiter(NOTION_BLOCK_CHILD_CONCURRENCY);
 
@@ -717,22 +637,33 @@ async function queryPublicPosts({
   page = 1,
   pageSize = DEFAULT_POST_PAGE_SIZE,
 } = {}) {
+  const metadata = await getDatabaseMetadata();
   const results = await queryPublicPages({ category, search });
+  const categoryOptions = readCategorySelectOptions(metadata.database, metadata.contentSchema);
+  const categoryOptionLookup = buildCategoryOptionLookup(categoryOptions);
+  const cachedSummaries = getCachedPublicPageSummaries()?.pages;
+  const categories = buildPublicCategories({
+    database: metadata.database,
+    schema: metadata.contentSchema,
+    posts: Array.isArray(cachedSummaries) ? cachedSummaries : results,
+  });
+  const decoratedResults = results.map((post) => decoratePostSummary(post, categoryOptionLookup));
 
   const safePageSize = Math.max(
     1,
     Math.min(normalizePositiveInteger(pageSize, DEFAULT_POST_PAGE_SIZE), 100),
   );
-  const total = results.length;
+  const total = decoratedResults.length;
   const totalPages = Math.max(1, Math.ceil(total / safePageSize));
   const currentPage = Math.max(1, Math.min(normalizePositiveInteger(page, 1), totalPages));
   const sliceStart = (currentPage - 1) * safePageSize;
 
   return {
-    results: results.slice(sliceStart, sliceStart + safePageSize),
+    results: decoratedResults.slice(sliceStart, sliceStart + safePageSize),
     total,
     totalPages,
     currentPage,
+    categories,
   };
 }
 
@@ -875,10 +806,12 @@ async function fetchPublicPost(pageId) {
       getDatabaseMetadata(),
     ]);
     const publicPage = assertPublicPage(page, metadata.publicAccessPolicy);
-    const summary = mapNotionPage(publicPage, {
+    const categoryOptions = readCategorySelectOptions(metadata.database, metadata.contentSchema);
+    const categoryOptionLookup = buildCategoryOptionLookup(categoryOptions);
+    const summary = decoratePostSummary(mapNotionPage(publicPage, {
       includeSearchText: true,
       schema: metadata.contentSchema,
-    });
+    }), categoryOptionLookup);
     const blocks = await fetchAllBlockChildren(publicPage.id);
     const post = buildPostPayload(summary, blocks);
     cachePublicPost(cacheKey, post);
@@ -936,7 +869,10 @@ if (typeof setInterval === "function") {
 
 module.exports = {
   buildArticleStructuredData,
+  buildCategoryPresentation,
+  buildPublicCategories,
   buildPostUrl,
+  decoratePostSummary,
   escapeHtml,
   fetchPublicPost,
   getDatabaseId,

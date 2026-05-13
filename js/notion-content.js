@@ -1,15 +1,34 @@
 (function (root, factory) {
-  const exported = factory();
+  const sharedContent = typeof module === "object" && module.exports
+    ? require("./notion-content-shared")
+    : root?.NotionContentShared;
+  const sharedUtils = typeof module === "object" && module.exports
+    ? require("./notion-content-utils")
+    : root?.NotionContentUtils;
+  const contentUrl = typeof module === "object" && module.exports
+    ? require("./notion-content-url")
+    : root?.NotionContentUrl;
+  const articleRenderer = typeof module === "object" && module.exports
+    ? require("./notion-article-renderer")
+    : root?.NotionArticleRenderer;
+  const exported = factory(
+    sharedContent || {},
+    sharedUtils || {},
+    contentUrl || {},
+    articleRenderer || {},
+  );
 
   if (typeof module === "object" && module.exports) {
     module.exports = exported;
   } else if (root) {
     root.NotionContent = exported;
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, () => {
-  const SAFE_LINK_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
-  const SAFE_IMAGE_PROTOCOLS = new Set(["https:"]);
-  const IMAGE_PROXY_PATH = "/api/image";
+})(typeof globalThis !== "undefined" ? globalThis : this, (
+  sharedContent = {},
+  sharedUtils = {},
+  contentUrl = {},
+  articleRenderer = {},
+) => {
   const NOTION_ANNOTATION_STYLES = {
     gray: "color: #9b9a97;",
     brown: "color: #937264;",
@@ -30,139 +49,93 @@
     pink_background: "background: rgba(255, 122, 162, 0.18); color: var(--text-primary); border-radius: 0.2em; padding: 0 0.2em;",
     red_background: "background: rgba(255, 107, 107, 0.18); color: var(--text-primary); border-radius: 0.2em; padding: 0 0.2em;",
   };
-  const ALL_CATEGORY = "全部";
-  const BOOKMARK_CATEGORY = "收藏";
-  const DEFAULT_NOTION_CONTENT_PROPERTY_CANDIDATES = Object.freeze({
-    title: Object.freeze(["Name", "Title", "标题"]),
-    excerpt: Object.freeze(["Excerpt", "Summary", "Description", "摘要"]),
-    readTime: Object.freeze(["ReadTime", "Read Time", "Reading Time", "阅读时间", "阅读时长"]),
-    tags: Object.freeze(["Tags", "Tag", "标签"]),
-    category: Object.freeze(["Category", "分类"]),
-    date: Object.freeze(["Date", "Published At", "Publish Date", "发布日期", "发布时间"]),
-  });
-  const NOTION_CONTENT_PROPERTY_TYPES = Object.freeze({
-    title: Object.freeze(["title"]),
-    excerpt: Object.freeze(["rich_text"]),
-    readTime: Object.freeze(["rich_text"]),
-    tags: Object.freeze(["multi_select"]),
-    category: Object.freeze(["select"]),
-    date: Object.freeze(["date"]),
-  });
-  const CATEGORY_DEFINITIONS = Object.freeze([
-    Object.freeze({
-      name: "精选",
-      emoji: "🌟",
-      color: "pink",
-      cardColor: Object.freeze({
-        bg: "rgba(255, 64, 129, 0.1)",
-        color: "#ff4081",
-        border: "rgba(255, 64, 129, 0.2)",
-      }),
-      gradient: "linear-gradient(135deg, #3b0a45, #6d1a7e)",
-    }),
-    Object.freeze({
-      name: "技术",
-      emoji: "💻",
-      color: "blue",
-      cardColor: Object.freeze({
-        bg: "rgba(41, 121, 255, 0.1)",
-        color: "#2979ff",
-        border: "rgba(41, 121, 255, 0.2)",
-      }),
-      gradient: "linear-gradient(135deg, #0d1b4b, #1a3a6b)",
-    }),
-    Object.freeze({
-      name: "随想",
-      emoji: "💭",
-      color: "purple",
-      cardColor: Object.freeze({
-        bg: "rgba(213, 0, 249, 0.1)",
-        color: "#d500f9",
-        border: "rgba(213, 0, 249, 0.2)",
-      }),
-      gradient: "linear-gradient(135deg, #1a0a3b, #3d1a7e)",
-    }),
-    Object.freeze({
-      name: "教程",
-      emoji: "📖",
-      color: "green",
-      cardColor: Object.freeze({
-        bg: "rgba(0, 230, 118, 0.1)",
-        color: "#00e676",
-        border: "rgba(0, 230, 118, 0.2)",
-      }),
-      gradient: "linear-gradient(135deg, #0a2e1a, #1a5c35)",
-    }),
-    Object.freeze({
-      name: "工具",
-      emoji: "🔧",
-      color: "orange",
-      cardColor: Object.freeze({
-        bg: "rgba(255, 171, 0, 0.1)",
-        color: "#ffab00",
-        border: "rgba(255, 171, 0, 0.2)",
-      }),
-      gradient: "linear-gradient(135deg, #2e1a00, #5c3800)",
-    }),
-  ]);
-  const REMOTE_BLOG_CATEGORIES = Object.freeze([
-    Object.freeze({ name: ALL_CATEGORY, emoji: "📋", color: "cyan" }),
-    ...CATEGORY_DEFINITIONS.map(({ name, emoji, color }) => Object.freeze({ name, emoji, color })),
-  ]);
-  const BOOKMARK_ONLY_CATEGORIES = Object.freeze([
-    Object.freeze({ name: BOOKMARK_CATEGORY, emoji: "📚" }),
-  ]);
-  const SUPPORTED_BLOG_CATEGORIES = Object.freeze([
-    ...REMOTE_BLOG_CATEGORIES.map((category) => category.name),
+  const {
+    ALL_CATEGORY,
     BOOKMARK_CATEGORY,
-  ]);
-  const CATEGORY_COLORS = Object.freeze(
-    CATEGORY_DEFINITIONS.reduce((colors, definition) => {
-      colors[definition.name] = definition.cardColor;
-      return colors;
-    }, {}),
-  );
-  const CATEGORY_GRADIENTS = Object.freeze(
-    CATEGORY_DEFINITIONS.reduce((gradients, definition) => {
-      gradients[definition.name] = definition.gradient;
-      return gradients;
-    }, {}),
-  );
-  const DEFAULT_CATEGORY_COLOR = Object.freeze({ bg: "rgba(0, 229, 255, 0.1)", color: "#00e5ff", border: "rgba(0, 229, 255, 0.2)" });
-  const DEFAULT_COVER_GRADIENT = "linear-gradient(135deg, #1a1a2e, #16213e)";
+    BOOKMARK_ONLY_CATEGORIES,
+    CATEGORY_COLORS,
+    CATEGORY_GRADIENTS,
+    DEFAULT_CATEGORY_COLOR,
+    DEFAULT_COVER_GRADIENT,
+    FEATURED_CATEGORY_DEFINITIONS,
+    REMOTE_BLOG_CATEGORIES,
+    SUPPORTED_BLOG_CATEGORIES,
+    getBookmarkOnlyCategories,
+    getCategoryColor,
+    getRemoteBlogCategories,
+    getSupportedBlogCategories,
+    gradientForCategory,
+  } = sharedContent;
 
-  /**
-   * Validates a CSS color value against a strict whitelist of safe formats.
-   * Prevents style attribute escaping that could lead to HTML injection.
-   */
-  function sanitizeCssColorValue(value, fallback) {
-    if (typeof value !== "string") return fallback;
-    const trimmed = value.trim();
-    if (/^#[0-9a-fA-F]{3,8}$/.test(trimmed)) return trimmed;
-    if (/^(rgba?|hsla?)\([0-9,.\s%]+\)$/i.test(trimmed)) return trimmed;
-    return fallback;
-  }
+  const {
+    DEFAULT_NOTION_CONTENT_PROPERTY_CANDIDATES,
+    buildPostSearchText,
+    escapeHtml,
+    getBaseOrigin,
+    getPageProperty,
+    normalizeName,
+    normalizePostTags,
+    normalizeSearchText,
+    resolveNotionContentSchema,
+    sanitizeCssColorValue,
+  } = sharedUtils;
+  const {
+    IMAGE_PROXY_PATH,
+    SAFE_IMAGE_PROTOCOLS,
+    SAFE_LINK_PROTOCOLS,
+    getUrlHostname,
+    isLikelyEphemeralAssetUrl,
+    resolveDisplayImageUrl,
+    resolveEmbeddableUrl,
+    resolveProxiedDisplayImageUrl,
+    resolveShareImageUrl,
+    sanitizeCspResourceUrl,
+    sanitizeUrl,
+    shouldOpenLinkInNewTab,
+  } = contentUrl;
+  const { createPostArticleRenderer } = articleRenderer;
 
-  function getBaseOrigin(baseOrigin) {
-    if (typeof baseOrigin === "string" && baseOrigin.trim()) {
-      return baseOrigin.trim().replace(/\/+$/, "");
-    }
-
-    if (typeof window !== "undefined" && window.location?.origin) {
-      return window.location.origin;
-    }
-
-    return "http://localhost";
-  }
-
-  function escapeHtml(value) {
-    if (!value) return "";
-    return String(value)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
+  if (
+    !ALL_CATEGORY ||
+    !BOOKMARK_CATEGORY ||
+    !BOOKMARK_ONLY_CATEGORIES ||
+    !CATEGORY_COLORS ||
+    !CATEGORY_GRADIENTS ||
+    !DEFAULT_CATEGORY_COLOR ||
+    !DEFAULT_COVER_GRADIENT ||
+    !FEATURED_CATEGORY_DEFINITIONS ||
+    !REMOTE_BLOG_CATEGORIES ||
+    !SUPPORTED_BLOG_CATEGORIES ||
+    typeof getBookmarkOnlyCategories !== "function" ||
+    typeof getCategoryColor !== "function" ||
+    typeof getRemoteBlogCategories !== "function" ||
+    typeof getSupportedBlogCategories !== "function" ||
+    typeof gradientForCategory !== "function" ||
+    !DEFAULT_NOTION_CONTENT_PROPERTY_CANDIDATES ||
+    typeof buildPostSearchText !== "function" ||
+    typeof escapeHtml !== "function" ||
+    typeof getBaseOrigin !== "function" ||
+    typeof getPageProperty !== "function" ||
+    typeof normalizeName !== "function" ||
+    typeof normalizePostTags !== "function" ||
+    typeof normalizeSearchText !== "function" ||
+    typeof resolveNotionContentSchema !== "function" ||
+    typeof sanitizeCssColorValue !== "function" ||
+    !IMAGE_PROXY_PATH ||
+    !SAFE_IMAGE_PROTOCOLS ||
+    !SAFE_LINK_PROTOCOLS ||
+    typeof getUrlHostname !== "function" ||
+    typeof isLikelyEphemeralAssetUrl !== "function" ||
+    typeof resolveDisplayImageUrl !== "function" ||
+    typeof resolveEmbeddableUrl !== "function" ||
+    typeof resolveProxiedDisplayImageUrl !== "function" ||
+    typeof resolveShareImageUrl !== "function" ||
+    typeof sanitizeCspResourceUrl !== "function" ||
+    typeof sanitizeUrl !== "function" ||
+    typeof shouldOpenLinkInNewTab !== "function" ||
+    typeof createPostArticleRenderer !== "function"
+  ) {
+    throw new Error("notion-content-shared.js, notion-content-utils.js, notion-content-url.js, and notion-article-renderer.js must load before notion-content.js");
   }
 
   const LATEX_SYMBOLS = Object.freeze({
@@ -638,164 +611,6 @@
     return `<math class="${className}" xmlns="http://www.w3.org/1998/Math/MathML"${displayAttribute} aria-label="${label}"><semantics>${bodyHtml}<annotation encoding="application/x-tex">${label}</annotation></semantics></math>`;
   }
 
-  function normalizeName(value) {
-    return typeof value === "string" ? value.trim().toLowerCase() : "";
-  }
-
-  function normalizeSearchText(value) {
-    return String(value ?? "")
-      .toLowerCase()
-      .trim()
-      .replace(/\s+/g, " ");
-  }
-
-  function normalizePostTags(tags) {
-    if (!Array.isArray(tags)) return [];
-
-    return tags
-      .map((tag) => String(tag ?? "").trim())
-      .filter(Boolean);
-  }
-
-  function buildPostSearchText(post = {}) {
-    return normalizeSearchText([
-      typeof post?.title === "string" ? post.title : "",
-      typeof post?.excerpt === "string" ? post.excerpt : "",
-      ...normalizePostTags(post?.tags),
-    ].join(" "));
-  }
-
-  function normalizeCandidates(value, fallback = []) {
-    if (Array.isArray(value)) {
-      return value.map((candidate) => String(candidate).trim()).filter(Boolean);
-    }
-
-    return normalizeCandidates(fallback, []);
-  }
-
-  function findPropertyEntry(properties, candidates, allowedTypes) {
-    const entries = Object.values(properties || {});
-    const normalizedCandidates = normalizeCandidates(candidates);
-    const allowedTypeSet = new Set(normalizeCandidates(allowedTypes));
-
-    for (const candidate of normalizedCandidates) {
-      const normalizedCandidate = normalizeName(candidate);
-      const match = entries.find((entry) => {
-        if (allowedTypeSet.size > 0 && !allowedTypeSet.has(normalizeName(entry?.type))) {
-          return false;
-        }
-
-        return normalizedCandidate === normalizeName(entry?.name) || normalizedCandidate === normalizeName(entry?.id);
-      });
-
-      if (match) {
-        return {
-          id: match.id || "",
-          name: match.name || "",
-          type: match.type || "",
-        };
-      }
-    }
-
-    return null;
-  }
-
-  function resolveNotionContentSchema(database, candidateOverrides = {}) {
-    const properties = database?.properties || {};
-    const schema = {};
-
-    Object.entries(DEFAULT_NOTION_CONTENT_PROPERTY_CANDIDATES).forEach(([field, defaults]) => {
-      schema[field] = findPropertyEntry(
-        properties,
-        normalizeCandidates(candidateOverrides[field], defaults),
-        NOTION_CONTENT_PROPERTY_TYPES[field] || [],
-      );
-    });
-
-    return schema;
-  }
-
-  function getPageProperty(page, schemaEntry, fallbackCandidates = []) {
-    const properties = page?.properties || {};
-    if (schemaEntry?.name && properties[schemaEntry.name]) {
-      return properties[schemaEntry.name];
-    }
-
-    if (schemaEntry?.id) {
-      const byId = Object.values(properties).find((entry) => normalizeName(entry?.id) === normalizeName(schemaEntry.id));
-      if (byId) {
-        return byId;
-      }
-    }
-
-    const fallbackEntry = findPropertyEntry(properties, fallbackCandidates, []);
-    return fallbackEntry?.name ? properties[fallbackEntry.name] || null : null;
-  }
-
-  function getRemoteBlogCategories() {
-    return REMOTE_BLOG_CATEGORIES.slice();
-  }
-
-  function getBookmarkOnlyCategories() {
-    return BOOKMARK_ONLY_CATEGORIES.slice();
-  }
-
-  function getSupportedBlogCategories() {
-    return SUPPORTED_BLOG_CATEGORIES.slice();
-  }
-
-  function sanitizeUrl(candidate, allowedProtocols, baseOrigin, { allowSameOrigin = false } = {}) {
-    if (!candidate || typeof candidate !== "string") return null;
-
-    try {
-      const resolvedBaseOrigin = getBaseOrigin(baseOrigin);
-      const parsed = new URL(candidate, resolvedBaseOrigin);
-      if (allowSameOrigin && parsed.origin === new URL(resolvedBaseOrigin).origin) {
-        return parsed.href;
-      }
-      return allowedProtocols.has(parsed.protocol) ? parsed.href : null;
-    } catch (error) {
-      return null;
-    }
-  }
-
-  function resolveDisplayImageUrl(candidate, baseOrigin) {
-    return sanitizeCspResourceUrl(candidate, SAFE_IMAGE_PROTOCOLS, baseOrigin);
-  }
-
-  function shouldProxyDisplayImageUrl(candidate, baseOrigin) {
-    if (!candidate || typeof candidate !== "string") return false;
-
-    try {
-      const resolvedBaseOrigin = getBaseOrigin(baseOrigin);
-      const parsed = new URL(candidate, resolvedBaseOrigin);
-      return parsed.protocol === "https:" && parsed.origin !== new URL(resolvedBaseOrigin).origin;
-    } catch (error) {
-      return false;
-    }
-  }
-
-  function buildImageProxyUrl(candidate, baseOrigin) {
-    const safeImageUrl = resolveDisplayImageUrl(candidate, baseOrigin);
-    if (!safeImageUrl) return null;
-    if (!shouldProxyDisplayImageUrl(safeImageUrl, baseOrigin)) return safeImageUrl;
-
-    const resolvedBaseOrigin = getBaseOrigin(baseOrigin);
-    const proxyUrl = new URL(IMAGE_PROXY_PATH, resolvedBaseOrigin);
-    proxyUrl.searchParams.set("src", safeImageUrl);
-    return proxyUrl.href;
-  }
-
-  function resolveProxiedDisplayImageUrl(candidate, baseOrigin) {
-    return buildImageProxyUrl(candidate, baseOrigin);
-  }
-
-  function sanitizeCspResourceUrl(candidate, allowedProtocols, baseOrigin) {
-    return sanitizeUrl(candidate, allowedProtocols, baseOrigin, {
-      allowSameOrigin: true,
-    });
-  }
-
   function getBlockResourceUrl(blockData) {
     return blockData?.external?.url || blockData?.file?.url || blockData?.url || "";
   }
@@ -869,17 +684,6 @@
     return (richText || []).map((item) => item.plain_text).join("");
   }
 
-  function shouldOpenLinkInNewTab(href, baseOrigin) {
-    try {
-      const siteOrigin = new URL(getBaseOrigin(baseOrigin)).origin;
-      const targetUrl = new URL(href, siteOrigin);
-      if (targetUrl.protocol === "mailto:") return true;
-      return targetUrl.origin !== siteOrigin;
-    } catch {
-      return true;
-    }
-  }
-
   function richTextToHtml(richText, { baseOrigin } = {}) {
     if (!richText?.length) return "";
 
@@ -913,10 +717,6 @@
 
       return text;
     }).join("");
-  }
-
-  function gradientForCategory(category) {
-    return CATEGORY_GRADIENTS[category] || DEFAULT_COVER_GRADIENT;
   }
 
   function mapNotionPage(page, { includeSearchText = false, schema = null } = {}) {
@@ -1087,91 +887,6 @@
     };
 
     return labels[resourceType] || formatBlockTypeLabel(resourceType);
-  }
-
-  function getUrlHostname(candidate, baseOrigin) {
-    if (!candidate || typeof candidate !== "string") return "";
-
-    try {
-      return new URL(candidate, getBaseOrigin(baseOrigin)).hostname.replace(/^www\./i, "");
-    } catch (error) {
-      return "";
-    }
-  }
-
-  function resolveEmbeddableUrl(candidate, baseOrigin) {
-    const safeUrl = sanitizeCspResourceUrl(candidate, SAFE_IMAGE_PROTOCOLS, baseOrigin);
-    if (!safeUrl) {
-      return null;
-    }
-
-    try {
-      const parsed = new URL(safeUrl, getBaseOrigin(baseOrigin));
-      const hostname = parsed.hostname.replace(/^www\./i, "").toLowerCase();
-      const pathname = parsed.pathname || "/";
-
-      if (hostname === "youtu.be") {
-        const videoId = pathname.split("/").filter(Boolean)[0];
-        return videoId ? `https://www.youtube.com/embed/${encodeURIComponent(videoId)}` : safeUrl;
-      }
-
-      if (hostname === "youtube.com") {
-        if (pathname === "/watch") {
-          const videoId = parsed.searchParams.get("v");
-          return videoId ? `https://www.youtube.com/embed/${encodeURIComponent(videoId)}` : safeUrl;
-        }
-
-        const shortMatch = pathname.match(/^\/(?:shorts|embed)\/([^/?#]+)/);
-        if (shortMatch?.[1]) {
-          return `https://www.youtube.com/embed/${encodeURIComponent(shortMatch[1])}`;
-        }
-      }
-
-      if (hostname === "player.bilibili.com" && pathname.startsWith("/player.html")) {
-        return parsed.href;
-      }
-
-      if (hostname === "bilibili.com") {
-        const bilibiliMatch = pathname.match(/^\/video\/((?:BV[0-9A-Za-z]+)|(?:av\d+))/i);
-        if (bilibiliMatch?.[1]) {
-          const page = parsed.searchParams.get("p") || "1";
-          const videoId = bilibiliMatch[1];
-          const query = videoId.toLowerCase().startsWith("av")
-            ? `aid=${encodeURIComponent(videoId.slice(2))}&page=${encodeURIComponent(page)}`
-            : `bvid=${encodeURIComponent(videoId)}&page=${encodeURIComponent(page)}`;
-          return `https://player.bilibili.com/player.html?${query}`;
-        }
-      }
-
-      if (hostname === "vimeo.com") {
-        const vimeoMatch = pathname.match(/^\/(\d+)(?:\/|$)/);
-        if (vimeoMatch?.[1]) {
-          return `https://player.vimeo.com/video/${encodeURIComponent(vimeoMatch[1])}`;
-        }
-      }
-
-      if (hostname === "loom.com") {
-        const loomMatch = pathname.match(/^\/(?:share|embed)\/([^/?#]+)/);
-        if (loomMatch?.[1]) {
-          return `https://www.loom.com/embed/${encodeURIComponent(loomMatch[1])}`;
-        }
-      }
-
-      if (hostname === "codepen.io") {
-        const codepenMatch = pathname.match(/^\/([^/]+)\/pen\/([^/?#]+)/);
-        if (codepenMatch?.[1] && codepenMatch?.[2]) {
-          return `https://codepen.io/${encodeURIComponent(codepenMatch[1])}/embed/${encodeURIComponent(codepenMatch[2])}?default-tab=result`;
-        }
-      }
-
-      if (hostname === "figma.com") {
-        return `https://www.figma.com/embed?embed_host=share&url=${encodeURIComponent(parsed.href)}`;
-      }
-
-      return null;
-    } catch (error) {
-      return null;
-    }
   }
 
   function renderFigureCaption(captionHtml, fallbackText, className) {
@@ -1394,113 +1109,13 @@
       : childrenHtml;
   }
 
-  function renderPostTags(tags) {
-    if (!Array.isArray(tags) || tags.length === 0) {
-      return "";
-    }
-
-    const tagItems = tags
-      .map((tag) => `<span class="post-tag">#${escapeHtml(tag)}</span>`)
-      .join(" ");
-
-    return `<span class="post-tags" aria-label="标签">${tagItems}</span>`;
-  }
-
-  function renderPostArticle(post, { baseOrigin, renderedContent } = {}) {
-    const category = post?.category || "";
-    const date = post?.date || "";
-    const readTime = post?.readTime || "";
-    const categoryColor = getCategoryColor(category);
-    const metaItems = [];
-    const articleContent = typeof renderedContent === "string"
-      ? renderedContent
-      : renderBlocks(Array.isArray(post?.content) ? post.content : [], { baseOrigin });
-
-    if (date) {
-      metaItems.push(`
-              <span>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                  <line x1="16" y1="2" x2="16" y2="6"></line>
-                  <line x1="8" y1="2" x2="8" y2="6"></line>
-                  <line x1="3" y1="10" x2="21" y2="10"></line>
-                </svg>
-                ${escapeHtml(date)}
-              </span>
-      `);
-    }
-
-    if (readTime) {
-      metaItems.push(`
-              <span>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <polyline points="12 6 12 12 16 14"></polyline>
-                </svg>
-                ${escapeHtml(readTime)}
-              </span>
-      `);
-    }
-
-    const tagHtml = renderPostTags(post?.tags);
-    if (tagHtml) {
-      metaItems.push(tagHtml);
-    }
-
-    const categoryHtml = category
-      ? `
-            <div class="post-category" style="background: ${sanitizeCssColorValue(categoryColor.bg, DEFAULT_CATEGORY_COLOR.bg)}; color: ${sanitizeCssColorValue(categoryColor.color, DEFAULT_CATEGORY_COLOR.color)}; border: 1px solid ${sanitizeCssColorValue(categoryColor.border, DEFAULT_CATEGORY_COLOR.border)};">
-              ${escapeHtml(category)}
-            </div>
-      `
-      : "";
-    const metaHtml = metaItems.length > 0
-      ? `
-            <div class="post-meta">
-              ${metaItems.join("")}
-            </div>
-      `
-      : "";
-
-    return `
-          <div class="post-header">
-            ${categoryHtml}
-            <h1 class="post-title" data-page-focus>${escapeHtml(post?.title || "")}</h1>
-            ${metaHtml}
-          </div>
-          <div class="post-content">
-            ${articleContent}
-          </div>
-  `;
-  }
-
-  function isLikelyEphemeralAssetUrl(candidate, baseOrigin) {
-    if (!candidate || typeof candidate !== "string") return false;
-
-    try {
-      const parsed = new URL(candidate, getBaseOrigin(baseOrigin));
-      return [
-        "X-Amz-Algorithm",
-        "X-Amz-Credential",
-        "X-Amz-Date",
-        "X-Amz-Expires",
-        "X-Amz-Signature",
-        "Expires",
-        "Signature",
-      ].some((key) => parsed.searchParams.has(key));
-    } catch (error) {
-      return false;
-    }
-  }
-
-  function resolveShareImageUrl(candidate, fallback, baseOrigin) {
-    const safeImageUrl = resolveDisplayImageUrl(candidate, baseOrigin);
-    if (!safeImageUrl || isLikelyEphemeralAssetUrl(safeImageUrl, baseOrigin)) {
-      return fallback;
-    }
-
-    return safeImageUrl;
-  }
+  const { renderPostArticle, renderPostTags } = createPostArticleRenderer({
+    DEFAULT_CATEGORY_COLOR,
+    escapeHtml,
+    getCategoryColor,
+    renderBlocks,
+    sanitizeCssColorValue,
+  });
 
   function buildArticleStructuredData(post, {
     canonicalUrl,
@@ -1536,7 +1151,7 @@
       "@type": "Article",
       headline: post?.title || siteName,
       description: post?.excerpt || post?.title || siteName,
-      articleSection: post?.category || undefined,
+      articleSection: post?.categoryLabel || post?.category || undefined,
       keywords: normalizedTags.length > 0 ? normalizedTags.join(", ") : undefined,
       datePublished: post?.date || undefined,
       dateModified: post?.date || undefined,
@@ -1556,10 +1171,6 @@
         },
       },
     };
-  }
-
-  function getCategoryColor(category) {
-    return CATEGORY_COLORS[category] || DEFAULT_CATEGORY_COLOR;
   }
 
   return Object.freeze({

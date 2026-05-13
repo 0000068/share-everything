@@ -180,7 +180,8 @@
     let didNormalizeRoute = false;
     let hashChangeHandler = null;
     const preloadedCoverImages = new Set();
-    const supportedCategories = new Set(DEFAULT_SUPPORTED_CATEGORIES);
+    let categories = hasRemoteSource ? notionApi.getCategories() : BOOKMARK_ONLY_CATEGORIES;
+    let validCategories = new Set([...categories.map((cat) => cat.name), BOOKMARK_CATEGORY]);
 
     const params = new URLSearchParams(window.location.search);
     const rawCategory = params.get("category");
@@ -221,7 +222,7 @@
     } else if (currentCategory === BOOKMARK_CATEGORY) {
       didNormalizeRoute = true;
     }
-    if (!supportedCategories.has(currentCategory)) {
+    if (!hasRemoteSource && !validCategories.has(currentCategory)) {
       currentCategory = defaultCategory;
       didNormalizeRoute = true;
     }
@@ -249,10 +250,8 @@
       return null;
     }
 
-    const categories = hasRemoteSource ? notionApi.getCategories() : BOOKMARK_ONLY_CATEGORIES;
     const pageSize = notionApi?.getPageSize?.() || DEFAULT_PAGE_SIZE;
-    const validCategories = new Set([...categories.map((cat) => cat.name), BOOKMARK_CATEGORY]);
-    if (!validCategories.has(currentCategory)) {
+    if (!hasRemoteSource && !validCategories.has(currentCategory)) {
       currentCategory = defaultCategory;
       didNormalizeRoute = true;
     }
@@ -386,7 +385,8 @@
     }
 
     function applyListingState({ category, search = "", page = 1 } = {}, historyMode = HISTORY_MODE_PUSH) {
-      const nextCategory = validCategories.has(category) ? category : defaultCategory;
+      const rawCategory = typeof category === "string" && category.trim() ? category.trim() : defaultCategory;
+      const nextCategory = hasRemoteSource || validCategories.has(rawCategory) ? rawCategory : defaultCategory;
       const nextSearch = typeof search === "string" ? search.trim() : "";
       const nextPage = normalizeListingPage(page, 1);
       const didChange =
@@ -576,6 +576,57 @@
       });
     }
 
+    function normalizeCategoryNavItem(category) {
+      if (!category || typeof category !== "object") return null;
+      const name = typeof category.name === "string" ? category.name.trim() : "";
+      if (!name) return null;
+      return {
+        ...category,
+        name,
+        label: typeof category.label === "string" && category.label.trim() ? category.label.trim() : name,
+        emoji: typeof category.emoji === "string" && category.emoji.trim() ? category.emoji.trim() : "",
+      };
+    }
+
+    function updateRemoteCategories(nextCategories) {
+      if (!hasRemoteSource || !Array.isArray(nextCategories) || nextCategories.length === 0) {
+        return false;
+      }
+
+      const seen = new Set();
+      const normalizedCategories = nextCategories
+        .map(normalizeCategoryNavItem)
+        .filter((category) => {
+          if (!category) return false;
+          const key = category.name.toLowerCase();
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+
+      if (normalizedCategories.length === 0) {
+        return false;
+      }
+
+      const previousSignature = JSON.stringify(categories.map((category) => [
+        category.name,
+        category.label,
+        category.emoji,
+      ]));
+      const nextSignature = JSON.stringify(normalizedCategories.map((category) => [
+        category.name,
+        category.label,
+        category.emoji,
+      ]));
+      if (previousSignature === nextSignature) {
+        return false;
+      }
+
+      categories = normalizedCategories;
+      validCategories = new Set([...categories.map((cat) => cat.name), BOOKMARK_CATEGORY]);
+      return true;
+    }
+
     function renderFilters() {
       filtersEl.replaceChildren();
 
@@ -584,7 +635,7 @@
         button.type = "button";
         button.className = `filter-btn${category.name === currentCategory ? " active" : ""}`;
         button.dataset.category = category.name;
-        button.textContent = `${category.emoji} ${category.name}`;
+        button.textContent = `${category.emoji ? `${category.emoji} ` : ""}${category.label || category.name}`;
         filtersEl.appendChild(button);
       });
     }
@@ -629,14 +680,13 @@
 
     function renderCard(post, index = 0) {
       const esc = escapeText;
-      // Defense-in-depth: catColor values originate from a hardcoded map but are
-      // sanitized for consistency with the shared renderPostArticle pipeline.
-      const catColor = getCategoryColor(post.category);
+      // Defense-in-depth: category colors may come from site config via the API.
+      const catColor = post.categoryColor || getCategoryColor(post.category);
       const bookmarked = bookmarkManager.isBookmarked(post.id);
 
       const safeTitle = esc(post.title);
       const safeExcerpt = esc(post.excerpt);
-      const safeCategory = esc(post.category);
+      const safeCategory = esc(post.categoryLabel || post.category);
       const safeCoverEmoji = esc(post.coverEmoji || "📝");
       const safeCoverGradient =
         typeof siteUtils.sanitizeCoverBackground === "function"
@@ -770,6 +820,9 @@
         const data = await loadCurrentPageData();
 
         if (currentToken !== renderToken) return;
+        if (updateRemoteCategories(data.categories)) {
+          renderFilters();
+        }
         if (currentPage !== data.currentPage) {
           currentPage = data.currentPage;
           syncListingUrl();

@@ -1,10 +1,13 @@
 import { notionBlockFixtures } from "./fixtures/notion-block-fixtures.mjs";
+import { runApiContractChecks } from "./smoke-check/api-contracts.mjs";
 import { runBlogPageChecks } from "./smoke-check/blog-page.mjs";
 import { runImageProxyChecks } from "./smoke-check/image-proxy.mjs";
 import { runMobileLayoutChecks } from "./smoke-check/mobile-layout.mjs";
+import { runContentModuleChecks } from "./smoke-check/content-modules.mjs";
 import { runNotionApiClientChecks } from "./smoke-check/notion-api-client.mjs";
 import { runPublicContentAndNotionChecks } from "./smoke-check/public-content-notion.mjs";
 import { runRoutingAndVercelChecks } from "./smoke-check/routing-vercel.mjs";
+import { runServerModuleChecks } from "./smoke-check/server-modules.mjs";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import {
@@ -39,6 +42,10 @@ import {
   "js/bookmark.js",
   "js/font-loader.js",
   "js/index-page.js",
+  "js/notion-content-shared.js",
+  "js/notion-content-utils.js",
+  "js/notion-content-url.js",
+  "js/notion-article-renderer.js",
   "js/notion-content.js",
   "js/notion-api.js",
   "js/post-page.js",
@@ -56,6 +63,8 @@ import {
   "api/sitemap.js",
   "server/public-content.js",
   "server/security-policy.js",
+  "server/notion-config.js",
+  "server/category-navigation.js",
   "server/notion-server.js",
 ].forEach(checkSyntax);
 const indexHtml = read("index.html");
@@ -84,19 +93,26 @@ const runtimeCoreJs = read("js/runtime-core.js");
 const spaRouterJs = read("js/spa-router.js");
 const bookmarkJs = read("js/bookmark.js");
 const indexPageJs = read("js/index-page.js");
+const notionContentSharedJs = read("js/notion-content-shared.js");
+const notionContentUtilsJs = read("js/notion-content-utils.js");
+const notionContentUrlJs = read("js/notion-content-url.js");
+const notionArticleRendererJs = read("js/notion-article-renderer.js");
 const notionContentJs = read("js/notion-content.js");
 const notionApiJs = read("js/notion-api.js");
 const postPageJs = read("js/post-page.js");
 const siteUtilsJs = read("js/site-utils.js");
 const smokeCheckSource = read("scripts/smoke-check.mjs");
 const smokeCheckModuleSources = [
+  read("scripts/smoke-check/api-contracts.mjs"),
   read("scripts/smoke-check/blog-page.mjs"),
+  read("scripts/smoke-check/content-modules.mjs"),
   read("scripts/smoke-check/harness.mjs"),
   read("scripts/smoke-check/image-proxy.mjs"),
   read("scripts/smoke-check/mobile-layout.mjs"),
   read("scripts/smoke-check/notion-api-client.mjs"),
   read("scripts/smoke-check/public-content-notion.mjs"),
   read("scripts/smoke-check/routing-vercel.mjs"),
+  read("scripts/smoke-check/server-modules.mjs"),
 ];
 const visualRegressionJs = read("scripts/visual-regression.mjs");
 const apiNotionJs = read("api/notion.js");
@@ -107,8 +123,16 @@ const apiPostJs = read("api/post.js");
 const apiRobotsJs = read("api/robots.js");
 const apiSitemapJs = read("api/sitemap.js");
 const publicContentJs = read("server/public-content.js");
+const serverNotionConfigJs = read("server/notion-config.js");
+const serverCategoryNavigationJs = read("server/category-navigation.js");
 const serverNotionJs = read("server/notion-server.js");
+const notionContentSharedHelpers = loadCommonJsModule("js/notion-content-shared.js");
+const notionContentUtilsHelpers = loadCommonJsModule("js/notion-content-utils.js");
+const notionContentUrlHelpers = loadCommonJsModule("js/notion-content-url.js");
+const notionArticleRendererHelpers = loadCommonJsModule("js/notion-article-renderer.js");
 const notionContentHelpers = loadCommonJsModule("js/notion-content.js");
+const serverNotionConfigHelpers = loadCommonJsModule("server/notion-config.js");
+const serverCategoryNavigationHelpers = loadCommonJsModule("server/category-navigation.js");
 const publicContentHelpers = loadCommonJsModule("server/public-content.js");
 const securityPolicyHelpers = loadCommonJsModule("server/security-policy.js");
 const apiNotionHandler = loadCommonJsModule("api/notion.js");
@@ -140,16 +164,19 @@ const {
 } = loadCommonJsModule("server/notion-server.js", [
   "buildPostPayload",
   "buildArticleStructuredData",
+  "buildPublicCategories",
   "buildContentSchema",
   "buildCategoryFilter",
+  "buildCategoryPresentation",
   "buildDatabaseSorts",
   "buildPublicAccessPolicyFromDatabase",
+  "decoratePostSummary",
   "filterPostsBySearch",
   "normalizePostQueryFilters",
   "renderPostContent",
 ]);
 
-const assetVersionValue = "20260513-mobile-pc-hero";
+const assetVersionValue = "20260513-content-modules";
 const assetVersion = `v=${assetVersionValue}`;
 const productionDomainPattern = /0000068\.xyz/;
 const allowedProductionDomainFiles = new Set([
@@ -213,8 +240,19 @@ assert.deepEqual(
 );
 assert.ok(!existsSync("robots.txt"), "robots.txt should be served dynamically through /api/robots");
 assert.equal(siteConfig.siteUrl, configuredSiteOrigin, "site.config.json siteUrl should be a normalized origin without a trailing slash");
-expectIncludes(serverNotionJs, "readConfiguredSiteOrigin()", "server site origin fallback should read site.config.json");
+expectIncludes(serverNotionJs, "readConfiguredSiteOrigin(SITE_CONFIG)", "server site origin fallback should read site.config.json");
 expectNotIncludes(serverNotionJs, "0000068.xyz", "server site origin fallback should not duplicate the production domain literal");
+runServerModuleChecks({
+  assert,
+  expectIncludes,
+  expectNotIncludes,
+  serverCategoryNavigationHelpers,
+  serverCategoryNavigationJs,
+  serverNotionConfigHelpers,
+  serverNotionConfigJs,
+  serverNotionJs,
+  siteArchitectureMd,
+});
 [
   ["index.html", indexHtml, "/"],
   ["blog.html", blogHtml, "/blog.html"],
@@ -286,6 +324,10 @@ assert.equal(
 );
 const sharedRuntimeScriptSources = [
   `/js/font-loader.js?${assetVersion}`,
+  `/js/notion-content-shared.js?${assetVersion}`,
+  `/js/notion-content-utils.js?${assetVersion}`,
+  `/js/notion-content-url.js?${assetVersion}`,
+  `/js/notion-article-renderer.js?${assetVersion}`,
   `/js/notion-content.js?${assetVersion}`,
   `/js/runtime-core.js?${assetVersion}`,
   `/js/site-utils.js?${assetVersion}`,
@@ -309,6 +351,17 @@ pageHtmlByLabel.forEach(([label, htmlSource]) => {
       `${label} should mark ${src} as a shared SPA runtime script`,
     );
   });
+  [
+    `/js/notion-content-shared.js?${assetVersion}`,
+    `/js/notion-content-utils.js?${assetVersion}`,
+    `/js/notion-content-url.js?${assetVersion}`,
+    `/js/notion-article-renderer.js?${assetVersion}`,
+    `/js/notion-content.js?${assetVersion}`,
+  ].reduce((previousIndex, src) => {
+    const nextIndex = htmlSource.indexOf(src);
+    assert.ok(nextIndex > previousIndex, `${label} should load ${src} in content dependency order`);
+    return nextIndex;
+  }, -1);
 });
 expectNoMalformedClosingTags(indexHtml, "index.html should not contain malformed closing tags");
 expectNoMalformedClosingTags(blogHtml, "blog.html should not contain malformed closing tags");
@@ -404,9 +457,10 @@ expectIncludes(apiImageJs, 'readPositiveEnvNumber("IMAGE_PROXY_TIMEOUT_MS", 10_0
 expectIncludes(apiImageJs, 'readPositiveEnvNumber("IMAGE_PROXY_MAX_BYTES", 8 * 1024 * 1024)', "image proxy size limit should be configurable while keeping its default");
 expectIncludes(apiImageJs, 'readNonNegativeEnvInteger("IMAGE_PROXY_MAX_REDIRECTS", 4)', "image proxy redirect limit should be configurable while keeping its default");
 expectIncludes(packageJson, '"dev": "node scripts/local-server.mjs"', "package scripts should expose the local API-aware dev server");
+expectIncludes(packageJson, '"notion:live-check": "node scripts/notion-live-check.mjs"', "package scripts should expose the optional live Notion integration check");
 expectIncludes(packageJson, '"visual:check": "node scripts/visual-regression.mjs"', "package scripts should expose the browser visual regression check");
 expectIncludes(packageJson, '"license": "MIT"', "package metadata should match the published README license");
-expectIncludes(packageJson, '"version": "4.0.0"', "package version should match the next release commit");
+expectIncludes(packageJson, '"version": "4.2.0"', "package version should match the next release commit");
 expectIncludes(localServerJs, '["/api/robots", require("../api/robots.js")]', "local server should expose the dynamic robots handler");
 expectIncludes(localServerJs, 'url.pathname === "/robots.txt"', "local server should map robots.txt to the dynamic handler");
 expectIncludes(localServerJs, "VISUAL_REGRESSION_STATIC_TEMPLATES", "local server should expose static templates only for visual regression");
@@ -417,11 +471,11 @@ expectIncludes(visualRegressionJs, "desktop particles should remain animated", "
 expectIncludes(visualRegressionJs, "mobile home particles should be disabled", "visual regression should guard mobile home particle removal");
 expectIncludes(visualRegressionJs, "mobile blog bookmark button should compute to 26px width", "visual regression should guard mobile card bookmark sizing");
 expectIncludes(visualRegressionJs, "mobile post top dock should stay hidden", "visual regression should guard mobile article dock visibility");
-expectIncludes(readmeMd, "badge/version-4.0.0", "README badge should match package version");
+expectIncludes(readmeMd, "badge/version-4.2.0", "README badge should match package version");
 expectIncludes(readmeMd, "npm.cmd run visual:check", "README should document the browser visual regression check");
 expectIncludes(readmeMd, "VISUAL_STRICT=1", "README should document strict visual regression mode");
-expectIncludes(siteArchitectureMd, "> Version: v4.0", "architecture docs should match the next release commit");
-expectIncludes(siteArchitectureMd, "Version v4.0 Highlights", "architecture docs should describe the current release");
+expectIncludes(siteArchitectureMd, "> Version: v4.2", "architecture docs should match the next release commit");
+expectIncludes(siteArchitectureMd, "Version v4.2 Highlights", "architecture docs should describe the current release");
 expectIncludes(readmeMd, "SITE_URL=https://your-domain.example", "README should use the same SITE_URL placeholder as .env.example");
 expectIncludes(readmeMd, "IMAGE_PROXY_TIMEOUT_MS=10000", "README should document image proxy timeout tuning");
 expectIncludes(readmeMd, "IMAGE_PROXY_MAX_BYTES=8388608", "README should document image proxy size tuning");
@@ -438,7 +492,6 @@ expectIncludes(siteArchitectureMd, ".kiro/steering/git-rules.md", "architecture 
 expectIncludes(siteArchitectureMd, "Do not add a catch-all `/api/*` `Cache-Control` header", "architecture docs should warn against API-wide cache headers");
 expectIncludes(siteArchitectureMd, "up to 200 post summaries in memory", "architecture docs should describe the bounded summary memory cache");
 expectIncludes(siteArchitectureMd, "`blog-page.js` owns the `hashchange` flow for `/blog.html#bookmarks`", "architecture docs should document hash-only bookmark routing ownership");
-expectIncludes(siteArchitectureMd, "`notion-content.js` renders Notion blocks through a `block.type` -> renderer registry", "architecture docs should describe the block renderer registry");
 expectIncludes(siteArchitectureMd, "`scripts/smoke-check.mjs` is the single `npm.cmd run check` entrypoint", "architecture docs should describe the smoke-check entrypoint");
 expectIncludes(siteArchitectureMd, "`image-proxy.mjs` for `/api/image`", "architecture docs should list focused smoke-check modules");
 expectIncludes(siteArchitectureMd, "`visual-regression.mjs` for real-browser screenshot checks", "architecture docs should describe the visual regression script");
@@ -736,47 +789,23 @@ expectIncludes(bookmarkJs, "return false;", "bookmark save should fail explicitl
 expectIncludes(bookmarkJs, "if (!save(bookmarks)) return null;", "bookmark toggles should abort when persistence fails");
 expectIncludes(bookmarkJs, "if (!save(nextBookmarks))", "bookmark hydration should fail cleanly when persistence is unavailable");
 expectIncludes(bookmarkJs, "return null;", "bookmark toggleById should signal persistence failures");
-expectIncludes(notionContentJs, "root.NotionContent", "shared notion content module should publish a browser global");
-expectIncludes(notionContentJs, "module.exports = exported;", "shared notion content module should support CommonJS consumers");
-expectIncludes(notionContentJs, "function mapNotionPage", "shared notion content module should own notion page mapping");
-expectIncludes(notionContentJs, "function renderBlocks", "shared notion content module should own block rendering");
-expectIncludes(notionContentJs, "function createBlockRenderers", "shared notion content module should register block renderers by type");
-expectIncludes(notionContentJs, "const blockRenderers = createBlockRenderers()", "shared notion content module should keep renderer dispatch in a registry");
-expectNotIncludes(notionContentJs, "switch (block.type)", "shared notion content renderer should avoid a central block-type switch");
-expectIncludes(notionContentJs, "function renderPostArticle", "shared notion content module should own article-shell rendering for both SSR and CSR");
-expectIncludes(notionContentJs, "function renderMathExpression", "shared notion content module should render Notion equations without exposing LaTeX as code");
-expectIncludes(notionContentJs, "application/x-tex", "shared notion content module should keep the original TeX only as MathML annotation");
-expectIncludes(notionContentJs, "resolveDisplayImageUrl", "shared notion content module should expose a display-safe image resolver");
-expectIncludes(notionContentJs, 'const SAFE_IMAGE_PROTOCOLS = new Set(["https:"])', "shared notion content module should align external image URL policy with production CSP");
-expectIncludes(notionContentJs, "resolveNotionContentSchema", "shared notion content module should resolve Notion schemas for renamed database properties");
-expectIncludes(notionContentJs, "REMOTE_BLOG_CATEGORIES", "shared notion content module should centralize remote blog category definitions");
-expectIncludes(notionContentJs, "BOOKMARK_ONLY_CATEGORIES", "shared notion content module should centralize bookmark-only category definitions");
-expectIncludes(notionContentJs, "table: () => ({", "shared notion content module should preserve Notion table blocks");
-expectIncludes(notionContentJs, "buildResourceBlock(", "shared notion content module should preserve file-like Notion blocks");
-expectIncludes(notionContentJs, "buildUnsupportedBlock(", "shared notion content module should surface unsupported blocks instead of dropping them");
-expectIncludes(notionContentJs, "table_of_contents: () => ({ type })", "shared notion content module should preserve table of contents blocks for semantic rendering");
-expectIncludes(notionContentJs, "function renderTableOfContentsBlock", "shared notion content module should build semantic table of contents navigation");
-expectIncludes(notionContentJs, "function renderBookmarkBlock", "shared notion content module should render bookmark blocks as semantic cards");
-expectIncludes(notionContentJs, "function renderEmbedBlock", "shared notion content module should render embed resources through a dedicated renderer");
-expectIncludes(notionContentJs, "shouldOpenLinkInNewTab", "shared notion content module should distinguish internal rich-text links from external links");
-expectIncludes(postPageCss, ".post-math-display", "post page CSS should style display equations as rendered math instead of code");
-expectNotIncludes(postPageCss, ".post-equation-expression code", "post page CSS should not style equations as visible code blocks");
-assert.equal(
-  notionContentHelpers.ALL_CATEGORY,
-  "全部",
-  "shared notion content module should expose the canonical all-posts category label",
-);
-assert.equal(
-  notionContentHelpers.BOOKMARK_CATEGORY,
-  "收藏",
-  "shared notion content module should expose the canonical bookmark category label",
-);
-assert.ok(
-  notionContentHelpers.getRemoteBlogCategories().some(
-    (category) => category.name && category.name !== notionContentHelpers.ALL_CATEGORY,
-  ),
-  "shared notion content module should publish the remote category list for client pages",
-);
+runContentModuleChecks({
+  assert,
+  expectIncludes,
+  expectNotIncludes,
+  notionArticleRendererHelpers,
+  notionArticleRendererJs,
+  notionContentHelpers,
+  notionContentJs,
+  notionContentSharedHelpers,
+  notionContentSharedJs,
+  notionContentUrlHelpers,
+  notionContentUrlJs,
+  notionContentUtilsHelpers,
+  notionContentUtilsJs,
+  postPageCss,
+  siteArchitectureMd,
+});
 assert.equal(
   notionContentHelpers.resolveDisplayImageUrl("http://cdn.example.com/cover.png", "https://example.com"),
   null,
@@ -1500,6 +1529,12 @@ assert.equal(postDataMethodNotAllowedRes.getHeader("cache-control"), "no-store",
 const postDataHeadRes = createApiResponseRecorder();
 await apiPostDataHandler({ method: "HEAD", query: { id: "post-1" } }, postDataHeadRes);
 assert.equal(postDataHeadRes.statusCode, 405, "post data endpoint should reject HEAD without loading the post detail tree");
+await runApiContractChecks({
+  assert,
+  createApiResponseRecorder,
+  expectIncludes,
+  loadCommonJsModule,
+});
 await runImageProxyChecks({
   assert,
   Buffer,

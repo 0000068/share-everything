@@ -1,6 +1,6 @@
 {
   "name": "share-everything",
-  "version": "4.0.0",
+  "version": "4.2.0",
   "type": "commonjs",
   "private": true,
   "license": "MIT",
@@ -11,6 +11,8 @@
   "scripts": {
     "check": "node scripts/smoke-check.mjs",
     "dev": "node scripts/local-server.mjs",
-    "visual:check": "node scripts/visual-regression.mjs"
+    "notion:live-check": "node scripts/notion-live-check.mjs",
+    "visual:check": "node scripts/visual-regression.mjs",
+    "verify:release": "node scripts/release-check.mjs"
   }
 }
