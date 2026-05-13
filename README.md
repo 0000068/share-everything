@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-3.8.0-00e5ff?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/version-4.0.0-00e5ff?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/deploy-Vercel-000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel" />
   <img src="https://img.shields.io/badge/CMS-Notion-000?style=flat-square&logo=notion&logoColor=white" alt="Notion" />
@@ -100,6 +100,7 @@ Notion Database
       → /api/post-data      文章 JSON
       → /api/post           SSR 文章 HTML
       → /api/image          安全图片代理
+      → /api/robots         动态 robots.txt
       → /api/sitemap        动态站点地图
         → Browser
           → 静态 HTML 外壳
@@ -110,7 +111,7 @@ Notion Database
 | 层级 | 技术 | 职责 |
 |------|------|------|
 | 内容源 | Notion API | 文章元数据与块内容 |
-| 服务端 | Vercel Serverless | 公开 API、SSR、图片代理、站点地图 |
+| 服务端 | Vercel Serverless | 公开 API、SSR、图片代理、robots、站点地图 |
 | 前端 | 原生 HTML/CSS/JS | 静态页面 + 轻量 SPA |
 | DNS | Cloudflare | 仅 DNS 解析 |
 | 收藏 | localStorage | 纯本地存储 |
@@ -122,11 +123,13 @@ Notion Database
 ├── index.html              首页 / 搜索入口
 ├── blog.html               博客列表 / 书签列表
 ├── post.html               文章模板（SSR 注入）
+├── site.config.json        生产站点 URL fallback
 ├── api/
 │   ├── posts-data.js       列表数据接口
 │   ├── post-data.js        文章数据接口
 │   ├── post.js             SSR 渲染器
 │   ├── image.js            安全图片代理
+│   ├── robots.js           robots.txt 生成
 │   ├── sitemap.js          站点地图生成
 │   └── notion.js           已禁用的旧代理 (410)
 ├── server/
@@ -152,7 +155,8 @@ Notion Database
 │   └── post-page.css       文章页样式
 ├── scripts/
 │   ├── local-server.mjs    本地开发服务器
-│   └── smoke-check.mjs     冒烟测试（3000+ 行测试 / 约 540 个断言）
+│   ├── smoke-check.mjs     冒烟测试（3000+ 行测试 / 约 540 个断言）
+│   └── visual-regression.mjs  真实浏览器截图回归
 └── vercel.json             路由、缓存、安全头
 ```
 
@@ -216,6 +220,14 @@ npm.cmd run dev
 npm.cmd run check
 ```
 
+需要复核移动端/桌面视觉时：
+
+```powershell
+npm.cmd run visual:check
+```
+
+该脚本会启动本地服务，优先使用本机 Chrome 或 Edge 的 headless + CDP 模式截图并执行布局契约断言，覆盖移动首页、移动总览、移动文章空态和桌面首页。如果当前机器无法完成真实浏览器截图，默认会生成 skipped 报告；CI 或严格验收可设置 `VISUAL_STRICT=1`，要求 CDP 契约检查可用且断言失败时直接失败。
+
 ---
 
 ## 部署
@@ -252,7 +264,7 @@ npm.cmd run check
 |--------|------|--------|------|
 | `NOTION_TOKEN` | ✅ | — | Notion Integration Token |
 | `NOTION_DATABASE_ID` | ✅ | — | Notion 数据库 ID |
-| `SITE_URL` | ❌ | `https://www.0000068.xyz` | 站点根 URL |
+| `SITE_URL` | ❌ | `site.config.json` | 站点根 URL；环境变量优先 |
 | `DATABASE_METADATA_TTL_MS` | ❌ | `300000` | 数据库元数据缓存时间 (ms) |
 | `PUBLIC_PAGE_SUMMARY_CACHE_TTL_MS` | ❌ | `120000` | 页面摘要缓存时间 (ms) |
 | `PUBLIC_POST_CACHE_TTL_MS` | ❌ | `60000` | 单篇文章缓存时间 (ms) |
@@ -294,7 +306,7 @@ npm.cmd run check
   </tr>
   <tr>
     <td align="center"><b>测试</b></td>
-    <td>自定义冒烟测试（3000+ 行测试 / 约 540 个断言，零依赖）</td>
+    <td>自定义冒烟测试 + 真实浏览器截图回归（零三方依赖）</td>
   </tr>
 </table>
 

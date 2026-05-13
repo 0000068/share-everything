@@ -1,6 +1,6 @@
 # 移动端重设计与待修复清单
 
-> 更新时间：2026-05-12
+> 更新时间：2026-05-13
 > 目标：PC 视觉和粒子保持现状；移动端重新做成轻量、清爽、稳定的体验。
 
 ## 执行原则
@@ -24,7 +24,7 @@
 
 - [x] 实现移动端粒子策略：首页极轻粒子，博客列表页和文章页禁用粒子。
   - 影响：移动端性能、滚动稳定性、电量消耗。
-  - 2026-05-12 复查：手机首页粒子改为只绘制一帧静态星点；桌面仍保留 350 粒子的动态效果。
+  - 2026-05-13 复查：手机首页改为 PC 同款粒子模型的轻量动态版，移动端使用 120 粒子并限制约 30fps；桌面仍保留 350 粒子的动态效果。
   - 相关文件：`js/common.js`、`css/style.css`
 
 - [x] 修复手机缩放时背景割裂的问题。
@@ -45,7 +45,7 @@
 
 - [x] 修复手机首页 `Share Everything` 标题排版。
   - 影响：移动端首页首屏。
-  - 2026-05-12 复查：标题保持同一行，并按参考图二调成更低、更宽的移动端静态青蓝紫粉渐变；PC 标题动画和桌面粒子不变。
+  - 2026-05-13 复查：标题保持同一行，并在移动端改回 PC 同款 `title-gradient` 渐变动画；仅保留移动端字号和纵向位置控制。
   - 相关文件：`css/style.css`
 
 - [x] 修复 Brave/vivo 继续显示旧 UI 的缓存与移动端 gate 兼容问题。
@@ -114,7 +114,7 @@
 
 - [x] 统一 `SITE_ARCHITECTURE.md`、`README.md`、`package.json` 的版本描述。
   - 影响：读者理解、发布规则一致性。
-  - 当前状态：已按最新发布顺序推进到 `v3.8`；`package.json` 和 README 使用 `3.8.0`，`SITE_ARCHITECTURE.md` 使用 `v3.8`；当前仓库根目录未发现 `git-rules.md`。
+  - 当前状态：已按下一版本意向推进到 `v4.0`；`package.json` 和 README 使用 `4.0.0`，`SITE_ARCHITECTURE.md` 使用 `v4.0`，并由 `scripts/smoke-check.mjs` 校验。
   - 相关文件：`SITE_ARCHITECTURE.md`、`README.md`、`package.json`、`scripts/smoke-check.mjs`
 
 - [x] 让本地 dev server 挂载 `/api/notion` 并返回与生产一致的 `410`。
@@ -132,24 +132,29 @@
   - 2026-05-12 复查：`insertMarkupBefore()` 改为显式 `didMatch`，避免“替换内容刚好等于原 HTML”时误判未命中。
   - 相关文件：`api/post.js`
 
-- [ ] 处理静态 HTML 与 `robots.txt` 中硬编码的 `https://www.0000068.xyz`。
+- [x] 处理静态 HTML 与 `robots.txt` 中硬编码的 `https://www.0000068.xyz`。
   - 影响：换域名部署时 canonical、OG、robots sitemap 正确性。
   - 2026-05-12 复查：`index.html`、`blog.html`、`post.html` 的 fallback OG/canonical 与 `robots.txt` 仍是生产域名；客户端 `seo-meta.js` 会在浏览器运行后按当前 origin 修正页面 meta，但不执行 JS 的爬虫仍会读到静态硬编码。建议后续用构建期替换或动态 robots/sitemap 入口统一处理。
   - 2026-05-12 本轮补充：暂不直接改掉正式 SEO 域名，已在 `scripts/smoke-check.mjs` 增加“受控硬编码”白名单检查，防止 `0000068.xyz` 扩散到未登记文件；真正换域名方案仍保留到下一轮设计。
-  - 相关文件：`index.html`、`blog.html`、`post.html`、`robots.txt`
+  - 2026-05-13 v4.0 处理：新增 `site.config.json` 作为生产域名的受控配置源；`server/notion-server.js` 改为读取该配置作为 `SITE_URL` fallback；`robots.txt` 静态文件已删除，改由 `/api/robots` 动态输出，并在 Vercel 与本地开发服务器中映射；smoke check 会校验静态 HTML fallback canonical/OG 与 `site.config.json` 同步、动态 robots sitemap URL 正确、服务端代码不再重复硬编码生产域名。
+  - 剩余边界：静态 HTML 仍保留 SEO fallback 绝对 URL，但已被 `site.config.json` 和 smoke check 约束；若后续换域名，改配置和 HTML fallback 即可被检查发现是否漏同步。
+  - 相关文件：`index.html`、`blog.html`、`post.html`、`site.config.json`、`api/robots.js`、`server/notion-server.js`、`vercel.json`、`scripts/local-server.mjs`、`scripts/smoke-check.mjs`
 
 - [x] 明确或强化 Notion 整库公开策略的风险提示。
   - 影响：避免草稿误放入公开数据库。
   - 2026-05-12 复查：README 已明确当前默认读取整个 `NOTION_DATABASE_ID` 指向的数据库，并提醒草稿放入单独数据库；架构文档也记录了该公开策略。
   - 相关文件：`server/notion-server.js`、`README.md`、`SITE_ARCHITECTURE.md`
 
-- [ ] 补充真实浏览器/手机视觉回归检查。
+- [x] 补充真实浏览器/手机视觉回归检查。
   - 建议视口：`360x740`、`390x844`、`430x932`、`768x1024`、桌面宽屏。
   - 覆盖：移动首页、移动博客列表双列方卡、移动文章页无 dock、PC 首页粒子不变。
   - 2026-05-12 已做：内置浏览器复核 `390x844` 首页标题单行、博客移动端无粒子且筛选小标签正常、文章移动端无 dock/空态首屏显示、桌面首页粒子正常；仍建议后续补自动截图回归。
   - 2026-05-12 本轮补充：再次用内置浏览器复核 `390x844` 首页、博客页和文章空态，并用 `1280x720` 首页双截图差异确认 PC 粒子仍动态；当前仍缺可重复运行的自动截图脚本。
   - 2026-05-13 继续优化：新增 `scripts/smoke-check/mobile-layout.mjs`，把移动端首页标题渐变、单行标题、博客卡片小标签高度、标题/收藏同排等关键规则纳入 `npm.cmd run check`；这能防止本次 UI 回归再次静默出现，但仍不等同于真实截图 diff。
-  - 相关文件：`scripts/smoke-check.mjs`、`scripts/smoke-check/mobile-layout.mjs` 或新增视觉检查脚本。
+  - 2026-05-13 本轮补充：按最新参考图继续微调移动端首页，标题略收宽并整体下移；博客卡片收藏按钮回到 26px 小尺寸，避免右侧按钮显得过重。
+  - 2026-05-13 目标修正：移动端首页改为 PC 同款标题渐变动画与 PC 同款粒子模型的轻量动态版；博客/文章移动端继续禁用粒子。
+  - 2026-05-13 v4.0 完成：新增 `scripts/visual-regression.mjs` 与 `npm.cmd run visual:check`，脚本会启动本地服务、拉起本机 Chrome/Edge headless、截图移动首页/移动总览/移动文章空态/桌面首页，并断言移动标题渐变和单行、手机首页粒子动态、博客卡片 26px 收藏按钮、文章页移动 dock 隐藏、PC 粒子仍动态。
+  - 相关文件：`scripts/visual-regression.mjs`、`scripts/local-server.mjs`、`scripts/smoke-check.mjs`、`scripts/smoke-check/mobile-layout.mjs`、`package.json`
 
 ## P3 性能、文档与整洁项
 
@@ -233,7 +238,7 @@
   - 影响：后续发布时减少漏改 `?v=...` 的维护风险。
   - 2026-05-12 复查：`index.html`、`blog.html`、`post.html` 与 `scripts/smoke-check.mjs` 都使用同一套静态资源版本指纹；当前可用，但后续换版本需要多处同步。
   - 2026-05-12 本轮完成：`scripts/smoke-check.mjs` 已把当前版本收敛为 `assetVersionValue`，并扫描三个 HTML 的 `/css`、`/js` 资源，要求所有静态资源只使用同一个 `?v=` 值；若出现多套版本或漏同步，检查会失败。后续如需彻底免手改，可再引入构建期替换。
-  - 2026-05-13 本轮补充：移动端 UI 修复后，静态资源版本指纹推进到 `v=20260513-mobile-ui-fix`，确保移动浏览器不会继续复用旧 CSS。
+  - 2026-05-13 本轮补充：移动端 UI 修复后，静态资源版本指纹推进到 `v=20260513-mobile-pc-hero`，确保移动浏览器不会继续复用旧 CSS。
   - 相关文件：`index.html`、`blog.html`、`post.html`、`scripts/smoke-check.mjs`
 
 - [x] 将 `post.html` 中 `#postEmpty` 链接的内联样式迁移到 class。

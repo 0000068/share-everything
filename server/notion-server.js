@@ -1,3 +1,5 @@
+const fs = require("node:fs");
+const path = require("node:path");
 const {
   DEFAULT_NOTION_CONTENT_PROPERTY_CANDIDATES,
   buildArticleStructuredData: buildSharedArticleStructuredData,
@@ -17,8 +19,12 @@ const NOTION_BASE = "https://api.notion.com/v1";
 const NOTION_VERSION = "2022-06-28";
 const MAX_BLOCK_RECURSION_DEPTH = 10;
 const MAX_PAGINATION_ROUNDS = 50;
-const FALLBACK_SITE_ORIGIN = "https://www.0000068.xyz";
-const DEFAULT_SITE_ORIGIN = normalizeSiteOrigin(process.env.SITE_URL, FALLBACK_SITE_ORIGIN);
+const SAFE_FALLBACK_SITE_ORIGIN = "https://example.com";
+const CONFIGURED_SITE_ORIGIN = readConfiguredSiteOrigin();
+const DEFAULT_SITE_ORIGIN = normalizeSiteOrigin(
+  process.env.SITE_URL,
+  CONFIGURED_SITE_ORIGIN || SAFE_FALLBACK_SITE_ORIGIN,
+);
 const DEFAULT_POST_PAGE_SIZE = 9;
 const PUBLIC_CATEGORY_QUERY_MAX_LENGTH = 128;
 const PUBLIC_SEARCH_QUERY_MAX_LENGTH = 256;
@@ -92,7 +98,17 @@ function normalizeNonNegativeNumber(value, fallback) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
-function normalizeSiteOrigin(value, fallback = FALLBACK_SITE_ORIGIN) {
+function readConfiguredSiteOrigin() {
+  try {
+    const configPath = path.resolve(__dirname, "../site.config.json");
+    const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    return typeof config.siteUrl === "string" ? config.siteUrl : "";
+  } catch {
+    return "";
+  }
+}
+
+function normalizeSiteOrigin(value, fallback = SAFE_FALLBACK_SITE_ORIGIN) {
   const candidate = typeof value === "string" && value.trim() ? value.trim() : fallback;
 
   try {

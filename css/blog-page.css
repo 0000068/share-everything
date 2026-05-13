@@ -482,7 +482,7 @@
 
   .blog-card-body {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 34px;
+    grid-template-columns: minmax(0, 1fr) 30px;
     grid-template-rows: auto minmax(0, 1fr);
     column-gap: 8px;
     row-gap: 5px;
@@ -557,9 +557,9 @@
 
   .card-bookmark-btn {
     margin-left: 0;
-    width: 32px;
-    height: 32px;
-    border-radius: 9px;
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
     background: rgba(255, 255, 255, 0.055);
   }
 
@@ -621,7 +621,7 @@
   }
 
   .blog-card-body {
-    grid-template-columns: minmax(0, 1fr) 32px;
+    grid-template-columns: minmax(0, 1fr) 28px;
     column-gap: 8px;
     row-gap: 5px;
     padding: 10px;
@@ -669,9 +669,9 @@
   }
 
   .card-bookmark-btn {
-    width: 30px;
-    height: 30px;
-    border-radius: 8px;
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
   }
 
   .pagination {
@@ -795,7 +795,7 @@ html.is-mobile-device-viewport .blog-card-cover-fallback {
 
 html.is-mobile-device-viewport .blog-card-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 32px;
+  grid-template-columns: minmax(0, 1fr) 28px;
   grid-template-rows: auto minmax(0, 1fr);
   column-gap: 8px;
   row-gap: 5px;
@@ -854,7 +854,7 @@ html.is-mobile-device-viewport .blog-card-meta {
   margin-top: 0;
   flex-wrap: nowrap;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 0;
   font-size: 0.63rem;
 }
 
@@ -870,9 +870,9 @@ html.is-mobile-device-viewport .blog-card-meta svg {
 
 html.is-mobile-device-viewport .card-bookmark-btn {
   margin-left: 0;
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
   background: rgba(255, 255, 255, 0.055);
 }
 

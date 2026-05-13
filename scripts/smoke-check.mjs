@@ -5,7 +5,7 @@ import { runMobileLayoutChecks } from "./smoke-check/mobile-layout.mjs";
 import { runNotionApiClientChecks } from "./smoke-check/notion-api-client.mjs";
 import { runPublicContentAndNotionChecks } from "./smoke-check/public-content-notion.mjs";
 import { runRoutingAndVercelChecks } from "./smoke-check/routing-vercel.mjs";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import {
   assert,
@@ -52,6 +52,7 @@ import {
   "api/posts-data.js",
   "api/post-data.js",
   "api/post.js",
+  "api/robots.js",
   "api/sitemap.js",
   "server/public-content.js",
   "server/security-policy.js",
@@ -66,6 +67,9 @@ const kiroGitRules = read(".kiro/steering/git-rules.md");
 const packageJson = read("package.json");
 const readmeMd = read("README.md");
 const siteArchitectureMd = read("SITE_ARCHITECTURE.md");
+const siteConfigJson = read("site.config.json");
+const siteConfig = JSON.parse(siteConfigJson);
+const configuredSiteOrigin = normalizeConfiguredSiteOrigin(siteConfig.siteUrl);
 const vercelJson = read("vercel.json");
 const envExample = read(".env.example");
 const licenseText = read("LICENSE");
@@ -93,11 +97,13 @@ const smokeCheckModuleSources = [
   read("scripts/smoke-check/public-content-notion.mjs"),
   read("scripts/smoke-check/routing-vercel.mjs"),
 ];
+const visualRegressionJs = read("scripts/visual-regression.mjs");
 const apiNotionJs = read("api/notion.js");
 const apiImageJs = read("api/image.js");
 const apiPostsDataJs = read("api/posts-data.js");
 const apiPostDataJs = read("api/post-data.js");
 const apiPostJs = read("api/post.js");
+const apiRobotsJs = read("api/robots.js");
 const apiSitemapJs = read("api/sitemap.js");
 const publicContentJs = read("server/public-content.js");
 const serverNotionJs = read("server/notion-server.js");
@@ -114,6 +120,7 @@ const {
   "IMAGE_PROXY_MAX_REDIRECTS",
 ]);
 const apiPostHandler = loadCommonJsModule("api/post.js");
+const apiRobotsHandler = loadCommonJsModule("api/robots.js");
 const apiPostsDataHandler = loadCommonJsModule("api/posts-data.js");
 const apiPostDataHandler = loadCommonJsModule("api/post-data.js");
 const {
@@ -141,7 +148,7 @@ const {
   "renderPostContent",
 ]);
 
-const assetVersionValue = "20260513-mobile-ui-fix";
+const assetVersionValue = "20260513-mobile-pc-hero";
 const assetVersion = `v=${assetVersionValue}`;
 const productionDomainPattern = /0000068\.xyz/;
 const allowedProductionDomainFiles = new Set([
@@ -151,9 +158,8 @@ const allowedProductionDomainFiles = new Set([
   "blog.html",
   "index.html",
   "post.html",
-  "robots.txt",
   "scripts/smoke-check.mjs",
-  "server/notion-server.js",
+  "site.config.json",
   "同步.md",
   "统计待修复清单.MD",
 ]);
@@ -190,6 +196,12 @@ function collectVersionedStaticAssetVersions(htmlSource) {
   );
 }
 
+function normalizeConfiguredSiteOrigin(value) {
+  const url = new URL(String(value || ""));
+  assert.ok(["http:", "https:"].includes(url.protocol), "site.config.json siteUrl should use http or https");
+  return url.origin;
+}
+
 const productionDomainFiles = listProjectTextFiles().filter((filePath) => (
   productionDomainPattern.test(readFileSync(filePath, "utf8"))
 ));
@@ -198,6 +210,20 @@ assert.deepEqual(
   [],
   "production domain hardcoding should stay constrained to documented SEO fallback files",
 );
+assert.ok(!existsSync("robots.txt"), "robots.txt should be served dynamically through /api/robots");
+assert.equal(siteConfig.siteUrl, configuredSiteOrigin, "site.config.json siteUrl should be a normalized origin without a trailing slash");
+expectIncludes(serverNotionJs, "readConfiguredSiteOrigin()", "server site origin fallback should read site.config.json");
+expectNotIncludes(serverNotionJs, "0000068.xyz", "server site origin fallback should not duplicate the production domain literal");
+[
+  ["index.html", indexHtml, "/"],
+  ["blog.html", blogHtml, "/blog.html"],
+  ["post.html", postHtml, "/post.html"],
+].forEach(([label, htmlSource, routePath]) => {
+  const expectedUrl = `${configuredSiteOrigin}${routePath}`;
+  expectIncludes(htmlSource, `content="${expectedUrl}"`, `${label} should keep fallback og:url in sync with site.config.json`);
+  expectIncludes(htmlSource, `href="${expectedUrl}"`, `${label} should keep fallback canonical in sync with site.config.json`);
+  expectIncludes(htmlSource, `content="${configuredSiteOrigin}/favicon.png?v=2"`, `${label} should keep fallback og:image in sync with site.config.json`);
+});
 
 expectIncludes(indexHtml, 'property="og:image"', "index.html should declare og:image");
 expectIncludes(blogHtml, 'property="og:image"', "blog.html should declare og:image");
@@ -321,12 +347,11 @@ expectIncludes(blogPageCss, "z-index: 2;\n  border-radius: inherit;", "blog card
 expectIncludes(blogPageCss, "pointer-events: none;\n}", "blog card cover media should not swallow clicks meant for the card link");
 expectIncludes(blogPageCss, "z-index: 3;\n  display: inline-flex;", "blog card bookmark button should stay above the card link layer");
 expectIncludes(commonJs, "DESKTOP_PARTICLE_COUNT = 350", "particle runtime should preserve the desktop particle density");
-expectIncludes(commonJs, "MOBILE_PARTICLE_COUNT = 28", "particle runtime should use the ultra-light mobile-only particle density");
-expectIncludes(commonJs, "staticFrame: isMobile && !disabled", "particle runtime should render mobile home particles as a static frame");
-expectIncludes(commonJs, "if (particleProfile.staticFrame)", "particle runtime should skip the animation loop for mobile static particles");
+expectIncludes(commonJs, "MOBILE_PARTICLE_COUNT = 120", "particle runtime should use a PC-like but capped mobile home particle density");
+expectIncludes(commonJs, "frameInterval: isMobile && !disabled ? 33 : 0", "particle runtime should cap animated mobile home particles near 30fps");
+expectNotIncludes(commonJs, "staticFrame", "particle runtime should animate mobile home particles instead of drawing a static frame");
 expectIncludes(commonJs, 'MOBILE_PARTICLE_DISABLED_PAGES = new Set(["blog", "post"])', "particle runtime should disable mobile particles on list and article pages");
-expectIncludes(commonJs, "class MobileParticle", "particle runtime should use a cheaper mobile-only particle model");
-expectIncludes(commonJs, "particleProfile.isMobile ? MobileParticle : Particle", "particle runtime should keep the desktop particle class separate from the mobile renderer");
+expectIncludes(commonJs, "const ParticleCtor = Particle", "particle runtime should use the desktop particle model on mobile home too");
 expectIncludes(commonJs, "siteUtils.isMobileDeviceViewport", "particle runtime should use the shared real-mobile gate before changing density");
 expectIncludes(commonJs, '(hover: none) and (pointer: coarse)', "particle fallback should avoid treating narrow desktop windows as mobile");
 expectNotIncludes(commonJs, "function shouldReduceMotion", "particle runtime should not stop the old particle animation for reduced-motion settings");
@@ -370,7 +395,24 @@ expectIncludes(apiImageJs, 'readPositiveEnvNumber("IMAGE_PROXY_TIMEOUT_MS", 10_0
 expectIncludes(apiImageJs, 'readPositiveEnvNumber("IMAGE_PROXY_MAX_BYTES", 8 * 1024 * 1024)', "image proxy size limit should be configurable while keeping its default");
 expectIncludes(apiImageJs, 'readNonNegativeEnvInteger("IMAGE_PROXY_MAX_REDIRECTS", 4)', "image proxy redirect limit should be configurable while keeping its default");
 expectIncludes(packageJson, '"dev": "node scripts/local-server.mjs"', "package scripts should expose the local API-aware dev server");
+expectIncludes(packageJson, '"visual:check": "node scripts/visual-regression.mjs"', "package scripts should expose the browser visual regression check");
 expectIncludes(packageJson, '"license": "MIT"', "package metadata should match the published README license");
+expectIncludes(packageJson, '"version": "4.0.0"', "package version should match the next release commit");
+expectIncludes(localServerJs, '["/api/robots", require("../api/robots.js")]', "local server should expose the dynamic robots handler");
+expectIncludes(localServerJs, 'url.pathname === "/robots.txt"', "local server should map robots.txt to the dynamic handler");
+expectIncludes(localServerJs, "VISUAL_REGRESSION_STATIC_TEMPLATES", "local server should expose static templates only for visual regression");
+expectIncludes(visualRegressionJs, "Page.captureScreenshot", "visual regression should capture real browser screenshots");
+expectIncludes(visualRegressionJs, "Emulation.setDeviceMetricsOverride", "visual regression should emulate mobile and desktop viewports");
+expectIncludes(visualRegressionJs, "is-mobile-device-viewport", "visual regression should verify the mobile compatibility class");
+expectIncludes(visualRegressionJs, "desktop particles should remain animated", "visual regression should guard desktop particle animation");
+expectIncludes(visualRegressionJs, "mobile home particles should animate", "visual regression should guard mobile home particle animation");
+expectIncludes(visualRegressionJs, "mobile blog bookmark button should compute to 26px width", "visual regression should guard mobile card bookmark sizing");
+expectIncludes(visualRegressionJs, "mobile post top dock should stay hidden", "visual regression should guard mobile article dock visibility");
+expectIncludes(readmeMd, "badge/version-4.0.0", "README badge should match package version");
+expectIncludes(readmeMd, "npm.cmd run visual:check", "README should document the browser visual regression check");
+expectIncludes(readmeMd, "VISUAL_STRICT=1", "README should document strict visual regression mode");
+expectIncludes(siteArchitectureMd, "> Version: v4.0", "architecture docs should match the next release commit");
+expectIncludes(siteArchitectureMd, "Version v4.0 Highlights", "architecture docs should describe the current release");
 expectIncludes(readmeMd, "SITE_URL=https://your-domain.example", "README should use the same SITE_URL placeholder as .env.example");
 expectIncludes(readmeMd, "IMAGE_PROXY_TIMEOUT_MS=10000", "README should document image proxy timeout tuning");
 expectIncludes(readmeMd, "IMAGE_PROXY_MAX_BYTES=8388608", "README should document image proxy size tuning");
@@ -390,6 +432,10 @@ expectIncludes(siteArchitectureMd, "`blog-page.js` owns the `hashchange` flow fo
 expectIncludes(siteArchitectureMd, "`notion-content.js` renders Notion blocks through a `block.type` -> renderer registry", "architecture docs should describe the block renderer registry");
 expectIncludes(siteArchitectureMd, "`scripts/smoke-check.mjs` is the single `npm.cmd run check` entrypoint", "architecture docs should describe the smoke-check entrypoint");
 expectIncludes(siteArchitectureMd, "`image-proxy.mjs` for `/api/image`", "architecture docs should list focused smoke-check modules");
+expectIncludes(siteArchitectureMd, "`visual-regression.mjs` for real-browser screenshot checks", "architecture docs should describe the visual regression script");
+expectIncludes(siteArchitectureMd, "VISUAL_STRICT=1", "architecture docs should document strict visual regression mode");
+expectIncludes(readmeMd, "/api/robots", "README should document the dynamic robots endpoint");
+expectIncludes(siteArchitectureMd, "| `/api/robots` | `GET` | Dynamic robots.txt |", "architecture docs should document the dynamic robots endpoint");
 expectNotIncludes(
   siteArchitectureMd,
   "Add conservative length caps for public `category` and `search` query inputs",
@@ -1475,7 +1521,10 @@ await runRoutingAndVercelChecks({
   assert,
   apiNotionHandler,
   apiNotionJs,
+  apiRobotsHandler,
+  apiRobotsJs,
   apiSitemapJs,
+  configuredSiteOrigin,
   createApiResponseRecorder,
   expectIncludes,
   expectNotIncludes,

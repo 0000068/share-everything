@@ -36,6 +36,7 @@ const apiHandlers = new Map([
   ["/api/post", require("../api/post.js")],
   ["/api/post-data", require("../api/post-data.js")],
   ["/api/posts-data", require("../api/posts-data.js")],
+  ["/api/robots", require("../api/robots.js")],
   ["/api/sitemap", require("../api/sitemap.js")],
 ]);
 
@@ -150,10 +151,21 @@ async function serveStatic(url, res) {
   res.end(data);
 }
 
+function isVisualStaticTemplateRoute(url) {
+  return process.env.VISUAL_REGRESSION_STATIC_TEMPLATES === "1"
+    && url.pathname.startsWith("/__visual/")
+    && url.pathname.endsWith(".html");
+}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${host}:${port}`);
 
   try {
+    if (isVisualStaticTemplateRoute(url)) {
+      await serveStatic(new URL(url.pathname.slice("/__visual".length), `http://${host}:${port}`), res);
+      return;
+    }
+
     const postMatch = url.pathname.match(/^\/posts\/([^/?#]+)/);
     if (postMatch) {
       await invokeApiHandler(apiHandlers.get("/api/post"), req, res, {
@@ -175,6 +187,11 @@ const server = createServer(async (req, res) => {
 
     if (url.pathname === "/sitemap.xml") {
       await invokeApiHandler(apiHandlers.get("/api/sitemap"), req, res, readQuery(url));
+      return;
+    }
+
+    if (url.pathname === "/robots.txt") {
+      await invokeApiHandler(apiHandlers.get("/api/robots"), req, res, readQuery(url));
       return;
     }
 

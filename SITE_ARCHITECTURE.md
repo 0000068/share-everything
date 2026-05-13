@@ -1,7 +1,7 @@
 # Share Everything Site Architecture
 
-> Version: v3.8
-> Updated: 2026-05-12
+> Version: v4.0
+> Updated: 2026-05-13
 
 ## 1. Overview
 
@@ -12,7 +12,7 @@ It is not a React, Next.js, Vue, Cloudflare Workers, or Cloudflare Pages app. Cl
 | Layer | Technology | Responsibility |
 |---|---|---|
 | Content source | Notion API | Article metadata and block content |
-| Server | Vercel Serverless Functions | Public list API, post data API, SSR post HTML, sitemap, image proxy |
+| Server | Vercel Serverless Functions | Public list API, post data API, SSR post HTML, robots, sitemap, image proxy |
 | Frontend | Vanilla HTML/CSS/JS | Static entry pages plus lightweight SPA navigation |
 | DNS | Cloudflare | DNS only |
 | Bookmarks | `localStorage` | Fully local bookmark storage |
@@ -25,6 +25,7 @@ Notion Database
       -> /api/post-data
       -> /api/post
       -> /api/image
+      -> /api/robots
       -> /api/sitemap
         -> Browser
           -> Static HTML shell
@@ -32,14 +33,28 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v3.8 Highlights
+## 2. Version v4.0 Highlights
 
-v3.8 packages the current mobile compatibility and maintenance work into a release commit while preserving the desktop UI and particle behavior.
+v4.0 packages the latest mobile hero and production-domain maintenance work while preserving the desktop UI and desktop particle behavior.
 
-- `package.json` and README release metadata now match the `v3.8` release tag convention.
+- `package.json`, README, and architecture release metadata now match the `v4.0` release tag convention.
+- Mobile home now uses the desktop particle model in a capped mobile profile: 120 particles at roughly 30fps, while mobile blog and post pages still disable particles.
+- Mobile home title styling uses the same animated `title-gradient` colors as desktop, with mobile-only sizing and vertical placement.
+- Mobile blog card bookmark buttons are kept at the smaller 26px visual size so the card action does not dominate the title row.
 - `scripts/smoke-check.mjs` now enforces a single static CSS/JS `?v=` value across HTML entrypoints.
-- Production-domain fallback references to `0000068.xyz` are constrained by a smoke-check whitelist so hardcoded SEO URLs do not spread accidentally.
+- Production-domain fallback references to `0000068.xyz` are centralized around `site.config.json`; `server/notion-server.js`, `/api/sitemap`, and `/api/robots` read the configured origin instead of duplicating the domain literal.
+- `/robots.txt` is served dynamically through `/api/robots` in both Vercel and the local development server.
 - Local repository residue is cleaned up: the ignored `node_modules/` folder is removed, `.local-server.pid` is ignored, and no root log files are left behind.
+- Static checks cover the mobile hero gradient, capped mobile particle profile, small card bookmark action, cache-busting asset version, dynamic robots output, and controlled production-domain hardcoding.
+
+### v3.8 Highlights
+
+v3.8 packages the earlier mobile compatibility and maintenance work into a release commit while preserving the desktop UI and particle behavior.
+
+- `package.json` and README release metadata matched the `v3.8` release tag convention.
+- `scripts/smoke-check.mjs` enforced a single static CSS/JS `?v=` value across HTML entrypoints.
+- Production-domain fallback references to `0000068.xyz` were constrained by a smoke-check whitelist so hardcoded SEO URLs would not spread accidentally.
+- Local repository residue was cleaned up: the ignored `node_modules/` folder was removed, `.local-server.pid` was ignored, and no root log files were left behind.
 - Browser verification covered `390x844` mobile home/list/article states and `1280x720` desktop home particles without changing PC UI or desktop particle logic.
 
 ### v3.5 Highlights
@@ -189,6 +204,7 @@ v2.3 restores the v1.6-style whole-page SPA route motion while keeping the v2.0 
 | `/blog.html#bookmarks` | `blog-page.js` | Local bookmark view, marked noindex at runtime |
 | `/posts/:id` | `/api/post?id=:id` | Canonical SSR article route |
 | `/post.html?id=:id` | `/api/post` | Template-compatible article entry |
+| `/robots.txt` | `/api/robots` | Dynamic robots.txt |
 | `/sitemap.xml` | `/api/sitemap` | Dynamic sitemap |
 
 ## 4. API Routes
@@ -199,6 +215,7 @@ v2.3 restores the v1.6-style whole-page SPA route motion while keeping the v2.0 
 | `/api/post-data` | `GET` | Single post JSON |
 | `/api/post` | `GET` | SSR article HTML |
 | `/api/image` | `GET` | Same-origin remote image proxy |
+| `/api/robots` | `GET` | Dynamic robots.txt |
 | `/api/sitemap` | `GET` | Dynamic sitemap XML |
 | `/api/notion` | Any | Disabled legacy proxy, fixed `410` |
 
@@ -241,7 +258,7 @@ Client-side `notion-api.js` keeps a short bounded in-memory post-list response c
 |-- post.html
 |-- package.json
 |-- vercel.json
-|-- robots.txt
+|-- site.config.json
 |-- favicon.png
 |-- SITE_ARCHITECTURE.md
 |-- api/
@@ -249,6 +266,7 @@ Client-side `notion-api.js` keeps a short bounded in-memory post-list response c
 |   |-- posts-data.js
 |   |-- post-data.js
 |   |-- post.js
+|   |-- robots.js
 |   |-- sitemap.js
 |   `-- notion.js
 |-- server/
@@ -400,13 +418,21 @@ Use:
 npm.cmd run dev
 ```
 
-This starts `scripts/local-server.mjs` on `127.0.0.1:4173` by default and supports static assets plus semantic API routes including `/api/image`, `/api/post`, `/api/post-data`, `/api/posts-data`, and `/api/sitemap`.
+This starts `scripts/local-server.mjs` on `127.0.0.1:4173` by default and supports static assets plus semantic API routes including `/api/image`, `/api/post`, `/api/post-data`, `/api/posts-data`, `/api/robots`, and `/api/sitemap`.
 
 Use:
 
 ```powershell
 npm.cmd run check
 ```
+
+For browser-level visual regression:
+
+```powershell
+npm.cmd run visual:check
+```
+
+`scripts/visual-regression.mjs` starts the local server, launches the local Chrome or Edge executable in headless + CDP mode, captures screenshots into the system temp directory, and checks the mobile home, mobile blog, mobile post empty state, and desktop home particle/title contracts without adding third-party dependencies. Visual assertion failures are never downgraded to screenshot fallback. If the current machine cannot complete real-browser screenshots, it writes a skipped report by default; with `VISUAL_STRICT=1`, CDP contract checks must be available and any assertion failure fails the command.
 
 PowerShell may block `npm run check` because `npm.ps1` execution is disabled on the system, so `npm.cmd` is the reliable form on this machine.
 
@@ -423,7 +449,7 @@ Recommended:
 
 | Variable | Description |
 |---|---|
-| `SITE_URL` | Production site origin |
+| `SITE_URL` | Production site origin override; `site.config.json` is the checked-in fallback |
 
 Optional:
 
@@ -440,6 +466,8 @@ Optional:
 | `EXPOSE_PUBLIC_ERROR_DETAILS` | `false` | Expose upstream error detail for local debugging only |
 
 The server exposes the entire configured Notion database. This is the deliberate long-term project policy and matches v2.5 behavior. Keep drafts in a separate Notion database; `Status`, `Public`, and similar public/published fields are ignored by the runtime.
+
+`site.config.json` is the single checked-in production-origin fallback used by server rendering, dynamic sitemap, and dynamic robots output. Static HTML fallback canonical and OG URLs are smoke-checked against the same config until a build-time replacement step exists.
 
 ## 13. Git Naming Rules
 
@@ -458,7 +486,8 @@ The server exposes the entire configured Notion database. This is the deliberate
 - `notion-api-client.mjs` for browser-side Notion client summary caching and session fallback behavior.
 - `image-proxy.mjs` for `/api/image` SSRF, MIME, size, redirect, and method checks.
 - `public-content-notion.mjs` for public error mapping and server-side Notion data behavior.
-- `routing-vercel.mjs` for disabled legacy proxy, sitemap, and Vercel header rules.
+- `routing-vercel.mjs` for disabled legacy proxy, robots, sitemap, and Vercel header rules.
+- `visual-regression.mjs` for real-browser screenshot checks outside the default smoke suite.
 
 The smoke suite currently covers:
 
@@ -482,6 +511,7 @@ The smoke suite currently covers:
 - Structured data shared helpers.
 - SSR article injection fallback behavior.
 - Mobile particle performance constraints.
+- Real-browser visual regression via `npm.cmd run visual:check` for mobile/desktop screenshots and particle/title/card/dock checks.
 - Disabled `/api/notion` behavior.
 - Notion path parameter encoding.
 - Invalid TTL environment variable fallback behavior.

@@ -94,10 +94,10 @@ function expectGradientTitle(assert, source, selector, label) {
     "white-space": "nowrap",
     "overflow-wrap": "normal",
     "word-break": "normal",
-    "font-size": "2.62rem",
+    "font-size": "2.5rem",
     "line-height": "1",
     "letter-spacing": "0",
-    "background-size": "110% auto",
+    "background-size": "200% auto",
     "-webkit-background-clip": "text",
     "-webkit-text-fill-color": "transparent",
     "background-clip": "text",
@@ -105,13 +105,18 @@ function expectGradientTitle(assert, source, selector, label) {
 
   assert.match(
     declarations.get("background") || "",
-    /#8affff.+#25e4ff.+#5fa7ff.+#9b76ff.+#f238e6/,
-    `${label} should keep the cyan-blue-purple-pink title gradient`,
+    /#fff.+#00ffff.+#e040fb.+#ff4081.+#fff/,
+    `${label} should keep the desktop title gradient colors`,
   );
   assert.match(
     declarations.get("filter") || "",
-    /drop-shadow.+rgba\(0, 229, 255, 0\.22\).+drop-shadow.+rgba\(224, 64, 251, 0\.16\)/,
-    `${label} should keep the mobile title glow`,
+    /drop-shadow.+rgba\(0, 255, 255, 0\.3\).+drop-shadow.+rgba\(224, 64, 251, 0\.2\)/,
+    `${label} should keep the desktop title glow`,
+  );
+  assert.match(
+    declarations.get("animation") || "",
+    /title-gradient 6s linear infinite.+fadeInUp/,
+    `${label} should keep the desktop title-gradient animation`,
   );
 }
 
@@ -154,6 +159,11 @@ function expectBlogCardMobileContract(assert, source, label, bookmarkColumnWidth
     "justify-self": "end",
     "margin-top": "0",
   }, label);
+
+  expectDeclarations(assert, source, ".card-bookmark-btn", {
+    "width": "26px",
+    "height": "26px",
+  }, label);
 }
 
 export function runMobileLayoutChecks(context) {
@@ -187,19 +197,33 @@ export function runMobileLayoutChecks(context) {
 
   expectGradientTitle(assert, realMobileStyle, ".hero-title", "real-mobile home");
   expectGradientTitle(assert, mobileFallbackStyle, "html.is-mobile-device-viewport .hero-title", "mobile fallback home");
+  expectDeclarations(assert, realMobileStyle, "#particles-canvas", {
+    "opacity": "0.78",
+  }, "real-mobile home");
+  expectDeclarations(assert, mobileFallbackStyle, "html.is-mobile-device-viewport #particles-canvas", {
+    "opacity": "0.78",
+  }, "mobile fallback home");
+  expectDeclarations(assert, realMobileStyle, ".hero-section", {
+    "padding": "clamp(190px, 27svh, 240px) 0 48px",
+    "gap": "12px",
+  }, "real-mobile home");
+  expectDeclarations(assert, mobileFallbackStyle, "html.is-mobile-device-viewport .hero-section", {
+    "padding": "clamp(190px, 27svh, 240px) 0 48px",
+    "gap": "12px",
+  }, "mobile fallback home");
   expectDeclarations(assert, narrowMobileStyle, ".hero-title", {
-    "font-size": "2.62rem",
+    "font-size": "2.5rem",
     "letter-spacing": "0",
   }, "narrow real-mobile home");
   expectDeclarations(assert, narrowMobileFallbackStyle, "html.is-mobile-device-viewport .hero-title", {
-    "font-size": "2.62rem",
+    "font-size": "2.5rem",
     "letter-spacing": "0",
   }, "narrow mobile fallback home");
 
-  expectBlogCardMobileContract(assert, realMobileBlog, "real-mobile blog cards", "34px");
-  expectBlogCardMobileContract(assert, mobileFallbackBlog, "mobile fallback blog cards", "32px");
+  expectBlogCardMobileContract(assert, realMobileBlog, "real-mobile blog cards", "30px");
+  expectBlogCardMobileContract(assert, mobileFallbackBlog, "mobile fallback blog cards", "28px");
   expectDeclarations(assert, narrowMobileBlog, ".blog-card-body", {
-    "grid-template-columns": "minmax(0, 1fr) 32px",
+    "grid-template-columns": "minmax(0, 1fr) 28px",
   }, "narrow real-mobile blog cards");
   expectDeclarations(assert, narrowMobileBlog, ".blog-card-category", {
     "display": "inline-flex",
@@ -210,5 +234,9 @@ export function runMobileLayoutChecks(context) {
     "align-self": "center",
     "justify-self": "end",
     "gap": "0",
+  }, "narrow real-mobile blog cards");
+  expectDeclarations(assert, narrowMobileBlog, ".card-bookmark-btn", {
+    "width": "26px",
+    "height": "26px",
   }, "narrow real-mobile blog cards");
 }

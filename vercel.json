@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/robots.txt", "destination": "/api/robots" },
     { "source": "/sitemap.xml", "destination": "/api/sitemap" },
     { "source": "/posts/:id", "destination": "/api/post?id=:id" },
     { "source": "/post.html", "destination": "/api/post" }

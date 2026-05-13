@@ -16,7 +16,7 @@ let mouseY = 0;
 let targetMouseX = 0;
 let targetMouseY = 0;
 const MOBILE_PARTICLE_BREAKPOINT = 768;
-const MOBILE_PARTICLE_COUNT = 28;
+const MOBILE_PARTICLE_COUNT = 120;
 const DESKTOP_PARTICLE_COUNT = 350;
 const MOBILE_SCROLL_PARTICLE_PAUSE_MS = 240;
 const MOBILE_PARTICLE_DISABLED_PAGES = new Set(["blog", "post"]);
@@ -53,9 +53,8 @@ function getParticleProfileForViewport() {
   return {
     isMobile,
     disabled,
-    staticFrame: isMobile && !disabled,
     count: disabled ? 0 : isMobile ? MOBILE_PARTICLE_COUNT : DESKTOP_PARTICLE_COUNT,
-    frameInterval: 0,
+    frameInterval: isMobile && !disabled ? 33 : 0,
   };
 }
 
@@ -64,8 +63,8 @@ function refreshParticleProfile() {
   const didChange =
     nextProfile.isMobile !== particleProfile.isMobile ||
     nextProfile.disabled !== particleProfile.disabled ||
-    nextProfile.staticFrame !== particleProfile.staticFrame ||
-    nextProfile.count !== particleProfile.count;
+    nextProfile.count !== particleProfile.count ||
+    nextProfile.frameInterval !== particleProfile.frameInterval;
   particleProfile = nextProfile;
   particleCount = nextProfile.count;
   return didChange;
@@ -140,46 +139,9 @@ class Particle {
   }
 }
 
-class MobileParticle {
-  constructor() {
-    this.spawn(false);
-  }
-
-  spawn(isRespawn) {
-    this.x = Math.random() * width;
-    this.y = isRespawn ? -12 - Math.random() * height * 0.2 : Math.random() * height;
-    this.size = Math.random() * 1.2 + 0.6;
-    this.opacity = Math.random() * 0.34 + 0.24;
-    this.color = colors[Math.floor(Math.random() * colors.length)];
-    this.vx = (Math.random() - 0.5) * 0.08;
-    this.vy = Math.random() * 0.16 + 0.05;
-    this.twinkle = Math.random() * Math.PI * 2;
-    this.twinkleSpeed = Math.random() * 0.035 + 0.015;
-  }
-
-  update() {
-    this.x += this.vx + mouseX * 0.00001;
-    this.y += this.vy;
-    this.twinkle += this.twinkleSpeed;
-
-    if (this.y > height + 12 || this.x < -12 || this.x > width + 12) {
-      this.spawn(true);
-    }
-  }
-
-  getDrawData(out) {
-    out.px = this.x;
-    out.py = this.y;
-    out.pSize = this.size;
-    out.opacity = Math.max(0.12, this.opacity * (0.78 + Math.sin(this.twinkle) * 0.22));
-    out.color = this.color;
-    return out;
-  }
-}
-
 function initParticles() {
   particles = [];
-  const ParticleCtor = particleProfile.isMobile ? MobileParticle : Particle;
+  const ParticleCtor = Particle;
   for (let i = 0; i < particleCount; i += 1) {
     particles.push(new ParticleCtor());
   }
@@ -288,7 +250,7 @@ function clearParticleBootstrapTimer() {
 }
 
 function animateParticles() {
-  if (!ctx || particlesPausedForScroll || particleProfile.disabled || particleProfile.staticFrame) return;
+  if (!ctx || particlesPausedForScroll || particleProfile.disabled) return;
   const now = typeof performance !== "undefined" && typeof performance.now === "function"
     ? performance.now()
     : Date.now();
@@ -326,10 +288,6 @@ function bootstrapParticles(force = false) {
 
   drawParticlesFrame(false);
   lastParticleFrameTime = 0;
-  if (particleProfile.staticFrame) {
-    return true;
-  }
-
   if (particlesPausedForScroll) {
     return true;
   }
@@ -375,7 +333,6 @@ function clearScrollParticleResumeTimer() {
 function pauseMobileParticlesDuringScroll() {
   if (!isMobileParticleViewport()) return;
   if (particleProfile.disabled) return;
-  if (particleProfile.staticFrame) return;
 
   particlesPausedForScroll = true;
   stopParticles();

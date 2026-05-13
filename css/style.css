@@ -641,7 +641,7 @@ body.has-cursor-glow .cursor-glow {
   }
 
   #particles-canvas {
-    opacity: 0.5;
+    opacity: 0.78;
   }
 
   .content-layer {
@@ -651,8 +651,8 @@ body.has-cursor-glow .cursor-glow {
   .hero-section {
     width: 100%;
     min-height: 100svh;
-    padding: clamp(126px, 19svh, 170px) 0 48px;
-    gap: 14px;
+    padding: clamp(190px, 27svh, 240px) 0 48px;
+    gap: 12px;
   }
 
   .hero-title {
@@ -662,19 +662,26 @@ body.has-cursor-glow .cursor-glow {
     word-break: normal;
     position: relative;
     top: 0;
-    font-size: 2.62rem;
+    font-size: 2.5rem;
     line-height: 1;
     letter-spacing: 0;
-    background: linear-gradient(100deg, #8affff 0%, #25e4ff 27%, #5fa7ff 51%, #9b76ff 72%, #f238e6 100%);
-    background-size: 110% auto;
-    background-position: center;
+    background: linear-gradient(
+      to right,
+      #fff 0%,
+      #00ffff 20%,
+      #e040fb 50%,
+      #ff4081 80%,
+      #fff 100%
+    );
+    background-size: 200% auto;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    filter:
-      drop-shadow(0 0 24px rgba(0, 229, 255, 0.22))
-      drop-shadow(0 0 46px rgba(224, 64, 251, 0.16));
-    animation: fadeInUp 0.9s var(--transition-smooth) 0.25s both;
+    filter: drop-shadow(0 0 40px rgba(0, 255, 255, 0.3))
+      drop-shadow(0 0 80px rgba(224, 64, 251, 0.2));
+    animation:
+      title-gradient 6s linear infinite,
+      fadeInUp 0.9s var(--transition-smooth) 0.25s both;
   }
 
   .hero-search {
@@ -872,13 +879,13 @@ body.has-cursor-glow .cursor-glow {
 
   .hero-section {
     width: 100%;
-    padding-top: clamp(122px, 18.5svh, 156px);
-    gap: 14px;
+    padding-top: clamp(198px, 27svh, 234px);
+    gap: 12px;
   }
 
   .hero-title {
     top: 0;
-    font-size: 2.62rem;
+    font-size: 2.5rem;
     letter-spacing: 0;
   }
 
@@ -953,7 +960,7 @@ body.has-cursor-glow .cursor-glow {
 
 @media (max-width: 360px) and (hover: none) and (pointer: coarse) {
   .hero-title {
-    font-size: 2.34rem;
+    font-size: 2.24rem;
   }
 
   .hero-search {
@@ -1012,7 +1019,7 @@ html.is-mobile-device-viewport .glow-orb {
 }
 
 html.is-mobile-device-viewport #particles-canvas {
-  opacity: 0.5;
+  opacity: 0.78;
 }
 
 html.is-mobile-device-viewport .content-layer {
@@ -1022,8 +1029,8 @@ html.is-mobile-device-viewport .content-layer {
 html.is-mobile-device-viewport .hero-section {
   width: 100%;
   min-height: 100svh;
-  padding: clamp(126px, 19svh, 170px) 0 48px;
-  gap: 14px;
+  padding: clamp(190px, 27svh, 240px) 0 48px;
+  gap: 12px;
 }
 
 html.is-mobile-device-viewport .hero-title {
@@ -1033,19 +1040,26 @@ html.is-mobile-device-viewport .hero-title {
   word-break: normal;
   position: relative;
   top: 0;
-  font-size: 2.62rem;
+  font-size: 2.5rem;
   line-height: 1;
   letter-spacing: 0;
-  background: linear-gradient(100deg, #8affff 0%, #25e4ff 27%, #5fa7ff 51%, #9b76ff 72%, #f238e6 100%);
-  background-size: 110% auto;
-  background-position: center;
+  background: linear-gradient(
+    to right,
+    #fff 0%,
+    #00ffff 20%,
+    #e040fb 50%,
+    #ff4081 80%,
+    #fff 100%
+  );
+  background-size: 200% auto;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  filter:
-    drop-shadow(0 0 24px rgba(0, 229, 255, 0.22))
-    drop-shadow(0 0 46px rgba(224, 64, 251, 0.16));
-  animation: fadeInUp 0.9s var(--transition-smooth) 0.25s both;
+  filter: drop-shadow(0 0 40px rgba(0, 255, 255, 0.3))
+    drop-shadow(0 0 80px rgba(224, 64, 251, 0.2));
+  animation:
+    title-gradient 6s linear infinite,
+    fadeInUp 0.9s var(--transition-smooth) 0.25s both;
 }
 
 html.is-mobile-device-viewport .hero-search {
@@ -1109,12 +1123,13 @@ html.is-mobile-device-viewport .btn-tooltip {
 
 @media (max-width: 540px) {
   html.is-mobile-device-viewport .hero-section {
-    padding-top: clamp(122px, 18.5svh, 156px);
+    padding-top: clamp(198px, 27svh, 234px);
+    gap: 12px;
   }
 
   html.is-mobile-device-viewport .hero-title {
     top: 0;
-    font-size: 2.62rem;
+    font-size: 2.5rem;
     letter-spacing: 0;
   }
 
@@ -1147,7 +1162,7 @@ html.is-mobile-device-viewport .btn-tooltip {
 
 @media (max-width: 360px) {
   html.is-mobile-device-viewport .hero-title {
-    font-size: 2.34rem;
+    font-size: 2.24rem;
   }
 
   html.is-mobile-device-viewport .hero-search {
