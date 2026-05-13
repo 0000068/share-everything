@@ -1138,7 +1138,7 @@
     const resolvedDefaultShareImageUrl = resolveDisplayImageUrl(
       defaultShareImageUrl,
       resolvedBaseOrigin,
-    ) || new URL("favicon.png?v=3", resolvedBaseOrigin).href;
+    ) || new URL("favicon.png?v=4", resolvedBaseOrigin).href;
     const resolvedImageUrl = resolveShareImageUrl(
       typeof imageUrl === "string" && imageUrl.trim() ? imageUrl.trim() : post?.coverImage,
       resolvedDefaultShareImageUrl,

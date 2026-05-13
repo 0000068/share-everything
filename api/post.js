@@ -291,7 +291,7 @@ module.exports = async function handler(req, res) {
 
   const routeId = readQueryString(req.query.id);
   const siteOrigin = getSiteOrigin();
-  const defaultShareImageUrl = `${siteOrigin}/favicon.png?v=3`;
+  const defaultShareImageUrl = `${siteOrigin}/favicon.png?v=4`;
 
   let html = await getTemplate();
 

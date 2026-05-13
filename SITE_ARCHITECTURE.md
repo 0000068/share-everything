@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v4.3
+> Version: v4.4
 > Updated: 2026-05-13
 
 ## 1. Overview
@@ -33,19 +33,21 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v4.3 Highlights
+## 2. Version v4.4 Highlights
 
-v4.3 packages automatic category icon de-duplication, the latest Notion content module split, release verification, and production-domain maintenance work while preserving the desktop UI and desktop particle behavior.
+v4.4 packages automatic category icon de-duplication, the latest Notion content module split, the server Notion service split, the ES module frontend entry, release verification, and production-domain maintenance work while preserving the desktop UI and desktop particle behavior.
 
-- `package.json`, README, and architecture release metadata now match the `v4.3` release tag convention.
+- `package.json`, README, changelog, and architecture release metadata now match the `v4.4` release commit convention.
 - Mobile pages now disable the particle canvas entirely after real-device frame-rate checks, while desktop home keeps the 350-particle animation.
 - Blog cover placeholders no longer render the notebook emoji; slow or failed covers fall back to quiet gradients.
-- Browser icons prefer the crisp `favicon.svg`, with a refreshed `favicon.png?v=3` fallback for sharing and older clients.
+- Browser icons prefer the refreshed iridescent `favicon.svg`, with a restored `favicon.png?v=4` fallback for sharing and older clients.
 - Mobile home title styling uses the same animated `title-gradient` colors as desktop, with mobile-only sizing and vertical placement.
 - Mobile blog card bookmark buttons are kept at the smaller 26px visual size so the card action does not dominate the title row.
 - `scripts/smoke-check.mjs` now enforces a single static CSS/JS `?v=` value across HTML entrypoints.
 - Production-domain fallback references to `0000068.xyz` are centralized around `site.config.json`; `server/notion-server.js`, `/api/sitemap`, and `/api/robots` read the configured origin instead of duplicating the domain literal.
-- `server/notion-config.js` and `server/category-navigation.js` split stable configuration and category presentation helpers out of `server/notion-server.js`.
+- `server/notion-client.js`, `server/notion-schema.js`, `server/public-policy.js`, `server/post-service.js`, `server/block-service.js`, `server/cache-store.js`, and `server/render-service.js` split Notion requests, schema inference, public policy, post queries, block recursion, caches, and SSR helpers out of `server/notion-server.js`.
+- `server/notion-config.js` and `server/category-navigation.js` keep stable configuration and category presentation helpers outside the compatibility export layer.
+- `js/app.js` is the single `type="module"` frontend entry, replacing the long HTML script chain while preserving the vanilla JS runtime.
 - `js/notion-content-utils.js` split pure schema, property lookup, escaping, and search-text helpers out of `js/notion-content.js`; HTML entrypoints load it before the renderer.
 - `js/notion-content-shared.js`, `js/notion-content-url.js`, and `js/notion-article-renderer.js` further isolate category constants, URL/image policy, and article shell markup from the central Notion renderer.
 - `/robots.txt` is served dynamically through `/api/robots` in both Vercel and the local development server.
@@ -277,11 +279,19 @@ Client-side `notion-api.js` keeps a short bounded in-memory post-list response c
 |   `-- notion.js
 |-- server/
 |   |-- notion-server.js
+|   |-- notion-client.js
+|   |-- notion-schema.js
+|   |-- public-policy.js
+|   |-- post-service.js
+|   |-- block-service.js
+|   |-- cache-store.js
+|   |-- render-service.js
 |   |-- notion-config.js
 |   |-- category-navigation.js
 |   |-- public-content.js
 |   `-- security-policy.js
 |-- js/
+|   |-- app.js
 |   |-- notion-content-shared.js
 |   |-- notion-content-utils.js
 |   |-- notion-content-url.js
@@ -344,10 +354,18 @@ Page-specific scripts are then loaded as needed:
 | `bookmark.js` | Local bookmark persistence and legacy metadata hydration |
 | `notion-api.js` | Browser-side API requests, summary cache, short list response cache |
 
-### Script Load-Order Dependency Graph
+### Frontend Module Entry
 
-The `data-spa-runtime` scripts MUST load in the order declared in the HTML files. The
-following graph shows which `window.*` globals each script exposes (▸) and consumes (◂):
+The HTML templates load one shared module script:
+
+```html
+<script type="module" src="/js/app.js?v=20260513-content-modules" data-spa-runtime></script>
+```
+
+`js/app.js` owns the frontend dependency order. The project still exposes browser runtime
+helpers through `window.*` for compatibility, but templates no longer rely on a long list
+of ordered classic scripts. The module graph is intentionally incremental and keeps the
+current vanilla JS files as side-effect imports:
 
 ```
   font-loader.js
@@ -397,16 +415,16 @@ following graph shows which `window.*` globals each script exposes (▸) and con
     ▸ window.SPARouter
 ```
 
-Page-specific scripts (`notion-api.js`, `bookmark.js`, `blog-page.js`, `post-page.js`,
-`index-page.js`) are loaded after the runtime set and may safely reference any of the
+Page modules (`notion-api.js`, `bookmark.js`, `index-page.js`, `blog-page.js`, and
+`post-page.js`) are imported after the runtime set and may safely reference any of the
 globals listed above.
 
 `notion-content-utils.js` must load before `notion-content-url.js` and `notion-content.js`
 because URL helpers and the renderer use the extracted origin, schema, property lookup,
 escaping, and search-text helpers in both browser and CommonJS runtimes.
 
-`spa-router.js` MUST be loaded **last** among the runtime scripts because it initializes
-link interception immediately on load and depends on all preceding globals.
+`spa-router.js` is imported after runtime helpers because it initializes link interception
+immediately on load and depends on preceding globals.
 
 `spa-router.js` keeps canonical URLs in the address bar, but can load `/post.html?id=...` as a compatibility fallback when a server returns `404` for `/posts/:id`. On local dev origins such as `127.0.0.1` and `localhost`, it loads that static post template first because the local static server does not rewrite `/posts/:id`. Route changes use the v1.6-style whole-page opacity/transform cadence with a short 150ms visual exit cue, then suppress nested first-load animations after the swap so the transition reads as one calm page movement. Same-path hash-only changes are intentionally passed through to native browser handling; `blog-page.js` owns the `hashchange` flow for `/blog.html#bookmarks`. If a route remains in its exit state too long, the router falls back to a local-compatible full navigation instead of leaving the page transparent or non-clickable.
 
@@ -435,15 +453,16 @@ Cover images and fallback layers set `pointer-events: none`; the full-card link 
 
 ## 10. Server Content Layer
 
-`server/notion-server.js` handles:
+`server/notion-server.js` is now a compatibility export layer. Focused modules own the
+actual behavior:
 
-- Database metadata, Notion request orchestration, and schema resolution.
-- Public content access policy.
-- Post list querying, filtering, search, and pagination.
-- Single post fetching.
-- Recursive block fetching with concurrency limits.
-- SSR article content and structured data preparation.
-- Notion error classification by resource type.
+- `server/notion-client.js` owns Notion HTTP requests, request timeouts, token/database id lookup, site-origin fallback, and wrapped Notion error metadata.
+- `server/notion-schema.js` owns Notion content property candidate overrides, schema resolution, list sorting, and category prefilters.
+- `server/public-policy.js` owns the database-wide public access policy and page-public assertions.
+- `server/post-service.js` owns public post listing, filtering, pagination, search, metadata loading, detail loading, and post payload construction.
+- `server/block-service.js` owns recursive block fetching with pagination and child-fetch concurrency limits.
+- `server/cache-store.js` owns reusable TTL slots, LRU TTL caches, single-flight loading, and pending request maps.
+- `server/render-service.js` owns SSR post HTML rendering, canonical post URLs, and article structured data preparation.
 
 `server/notion-config.js` owns environment and site-origin normalization, checked-in
 `site.config.json` loading, Notion path-id encoding, numeric env parsing, and the shared
@@ -553,7 +572,7 @@ Category navigation is Notion-driven. The server reads the resolved `Category` /
 - `image-proxy.mjs` for `/api/image` SSRF, MIME, size, redirect, and method checks.
 - `public-content-notion.mjs` for public error mapping and server-side Notion data behavior.
 - `routing-vercel.mjs` for disabled legacy proxy, robots, sitemap, and Vercel header rules.
-- `server-modules.mjs` for Notion server configuration and category navigation boundaries.
+- `server-modules.mjs` for Notion server module boundaries, configuration, category navigation, and cache helpers.
 - `visual-regression.mjs` for real-browser screenshot checks outside the default smoke suite.
 - `notion-live-check.mjs` for optional live Notion database integration checks when `NOTION_TOKEN` and `NOTION_DATABASE_ID` are available.
 

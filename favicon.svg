@@ -1,33 +1,47 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
   <title id="title">Share Everything</title>
   <defs>
-    <linearGradient id="upper" x1="88" y1="420" x2="424" y2="80" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#b32cff" />
-      <stop offset="0.34" stop-color="#ff4081" />
-      <stop offset="0.66" stop-color="#ff6f3d" />
-      <stop offset="1" stop-color="#ffd43b" />
+    <linearGradient id="upper" x1="80" y1="420" x2="432" y2="92" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8a2be2" />
+      <stop offset="0.32" stop-color="#ff4081" />
+      <stop offset="0.66" stop-color="#ff7a3d" />
+      <stop offset="1" stop-color="#ffe066" />
     </linearGradient>
-    <linearGradient id="lower" x1="96" y1="160" x2="416" y2="440" gradientUnits="userSpaceOnUse">
+    <linearGradient id="lower" x1="80" y1="164" x2="432" y2="430" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#ff4081" />
-      <stop offset="0.34" stop-color="#8a2be2" />
-      <stop offset="0.66" stop-color="#20d6ff" />
+      <stop offset="0.36" stop-color="#7c4dff" />
+      <stop offset="0.72" stop-color="#00d5ff" />
       <stop offset="1" stop-color="#9be64a" />
     </linearGradient>
+    <linearGradient id="spark" x1="164" y1="116" x2="348" y2="396" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.95" />
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.1" />
+    </linearGradient>
   </defs>
+  <circle cx="256" cy="256" r="232" fill="#080a16" />
   <path
-    d="M256 62 446 420H66L256 62Z"
+    d="M256 70 438 408H74L256 70Z"
     fill="none"
     stroke="url(#upper)"
-    stroke-width="48"
+    stroke-width="44"
     stroke-linejoin="round"
     stroke-linecap="round"
   />
   <path
-    d="M66 166h380L256 450 66 166Z"
+    d="M74 162h364L256 442 74 162Z"
     fill="none"
     stroke="url(#lower)"
-    stroke-width="48"
+    stroke-width="44"
     stroke-linejoin="round"
     stroke-linecap="round"
+  />
+  <path
+    d="M256 166 328 292H184L256 166Z"
+    fill="none"
+    stroke="url(#spark)"
+    stroke-width="24"
+    stroke-linejoin="round"
+    stroke-linecap="round"
+    opacity="0.82"
   />
 </svg>

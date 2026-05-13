@@ -1,10 +1,16 @@
 {
   "name": "share-everything",
-  "version": "4.3.0",
+  "version": "4.4.0",
   "type": "commonjs",
-  "private": true,
+  "private": false,
   "license": "MIT",
   "description": "Share Everything — 探索、记录、分享",
+  "keywords": [
+    "notion",
+    "blog",
+    "vercel",
+    "vanilla-js"
+  ],
   "engines": {
     "node": ">=18"
   },
@@ -12,6 +18,8 @@
     "check": "node scripts/smoke-check.mjs",
     "dev": "node scripts/local-server.mjs",
     "notion:live-check": "node scripts/notion-live-check.mjs",
+    "test": "npm run check",
+    "verify": "npm run verify:release",
     "visual:check": "node scripts/visual-regression.mjs",
     "verify:release": "node scripts/release-check.mjs"
   }

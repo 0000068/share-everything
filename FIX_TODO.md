@@ -239,7 +239,7 @@
   - 影响：后续发布时减少漏改 `?v=...` 的维护风险。
   - 2026-05-12 复查：`index.html`、`blog.html`、`post.html` 与 `scripts/smoke-check.mjs` 都使用同一套静态资源版本指纹；当前可用，但后续换版本需要多处同步。
   - 2026-05-12 本轮完成：`scripts/smoke-check.mjs` 已把当前版本收敛为 `assetVersionValue`，并扫描三个 HTML 的 `/css`、`/js` 资源，要求所有静态资源只使用同一个 `?v=` 值；若出现多套版本或漏同步，检查会失败。后续如需彻底免手改，可再引入构建期替换。
-  - 2026-05-13 本轮补充：移动端 UI 修复后，静态资源版本指纹推进到 `v=20260513-mobile-pc-hero`，确保移动浏览器不会继续复用旧 CSS。
+  - 2026-05-13 本轮补充：移动端 UI 修复后，静态资源版本指纹推进到 `v=20260513-content-modules`，确保移动浏览器不会继续复用旧 CSS。
   - 相关文件：`index.html`、`blog.html`、`post.html`、`scripts/smoke-check.mjs`
 
 - [x] 将 `post.html` 中 `#postEmpty` 链接的内联样式迁移到 class。

@@ -41,6 +41,7 @@ import {
   "js/blog-page.js",
   "js/bookmark.js",
   "js/font-loader.js",
+  "js/app.js",
   "js/index-page.js",
   "js/notion-content-shared.js",
   "js/notion-content-utils.js",
@@ -65,6 +66,13 @@ import {
   "server/security-policy.js",
   "server/notion-config.js",
   "server/category-navigation.js",
+  "server/cache-store.js",
+  "server/notion-client.js",
+  "server/notion-schema.js",
+  "server/public-policy.js",
+  "server/block-service.js",
+  "server/post-service.js",
+  "server/render-service.js",
   "server/notion-server.js",
 ].forEach(checkSyntax);
 const indexHtml = read("index.html");
@@ -92,6 +100,7 @@ const blogPageJs = read("js/blog-page.js");
 const runtimeCoreJs = read("js/runtime-core.js");
 const spaRouterJs = read("js/spa-router.js");
 const bookmarkJs = read("js/bookmark.js");
+const appJs = read("js/app.js");
 const indexPageJs = read("js/index-page.js");
 const notionContentSharedJs = read("js/notion-content-shared.js");
 const notionContentUtilsJs = read("js/notion-content-utils.js");
@@ -125,6 +134,13 @@ const apiSitemapJs = read("api/sitemap.js");
 const publicContentJs = read("server/public-content.js");
 const serverNotionConfigJs = read("server/notion-config.js");
 const serverCategoryNavigationJs = read("server/category-navigation.js");
+const serverCacheStoreJs = read("server/cache-store.js");
+const serverNotionClientJs = read("server/notion-client.js");
+const serverNotionSchemaJs = read("server/notion-schema.js");
+const serverPublicPolicyJs = read("server/public-policy.js");
+const serverBlockServiceJs = read("server/block-service.js");
+const serverPostServiceJs = read("server/post-service.js");
+const serverRenderServiceJs = read("server/render-service.js");
 const serverNotionJs = read("server/notion-server.js");
 const notionContentSharedHelpers = loadCommonJsModule("js/notion-content-shared.js");
 const notionContentUtilsHelpers = loadCommonJsModule("js/notion-content-utils.js");
@@ -240,17 +256,24 @@ assert.deepEqual(
 );
 assert.ok(!existsSync("robots.txt"), "robots.txt should be served dynamically through /api/robots");
 assert.equal(siteConfig.siteUrl, configuredSiteOrigin, "site.config.json siteUrl should be a normalized origin without a trailing slash");
-expectIncludes(serverNotionJs, "readConfiguredSiteOrigin(SITE_CONFIG)", "server site origin fallback should read site.config.json");
+expectIncludes(serverNotionClientJs, "readConfiguredSiteOrigin(SITE_CONFIG)", "server site origin fallback should read site.config.json");
 expectNotIncludes(serverNotionJs, "0000068.xyz", "server site origin fallback should not duplicate the production domain literal");
 runServerModuleChecks({
   assert,
   expectIncludes,
   expectNotIncludes,
+  serverBlockServiceJs,
+  serverCacheStoreJs,
   serverCategoryNavigationHelpers,
   serverCategoryNavigationJs,
+  serverNotionClientJs,
   serverNotionConfigHelpers,
   serverNotionConfigJs,
   serverNotionJs,
+  serverNotionSchemaJs,
+  serverPostServiceJs,
+  serverPublicPolicyJs,
+  serverRenderServiceJs,
   siteArchitectureMd,
 });
 [
@@ -261,7 +284,7 @@ runServerModuleChecks({
   const expectedUrl = `${configuredSiteOrigin}${routePath}`;
   expectIncludes(htmlSource, `content="${expectedUrl}"`, `${label} should keep fallback og:url in sync with site.config.json`);
   expectIncludes(htmlSource, `href="${expectedUrl}"`, `${label} should keep fallback canonical in sync with site.config.json`);
-  expectIncludes(htmlSource, `content="${configuredSiteOrigin}/favicon.png?v=3"`, `${label} should keep fallback og:image in sync with site.config.json`);
+  expectIncludes(htmlSource, `content="${configuredSiteOrigin}/favicon.png?v=4"`, `${label} should keep fallback og:image in sync with site.config.json`);
 });
 
 expectIncludes(indexHtml, 'property="og:image"', "index.html should declare og:image");
@@ -272,11 +295,14 @@ expectIncludes(postHtml, 'property="og:image"', "post.html should declare og:ima
   ["blog.html", blogHtml],
   ["post.html", postHtml],
 ].forEach(([label, htmlSource]) => {
-  expectIncludes(htmlSource, 'type="image/svg+xml" href="/favicon.svg?v=1"', `${label} should prefer the crisp SVG favicon`);
-  expectIncludes(htmlSource, 'type="image/png" href="/favicon.png?v=3"', `${label} should retain the PNG favicon fallback`);
+  expectIncludes(htmlSource, 'type="image/svg+xml" href="/favicon.svg?v=2"', `${label} should prefer the crisp SVG favicon`);
+  expectIncludes(htmlSource, 'type="image/png" href="/favicon.png?v=4"', `${label} should retain the PNG favicon fallback`);
 });
 expectIncludes(faviconSvg, "<svg", "favicon.svg should be a vector favicon for crisp browser scaling");
+expectNotIncludes(faviconSvg, "<image", "favicon.svg should not wrap raster image data");
+expectNotIncludes(faviconSvg, "data:image", "favicon.svg should not inline a raster data URL");
 expectNotIncludes(faviconSvg, "filter=", "favicon.svg should avoid fuzzy filter edges");
+assert.ok(faviconSvg.length < 10_000, "favicon.svg should stay a compact vector asset");
 expectIncludes(indexHtml, 'id="heroSearchForm"', "index.html should expose a real search form");
 expectIncludes(indexHtml, 'action="/blog.html"', "index.html search should degrade to a real blog route");
 expectIncludes(indexHtml, 'method="get"', "index.html search should work without JavaScript");
@@ -284,7 +310,7 @@ expectIncludes(postHtml, 'rel="canonical"', "post.html should declare a fallback
 expectIncludes(postHtml, 'href="/blog.html"', "post.html should use root-relative blog links for canonical post routes");
 expectIncludes(postHtml, 'class="empty-state-helper"', "post.html should keep empty-state helper styling in CSS classes");
 expectIncludes(postHtml, 'class="empty-state-link"', "post.html should keep empty-state link styling in CSS classes");
-expectIncludes(postHtml, `src="/js/post-page.js?${assetVersion}"`, "post.html should use cache-busted root-relative scripts for canonical post routes");
+expectIncludes(postHtml, `type="module" src="/js/app.js?${assetVersion}"`, "post.html should use the shared module entry for canonical post routes");
 expectIncludes(postHtml, 'id="postStatus"', "post.html should expose a live status region for post interactions");
 expectIncludes(blogHtml, 'href="/"', "blog.html should point the home action to the canonical root route");
 expectIncludes(postHtml, 'href="/"', "post.html should point the home action to the canonical root route");
@@ -322,20 +348,6 @@ assert.equal(
   1,
   "static CSS/JS assets should not carry multiple cache-busting versions",
 );
-const sharedRuntimeScriptSources = [
-  `/js/font-loader.js?${assetVersion}`,
-  `/js/notion-content-shared.js?${assetVersion}`,
-  `/js/notion-content-utils.js?${assetVersion}`,
-  `/js/notion-content-url.js?${assetVersion}`,
-  `/js/notion-article-renderer.js?${assetVersion}`,
-  `/js/notion-content.js?${assetVersion}`,
-  `/js/runtime-core.js?${assetVersion}`,
-  `/js/site-utils.js?${assetVersion}`,
-  `/js/common.js?${assetVersion}`,
-  `/js/ui-effects.js?${assetVersion}`,
-  `/js/seo-meta.js?${assetVersion}`,
-  `/js/spa-router.js?${assetVersion}`,
-];
 const expectedStaticContentSecurityPolicy = securityPolicyHelpers.buildStaticContentSecurityPolicy();
 pageHtmlByLabel.forEach(([label, htmlSource]) => {
   assert.equal(
@@ -344,25 +356,40 @@ pageHtmlByLabel.forEach(([label, htmlSource]) => {
     `${label} static CSP meta should match the shared security policy builder`,
   );
 
-  sharedRuntimeScriptSources.forEach((src) => {
-    expectIncludes(
-      htmlSource,
-      `src="${src}" data-spa-runtime`,
-      `${label} should mark ${src} as a shared SPA runtime script`,
-    );
-  });
-  [
-    `/js/notion-content-shared.js?${assetVersion}`,
-    `/js/notion-content-utils.js?${assetVersion}`,
-    `/js/notion-content-url.js?${assetVersion}`,
-    `/js/notion-article-renderer.js?${assetVersion}`,
-    `/js/notion-content.js?${assetVersion}`,
-  ].reduce((previousIndex, src) => {
-    const nextIndex = htmlSource.indexOf(src);
-    assert.ok(nextIndex > previousIndex, `${label} should load ${src} in content dependency order`);
-    return nextIndex;
-  }, -1);
+  expectIncludes(
+    htmlSource,
+    `<script type="module" src="/js/app.js?${assetVersion}" data-spa-runtime></script>`,
+    `${label} should load the shared SPA runtime through one ES module entry`,
+  );
+  assert.equal(
+    Array.from(htmlSource.matchAll(/<script\b[^>]*\bsrc="\/js\//g)).length,
+    1,
+    `${label} should avoid HTML script-order dependencies by using the module entry`,
+  );
 });
+[
+  "./font-loader.js",
+  "./notion-content-shared.js",
+  "./notion-content-utils.js",
+  "./notion-content-url.js",
+  "./notion-article-renderer.js",
+  "./notion-content.js",
+  "./runtime-core.js",
+  "./site-utils.js",
+  "./common.js",
+  "./ui-effects.js",
+  "./seo-meta.js",
+  "./spa-router.js",
+  "./notion-api.js",
+  "./bookmark.js",
+  "./index-page.js",
+  "./blog-page.js",
+  "./post-page.js",
+].reduce((previousIndex, src) => {
+  const nextIndex = appJs.indexOf(`import "${src}";`);
+  assert.ok(nextIndex > previousIndex, `app.js should import ${src} after its dependencies`);
+  return nextIndex;
+}, -1);
 expectNoMalformedClosingTags(indexHtml, "index.html should not contain malformed closing tags");
 expectNoMalformedClosingTags(blogHtml, "blog.html should not contain malformed closing tags");
 expectNoMalformedClosingTags(postHtml, "post.html should not contain malformed closing tags");
@@ -460,7 +487,7 @@ expectIncludes(packageJson, '"dev": "node scripts/local-server.mjs"', "package s
 expectIncludes(packageJson, '"notion:live-check": "node scripts/notion-live-check.mjs"', "package scripts should expose the optional live Notion integration check");
 expectIncludes(packageJson, '"visual:check": "node scripts/visual-regression.mjs"', "package scripts should expose the browser visual regression check");
 expectIncludes(packageJson, '"license": "MIT"', "package metadata should match the published README license");
-expectIncludes(packageJson, '"version": "4.3.0"', "package version should match the next release commit");
+expectIncludes(packageJson, '"version": "4.4.0"', "package version should match the next release commit");
 expectIncludes(localServerJs, '["/api/robots", require("../api/robots.js")]', "local server should expose the dynamic robots handler");
 expectIncludes(localServerJs, 'url.pathname === "/robots.txt"', "local server should map robots.txt to the dynamic handler");
 expectIncludes(localServerJs, "VISUAL_REGRESSION_STATIC_TEMPLATES", "local server should expose static templates only for visual regression");
@@ -471,11 +498,11 @@ expectIncludes(visualRegressionJs, "desktop particles should remain animated", "
 expectIncludes(visualRegressionJs, "mobile home particles should be disabled", "visual regression should guard mobile home particle removal");
 expectIncludes(visualRegressionJs, "mobile blog bookmark button should compute to 26px width", "visual regression should guard mobile card bookmark sizing");
 expectIncludes(visualRegressionJs, "mobile post top dock should stay hidden", "visual regression should guard mobile article dock visibility");
-expectIncludes(readmeMd, "badge/version-4.3.0", "README badge should match package version");
+expectIncludes(readmeMd, "badge/version-4.4.0", "README badge should match package version");
 expectIncludes(readmeMd, "npm.cmd run visual:check", "README should document the browser visual regression check");
 expectIncludes(readmeMd, "VISUAL_STRICT=1", "README should document strict visual regression mode");
-expectIncludes(siteArchitectureMd, "> Version: v4.3", "architecture docs should match the next release commit");
-expectIncludes(siteArchitectureMd, "Version v4.3 Highlights", "architecture docs should describe the current release");
+expectIncludes(siteArchitectureMd, "> Version: v4.4", "architecture docs should match the next release commit");
+expectIncludes(siteArchitectureMd, "Version v4.4 Highlights", "architecture docs should describe the current release");
 expectIncludes(readmeMd, "SITE_URL=https://your-domain.example", "README should use the same SITE_URL placeholder as .env.example");
 expectIncludes(readmeMd, "IMAGE_PROXY_TIMEOUT_MS=10000", "README should document image proxy timeout tuning");
 expectIncludes(readmeMd, "IMAGE_PROXY_MAX_BYTES=8388608", "README should document image proxy size tuning");
@@ -1043,7 +1070,7 @@ const sharedArticleStructuredData = notionContentHelpers.buildArticleStructuredD
   tags: ["Alpha", "Beta"],
 }, {
   canonicalUrl: "https://example.com/posts/post-1",
-  defaultShareImageUrl: "https://example.com/favicon.png?v=3",
+  defaultShareImageUrl: "https://example.com/favicon.png?v=4",
   baseOrigin: "https://example.com",
 });
 assert.equal(
@@ -1464,14 +1491,14 @@ try {
 <meta property="og:description" content="Same description" />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://example.com/post.html" />
-<meta property="og:image" content="https://example.com/favicon.png?v=3" />
+<meta property="og:image" content="https://example.com/favicon.png?v=4" />
 <meta property="og:image:alt" content="Share Everything" />
 <link rel="canonical" href="https://example.com/post.html" />
 </head></html>`, {
     title: "Same title",
     description: "Same description",
     url: "https://example.com/post.html",
-    image: "https://example.com/favicon.png?v=3",
+    image: "https://example.com/favicon.png?v=4",
     imageAlt: "Share Everything",
     canonicalUrl: "https://example.com/post.html",
     robots: "",
@@ -1558,8 +1585,15 @@ await runPublicContentAndNotionChecks({
   publicContentHelpers,
   publicContentJs,
   readmeMd,
+  serverBlockServiceJs,
+  serverCacheStoreJs,
+  serverNotionClientJs,
   serverNotionHelpers,
   serverNotionJs,
+  serverNotionSchemaJs,
+  serverPostServiceJs,
+  serverPublicPolicyJs,
+  serverRenderServiceJs,
   withEnvOverrides,
 });
 await runRoutingAndVercelChecks({

@@ -7,7 +7,7 @@
     const buildArticleStructuredData = typeof sharedContent.buildArticleStructuredData === "function"
       ? sharedContent.buildArticleStructuredData
       : null;
-    const defaultShareImageUrl = new URL("favicon.png?v=3", window.location.origin).href;
+    const defaultShareImageUrl = new URL("favicon.png?v=4", window.location.origin).href;
     const skeletonEl = document.getElementById("postSkeleton");
     const contentEl = document.getElementById("postContent");
     const emptyEl = document.getElementById("postEmpty");

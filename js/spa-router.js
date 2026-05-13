@@ -17,7 +17,7 @@
   const focusSpaContent = typeof window.focusSpaContent === "function"
     ? window.focusSpaContent
     : () => null;
-  const DEFAULT_OG_IMAGE_URL = new URL("favicon.png?v=3", window.location.origin).href;
+  const DEFAULT_OG_IMAGE_URL = new URL("favicon.png?v=4", window.location.origin).href;
   const DEFAULT_OG_IMAGE_ALT = "Share Everything";
   const connectionInfo =
     navigator.connection ||

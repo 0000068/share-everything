@@ -7,7 +7,7 @@
 <p align="center">
   <b>探索 · 记录 · 分享</b>
   <br />
-  一个以 Notion 为内容源、零框架依赖的高性能博客系统
+  一个基于 Notion + Vercel 的轻量个人博客模板（beta）
 </p>
 
 <p align="center">
@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-4.3.0-00e5ff?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/version-4.4.0-00e5ff?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/deploy-Vercel-000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel" />
   <img src="https://img.shields.io/badge/CMS-Notion-000?style=flat-square&logo=notion&logoColor=white" alt="Notion" />
@@ -37,7 +37,7 @@
 - ✏️ **在 Notion 里写文章**，放进配置好的公开数据库就上线
 - ⚡ **零构建步骤**，没有 React/Vue/Next.js，纯 HTML + CSS + JS
 - 🖥️ **SSR + SPA 混合**，首屏服务端渲染，后续导航丝滑无刷新
-- 🔒 **生产级安全**，CSP nonce、SSRF 防护、XSS 白名单过滤
+- 🔒 **面向公开部署的安全基线**，CSP nonce、SSRF 防护、XSS 白名单过滤
 - 📱 **极致移动端体验**，首页极轻粒子，列表和文章页移动端静态背景优先阅读
 
 ---
@@ -133,12 +133,20 @@ Notion Database
 │   ├── sitemap.js          站点地图生成
 │   └── notion.js           已禁用的旧代理 (410)
 ├── server/
-│   ├── notion-server.js    Notion 通信、缓存、查询编排
+│   ├── notion-server.js    服务端兼容导出层
+│   ├── notion-client.js    Notion 请求、超时、错误包装
+│   ├── notion-schema.js    属性名推断、schema 解析
+│   ├── public-policy.js    公开访问策略
+│   ├── post-service.js     列表、单篇、分页、搜索
+│   ├── block-service.js    递归 block 获取
+│   ├── cache-store.js      TTL / LRU / pending request
+│   ├── render-service.js   SSR HTML 与结构化数据
 │   ├── notion-config.js    环境变量、站点 URL、并发工具
 │   ├── category-navigation.js  Notion 分类导航与展示映射
 │   ├── security-policy.js  CSP 策略构建器
 │   └── public-content.js   错误处理、输入验证
 ├── js/
+│   ├── app.js              ES module 入口，按依赖顺序加载前端模块
 │   ├── runtime-core.js     页面生命周期、进度条、焦点管理
 │   ├── spa-router.js       SPA 路由、预取、过渡动画
 │   ├── notion-content-shared.js  分类常量与默认展示令牌
@@ -167,6 +175,10 @@ Notion Database
 ```
 
 ---
+
+## 项目状态
+
+当前定位是 **early open-source / beta** 的个人博客模板，适合愿意自己配置 Notion 数据库、Vercel 环境变量和公开内容边界的个人用户。它不是 fork 即用、适合所有人的生产级框架；请先在自己的 Notion 数据库和部署环境里跑通检查。
 
 ## 快速开始
 

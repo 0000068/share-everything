@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
+import { spawnSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
@@ -14,39 +16,93 @@ function read(relativePath) {
 }
 
 function checkSyntax(relativePath) {
-  new vm.Script(read(relativePath), {
+  const source = read(relativePath);
+  if (/^\s*(?:import|export)\s/m.test(source)) {
+    const result = spawnSync(process.execPath, ["--input-type=module", "--check"], {
+      input: source,
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr || `${relativePath} should have valid module syntax`);
+    return;
+  }
+
+  new vm.Script(source, {
     filename: relativePath,
   });
 }
 
 function loadCommonJsModule(relativePath, exportedNames = [], sandboxOverrides = {}) {
-  const filename = fileURLToPath(new URL(relativePath, root));
-  const module = { exports: {} };
-  const appendedExports = exportedNames.length > 0
-    ? `\nmodule.exports.__test = { ${exportedNames.join(", ")} };`
-    : "";
+  const rootPath = fileURLToPath(root);
+  const moduleCache = new Map();
 
-  vm.runInNewContext(`${read(relativePath)}${appendedExports}`, {
-    module,
-    exports: module.exports,
-    require: createRequire(new URL(relativePath, root)),
-    __dirname: fileURLToPath(new URL(".", new URL(relativePath, root))),
-    __filename: filename,
-    process,
-    console,
-    Buffer,
-    AbortController,
-    URL,
-    URLSearchParams,
-    fetch,
-    setTimeout,
-    clearTimeout,
-    ...sandboxOverrides,
-  }, {
-    filename,
-  });
+  function toProjectPath(filename) {
+    const relative = path.relative(rootPath, filename);
+    if (relative.startsWith("..") || path.isAbsolute(relative)) {
+      return null;
+    }
+    return relative.replace(/\\/g, "/");
+  }
 
-  return module.exports;
+  function createSandboxRequire(parentRelativePath) {
+    const nativeRequire = createRequire(new URL(parentRelativePath, root));
+
+    return function sandboxRequire(specifier) {
+      const resolved = nativeRequire.resolve(specifier);
+      const projectPath = toProjectPath(resolved);
+      if (!projectPath) {
+        return nativeRequire(specifier);
+      }
+
+      if (projectPath.endsWith(".json")) {
+        return JSON.parse(readFileSync(resolved, "utf8"));
+      }
+
+      if (!projectPath.endsWith(".js") && !projectPath.endsWith(".cjs")) {
+        return nativeRequire(specifier);
+      }
+
+      return loadProjectModule(projectPath);
+    };
+  }
+
+  function loadProjectModule(projectPath, extraExportNames = []) {
+    const normalizedPath = projectPath.replace(/\\/g, "/");
+    const cachedModule = moduleCache.get(normalizedPath);
+    if (cachedModule) {
+      return cachedModule.exports;
+    }
+
+    const filename = fileURLToPath(new URL(normalizedPath, root));
+    const module = { exports: {} };
+    moduleCache.set(normalizedPath, module);
+    const appendedExports = extraExportNames.length > 0
+      ? `\nmodule.exports.__test = { ${extraExportNames.join(", ")} };`
+      : "";
+
+    vm.runInNewContext(`${read(normalizedPath)}${appendedExports}`, {
+      module,
+      exports: module.exports,
+      require: createSandboxRequire(normalizedPath),
+      __dirname: fileURLToPath(new URL(".", new URL(normalizedPath, root))),
+      __filename: filename,
+      process,
+      console,
+      Buffer,
+      AbortController,
+      URL,
+      URLSearchParams,
+      fetch,
+      setTimeout,
+      clearTimeout,
+      ...sandboxOverrides,
+    }, {
+      filename,
+    });
+
+    return module.exports;
+  }
+
+  return loadProjectModule(relativePath, exportedNames);
 }
 
 function withEnvOverrides(overrides, callback) {

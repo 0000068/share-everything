@@ -9,8 +9,15 @@ export async function runPublicContentAndNotionChecks(context) {
     publicContentHelpers,
     publicContentJs,
     readmeMd,
+    serverBlockServiceJs,
+    serverCacheStoreJs,
+    serverNotionClientJs,
     serverNotionHelpers,
     serverNotionJs,
+    serverNotionSchemaJs,
+    serverPostServiceJs,
+    serverPublicPolicyJs,
+    serverRenderServiceJs,
     withEnvOverrides,
   } = context;
 
@@ -117,36 +124,37 @@ assert.equal(
   false,
   "public content helper should not expose upstream error details by default",
 );
-expectIncludes(serverNotionJs, "queryPublicPages", "server notion layer should expose a filtered public page query helper");
-expectIncludes(serverNotionJs, "queryPublicPosts", "server notion layer should provide a public post query helper");
-expectIncludes(serverNotionJs, "getNotionResourceType", "server notion layer should annotate upstream errors with the Notion resource type");
-expectIncludes(serverNotionJs, "PUBLIC_PAGE_SUMMARY_CACHE_TTL_MS", "server notion layer should define a short-lived public summary cache");
-expectIncludes(serverNotionJs, "buildContentSchema", "server notion layer should derive content property mappings from database metadata");
-expectIncludes(serverNotionJs, "buildDatabaseSorts", "server notion layer should derive list sorting from the resolved schema");
-expectIncludes(serverNotionJs, "normalizePostQueryFilters", "server notion layer should normalize category and search inputs before querying");
-expectIncludes(serverNotionJs, "PUBLIC_SEARCH_QUERY_MAX_LENGTH", "server notion layer should cap public search query input length");
-expectIncludes(serverNotionJs, "normalizeSiteOrigin", "server notion layer should validate SITE_URL before generating public URLs");
-expectIncludes(serverNotionJs, "includeSearchText: true", "server notion layer should precompute public post search text when mapping Notion pages");
-expectIncludes(serverNotionJs, "hasPostQueryFilters", "server notion layer should detect when filtered queries need extra work");
-expectIncludes(serverNotionJs, "NOTION_REQUEST_TIMEOUT_MS", "server notion layer should define a request timeout for upstream calls");
-expectIncludes(serverNotionJs, "AbortController", "server notion layer should abort slow Notion requests");
-expectIncludes(serverNotionJs, "runWithBlockChildConcurrency", "server notion layer should limit recursive block child fetch concurrency");
-expectIncludes(serverNotionJs, "buildDatabaseWidePublicAccessPolicy", "server notion layer should keep v2.5-compatible database-wide public mode");
+expectIncludes(serverPostServiceJs, "queryPublicPages", "post service should expose a filtered public page query helper");
+expectIncludes(serverPostServiceJs, "queryPublicPosts", "post service should provide a public post query helper");
+expectIncludes(serverNotionClientJs, "getNotionResourceType", "notion client should annotate upstream errors with the Notion resource type");
+expectIncludes(serverPostServiceJs, "PUBLIC_PAGE_SUMMARY_CACHE_TTL_MS", "post service should define a short-lived public summary cache");
+expectIncludes(serverNotionSchemaJs, "buildContentSchema", "schema service should derive content property mappings from database metadata");
+expectIncludes(serverNotionSchemaJs, "buildDatabaseSorts", "schema service should derive list sorting from the resolved schema");
+expectIncludes(serverPostServiceJs, "normalizePostQueryFilters", "post service should normalize category and search inputs before querying");
+expectIncludes(serverPostServiceJs, "PUBLIC_SEARCH_QUERY_MAX_LENGTH", "post service should cap public search query input length");
+expectIncludes(serverNotionClientJs, "normalizeSiteOrigin", "notion client should validate SITE_URL before generating public URLs");
+expectIncludes(serverPostServiceJs, "includeSearchText: true", "post service should precompute public post search text when mapping Notion pages");
+expectIncludes(serverPostServiceJs, "hasPostQueryFilters", "post service should detect when filtered queries need extra work");
+expectIncludes(serverNotionClientJs, "NOTION_REQUEST_TIMEOUT_MS", "notion client should define a request timeout for upstream calls");
+expectIncludes(serverNotionClientJs, "AbortController", "notion client should abort slow Notion requests");
+expectIncludes(serverBlockServiceJs, "runWithBlockChildConcurrency", "block service should limit recursive block child fetch concurrency");
+expectIncludes(serverPublicPolicyJs, "buildDatabaseWidePublicAccessPolicy", "public policy should keep v2.5-compatible database-wide public mode");
 expectNotIncludes(
-  serverNotionJs,
+  serverPublicPolicyJs,
   "buildPublicAccessPolicyFromDatabase(database)",
-  "server notion layer should not pass unused database metadata to the database-wide public policy builder",
+  "public policy should not pass unused database metadata to the database-wide public policy builder",
 );
-expectNotIncludes(serverNotionJs, "findPropertyEntriesByCandidates", "server notion layer should not inspect public visibility properties in database-wide public mode");
-expectNotIncludes(serverNotionJs, "NOTION_PUBLIC_PROPERTY_NAME", "server notion layer should ignore public visibility property env vars in database-wide public mode");
-expectNotIncludes(serverNotionJs, "NOTION_PUBLIC_STATUS_VALUES", "server notion layer should ignore public status env vars in database-wide public mode");
-expectNotIncludes(serverNotionJs, "NOTION_ALLOW_DATABASE_WIDE_PUBLIC_ACCESS", "server notion layer should not require opt-in for database-wide public mode");
-expectIncludes(serverNotionJs, 'require("../js/notion-content")', "server notion layer should reuse the shared notion content helpers");
-expectIncludes(serverNotionJs, "buildSharedArticleStructuredData", "server notion layer should delegate article structured data to the shared content helper");
-expectIncludes(serverNotionJs, "resolveNotionContentSchema", "server notion layer should resolve renamed content properties from database metadata");
-expectIncludes(serverNotionJs, "renderPostContent", "server notion layer should render SSR post HTML without duplicating it in API payloads");
-expectNotIncludes(serverNotionJs, "buildSearchFilter", "server notion layer should not delegate search semantics to upstream filters that behave differently from local search");
-expectNotIncludes(serverNotionJs, 'category === "閸忋劑鍎?', "server notion layer should not compare against a mojibake category label");
+expectNotIncludes(serverPublicPolicyJs, "findPropertyEntriesByCandidates", "public policy should not inspect public visibility properties in database-wide public mode");
+expectNotIncludes(serverPublicPolicyJs, "NOTION_PUBLIC_PROPERTY_NAME", "public policy should ignore public visibility property env vars in database-wide public mode");
+expectNotIncludes(serverPublicPolicyJs, "NOTION_PUBLIC_STATUS_VALUES", "public policy should ignore public status env vars in database-wide public mode");
+expectNotIncludes(serverPublicPolicyJs, "NOTION_ALLOW_DATABASE_WIDE_PUBLIC_ACCESS", "public policy should not require opt-in for database-wide public mode");
+expectIncludes(serverPostServiceJs, 'require("../js/notion-content")', "post service should reuse the shared notion content helpers");
+expectIncludes(serverRenderServiceJs, "buildSharedArticleStructuredData", "render service should delegate article structured data to the shared content helper");
+expectIncludes(serverNotionSchemaJs, "resolveNotionContentSchema", "schema service should resolve renamed content properties from database metadata");
+expectIncludes(serverRenderServiceJs, "renderPostContent", "render service should render SSR post HTML without duplicating it in API payloads");
+expectIncludes(serverCacheStoreJs, "createPendingRequestMap", "cache store should centralize pending request de-duplication");
+expectNotIncludes(serverPostServiceJs, "buildSearchFilter", "post service should not delegate search semantics to upstream filters that behave differently from local search");
+expectNotIncludes(serverPostServiceJs, 'category === "閸忋劑鍎?', "post service should not compare against a mojibake category label");
 const resolvedContentSchema = serverNotionHelpers.buildContentSchema({
   properties: {
     Title: { id: "title", name: "Title", type: "title" },

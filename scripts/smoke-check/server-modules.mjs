@@ -3,19 +3,35 @@ export function runServerModuleChecks(context) {
     assert,
     expectIncludes,
     expectNotIncludes,
+    serverBlockServiceJs,
+    serverCacheStoreJs,
     serverCategoryNavigationHelpers,
     serverCategoryNavigationJs,
+    serverNotionClientJs,
     serverNotionConfigHelpers,
     serverNotionConfigJs,
     serverNotionJs,
+    serverNotionSchemaJs,
+    serverPostServiceJs,
+    serverPublicPolicyJs,
+    serverRenderServiceJs,
     siteArchitectureMd,
   } = context;
 
-  expectIncludes(serverNotionJs, 'require("./notion-config")', "Notion server should import shared configuration helpers");
-  expectIncludes(serverNotionJs, 'require("./category-navigation")', "Notion server should import focused category navigation helpers");
+  expectIncludes(serverNotionJs, 'require("./notion-client")', "Notion server should re-export the focused client helpers");
+  expectIncludes(serverNotionJs, 'require("./post-service")', "Notion server should re-export the focused post service helpers");
+  expectIncludes(serverNotionJs, 'require("./render-service")', "Notion server should re-export the focused render helpers");
   expectNotIncludes(serverNotionJs, 'require("node:fs")', "Notion server should leave filesystem config reads to notion-config.js");
   expectNotIncludes(serverNotionJs, "function normalizeSiteOrigin", "Notion server should not keep site-origin normalization inline");
   expectNotIncludes(serverNotionJs, "function createCategoryNavigation", "Notion server should not keep category navigation assembly inline");
+  expectIncludes(serverNotionClientJs, 'require("./notion-config")', "notion-client.js should import shared configuration helpers");
+  expectIncludes(serverPostServiceJs, 'require("./category-navigation")', "post-service.js should import focused category navigation helpers");
+  expectIncludes(serverNotionSchemaJs, "function buildContentSchema", "notion-schema.js should own content schema resolution");
+  expectIncludes(serverPublicPolicyJs, "function buildPublicAccessPolicyFromDatabase", "public-policy.js should own public access policy assembly");
+  expectIncludes(serverPostServiceJs, "function queryPublicPosts", "post-service.js should own public list and pagination behavior");
+  expectIncludes(serverBlockServiceJs, "function fetchAllBlockChildren", "block-service.js should own recursive block loading");
+  expectIncludes(serverCacheStoreJs, "function createLruTtlCache", "cache-store.js should own reusable TTL/LRU caches");
+  expectIncludes(serverRenderServiceJs, "function buildArticleStructuredData", "render-service.js should own SSR structured data helpers");
   expectIncludes(serverNotionConfigJs, "function normalizeSiteOrigin", "notion-config.js should own site-origin normalization");
   expectIncludes(serverNotionConfigJs, "function createAsyncLimiter", "notion-config.js should own the async concurrency limiter");
   expectIncludes(serverCategoryNavigationJs, 'require("../js/notion-content-shared")', "category-navigation.js should import lightweight shared content constants");
@@ -25,6 +41,8 @@ export function runServerModuleChecks(context) {
   expectIncludes(serverCategoryNavigationJs, "function readCategorySelectOptions", "category-navigation.js should own Notion select option extraction");
   expectIncludes(siteArchitectureMd, "`server/notion-config.js` owns environment and site-origin normalization", "architecture docs should describe the server configuration split");
   expectIncludes(siteArchitectureMd, "`server/category-navigation.js` owns Notion-driven category presentation", "architecture docs should describe the server category split");
+  expectIncludes(siteArchitectureMd, "`server/notion-client.js` owns Notion HTTP requests", "architecture docs should describe the Notion client split");
+  expectIncludes(siteArchitectureMd, "`server/post-service.js` owns public post listing, filtering, pagination", "architecture docs should describe the post service split");
 
   assert.equal(
     serverNotionConfigHelpers.normalizeSiteOrigin("https://user:pass@example.com/blog/?preview=1#top"),
