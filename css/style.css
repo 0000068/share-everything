@@ -662,15 +662,18 @@ body.has-cursor-glow .cursor-glow {
     word-break: normal;
     position: relative;
     top: 0;
-    font-size: 2.55rem;
+    font-size: 2.62rem;
     line-height: 1;
     letter-spacing: 0;
-    background: linear-gradient(100deg, #7ffcff 0%, #55d8ff 42%, #837aff 68%, #e040fb 100%);
-    background-size: 100% auto;
+    background: linear-gradient(100deg, #8affff 0%, #25e4ff 27%, #5fa7ff 51%, #9b76ff 72%, #f238e6 100%);
+    background-size: 110% auto;
     background-position: center;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+    filter:
+      drop-shadow(0 0 24px rgba(0, 229, 255, 0.22))
+      drop-shadow(0 0 46px rgba(224, 64, 251, 0.16));
     animation: fadeInUp 0.9s var(--transition-smooth) 0.25s both;
   }
 
@@ -1030,15 +1033,18 @@ html.is-mobile-device-viewport .hero-title {
   word-break: normal;
   position: relative;
   top: 0;
-  font-size: 2.55rem;
+  font-size: 2.62rem;
   line-height: 1;
   letter-spacing: 0;
-  background: linear-gradient(100deg, #7ffcff 0%, #55d8ff 42%, #837aff 68%, #e040fb 100%);
-  background-size: 100% auto;
+  background: linear-gradient(100deg, #8affff 0%, #25e4ff 27%, #5fa7ff 51%, #9b76ff 72%, #f238e6 100%);
+  background-size: 110% auto;
   background-position: center;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  filter:
+    drop-shadow(0 0 24px rgba(0, 229, 255, 0.22))
+    drop-shadow(0 0 46px rgba(224, 64, 251, 0.16));
   animation: fadeInUp 0.9s var(--transition-smooth) 0.25s both;
 }
 
@@ -1109,6 +1115,7 @@ html.is-mobile-device-viewport .btn-tooltip {
   html.is-mobile-device-viewport .hero-title {
     top: 0;
     font-size: 2.62rem;
+    letter-spacing: 0;
   }
 
   html.is-mobile-device-viewport .hero-search {

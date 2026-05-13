@@ -51,7 +51,7 @@
 - [x] 修复 Brave/vivo 继续显示旧 UI 的缓存与移动端 gate 兼容问题。
   - 当前现象：Chrome/Safari 已正常，但 Brave/vivo 仍显示文章页顶部 dock、按钮文字被挤成竖排、长 URL 横向撑出正文。
   - 根因：HTML 会重新验证，但 CSS/JS 是未指纹路径并带有 `stale-while-revalidate` 缓存；旧移动浏览器可能继续使用旧 `style.css`/`post-page.css`。另一个触发点是部分 Android 浏览器对 `hover/pointer` 媒体查询返回不一致。
-  - 修复方向：静态 CSS/JS 链接加 `?v=20260512-mobile-compat` 版本指纹；`site-utils.js` 在触屏窄视口下同步 `html.is-mobile-device-viewport`，CSS 和 JS 以这个 class 作为等价移动端 fallback。
+  - 修复方向：静态 CSS/JS 链接加版本指纹；`site-utils.js` 在触屏窄视口下同步 `html.is-mobile-device-viewport`，CSS 和 JS 以这个 class 作为等价移动端 fallback。
   - 相关文件：`index.html`、`blog.html`、`post.html`、`css/style.css`、`css/blog-page.css`、`css/post-page.css`、`js/site-utils.js`、`js/blog-page.js`、`js/post-page.js`
 
 - [x] 修复 Codex/Windows 启动本地服务时 `cmd /c start /b ... > log` 卡死的问题。
@@ -148,7 +148,8 @@
   - 覆盖：移动首页、移动博客列表双列方卡、移动文章页无 dock、PC 首页粒子不变。
   - 2026-05-12 已做：内置浏览器复核 `390x844` 首页标题单行、博客移动端无粒子且筛选小标签正常、文章移动端无 dock/空态首屏显示、桌面首页粒子正常；仍建议后续补自动截图回归。
   - 2026-05-12 本轮补充：再次用内置浏览器复核 `390x844` 首页、博客页和文章空态，并用 `1280x720` 首页双截图差异确认 PC 粒子仍动态；当前仍缺可重复运行的自动截图脚本。
-  - 相关文件：`scripts/smoke-check.mjs` 或新增视觉检查脚本。
+  - 2026-05-13 继续优化：新增 `scripts/smoke-check/mobile-layout.mjs`，把移动端首页标题渐变、单行标题、博客卡片小标签高度、标题/收藏同排等关键规则纳入 `npm.cmd run check`；这能防止本次 UI 回归再次静默出现，但仍不等同于真实截图 diff。
+  - 相关文件：`scripts/smoke-check.mjs`、`scripts/smoke-check/mobile-layout.mjs` 或新增视觉检查脚本。
 
 ## P3 性能、文档与整洁项
 
@@ -230,8 +231,9 @@
 
 - [x] 为静态资源版本指纹增加一致性护栏。
   - 影响：后续发布时减少漏改 `?v=...` 的维护风险。
-  - 2026-05-12 复查：`index.html`、`blog.html`、`post.html` 与 `scripts/smoke-check.mjs` 都使用 `v=20260512-mobile-compat`；当前可用，但后续换版本需要多处同步。
+  - 2026-05-12 复查：`index.html`、`blog.html`、`post.html` 与 `scripts/smoke-check.mjs` 都使用同一套静态资源版本指纹；当前可用，但后续换版本需要多处同步。
   - 2026-05-12 本轮完成：`scripts/smoke-check.mjs` 已把当前版本收敛为 `assetVersionValue`，并扫描三个 HTML 的 `/css`、`/js` 资源，要求所有静态资源只使用同一个 `?v=` 值；若出现多套版本或漏同步，检查会失败。后续如需彻底免手改，可再引入构建期替换。
+  - 2026-05-13 本轮补充：移动端 UI 修复后，静态资源版本指纹推进到 `v=20260513-mobile-ui-fix`，确保移动浏览器不会继续复用旧 CSS。
   - 相关文件：`index.html`、`blog.html`、`post.html`、`scripts/smoke-check.mjs`
 
 - [x] 将 `post.html` 中 `#postEmpty` 链接的内联样式迁移到 class。

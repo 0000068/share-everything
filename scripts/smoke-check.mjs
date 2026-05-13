@@ -1,6 +1,7 @@
 import { notionBlockFixtures } from "./fixtures/notion-block-fixtures.mjs";
 import { runBlogPageChecks } from "./smoke-check/blog-page.mjs";
 import { runImageProxyChecks } from "./smoke-check/image-proxy.mjs";
+import { runMobileLayoutChecks } from "./smoke-check/mobile-layout.mjs";
 import { runNotionApiClientChecks } from "./smoke-check/notion-api-client.mjs";
 import { runPublicContentAndNotionChecks } from "./smoke-check/public-content-notion.mjs";
 import { runRoutingAndVercelChecks } from "./smoke-check/routing-vercel.mjs";
@@ -87,6 +88,7 @@ const smokeCheckModuleSources = [
   read("scripts/smoke-check/blog-page.mjs"),
   read("scripts/smoke-check/harness.mjs"),
   read("scripts/smoke-check/image-proxy.mjs"),
+  read("scripts/smoke-check/mobile-layout.mjs"),
   read("scripts/smoke-check/notion-api-client.mjs"),
   read("scripts/smoke-check/public-content-notion.mjs"),
   read("scripts/smoke-check/routing-vercel.mjs"),
@@ -139,7 +141,7 @@ const {
   "renderPostContent",
 ]);
 
-const assetVersionValue = "20260512-mobile-compat";
+const assetVersionValue = "20260513-mobile-ui-fix";
 const assetVersion = `v=${assetVersionValue}`;
 const productionDomainPattern = /0000068\.xyz/;
 const allowedProductionDomainFiles = new Set([
@@ -343,6 +345,7 @@ expectIncludes(postPageCss, "@media (max-width: 768px) and (hover: none) and (po
 expectIncludes(styleCss, 'body[data-page="post"] .top-actions', "post mobile CSS should explicitly target the article dock");
 expectIncludes(styleCss, 'html.is-mobile-device-viewport body[data-page="post"] .top-actions', "post mobile dock should also hide when the JS mobile compatibility class is active");
 expectIncludes(blogPageCss, "html.is-mobile-device-viewport .blog-grid", "blog mobile grid should also apply through the JS mobile compatibility class");
+runMobileLayoutChecks({ assert, blogPageCss, styleCss });
 expectIncludes(postPageCss, 'html.is-mobile-device-viewport body[data-page="post"] .page-transition-wrapper', "post wrapper clamp should also apply through the JS mobile compatibility class");
 expectIncludes(styleCss, "display: none;", "post mobile dock should be hidden for clean reading");
 expectIncludes(postPageCss, 'body[data-page="post"] .page-transition-wrapper', "post mobile CSS should clamp article layout wrappers to the viewport");
