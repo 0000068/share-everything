@@ -26,7 +26,7 @@ function createTtlSlot({ onExpire } = {}) {
       if (expireIfNeeded()) {
         return null;
       }
-      return entry?.value || null;
+      return entry ? entry.value : null;
     },
     set(value, expiresAt) {
       const safeExpiresAt = Number(expiresAt);
@@ -48,9 +48,9 @@ function createLruTtlCache({ maxEntries = Number.POSITIVE_INFINITY } = {}) {
 
   function pruneOverflow() {
     while (entries.size > safeMaxEntries) {
-      const oldestKey = entries.keys().next().value;
-      if (!oldestKey) break;
-      entries.delete(oldestKey);
+      const oldestKey = entries.keys().next();
+      if (oldestKey.done) break;
+      entries.delete(oldestKey.value);
     }
   }
 

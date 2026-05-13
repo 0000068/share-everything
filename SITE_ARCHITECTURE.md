@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v4.4
+> Version: v4.5
 > Updated: 2026-05-13
 
 ## 1. Overview
@@ -33,14 +33,14 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v4.4 Highlights
+## 2. Version v4.5 Highlights
 
-v4.4 packages automatic category icon de-duplication, the latest Notion content module split, the server Notion service split, the ES module frontend entry, release verification, and production-domain maintenance work while preserving the desktop UI and desktop particle behavior.
+v4.5 packages automatic category icon de-duplication, the latest Notion content module split, the server Notion service split, the ES module frontend entry, release verification, production-domain maintenance work, and the corrected approved PNG favicon path while preserving the desktop UI and desktop particle behavior.
 
-- `package.json`, README, changelog, and architecture release metadata now match the `v4.4` release commit convention.
+- `package.json`, README, changelog, and architecture release metadata now match the `v4.5` release commit convention.
 - Mobile pages now disable the particle canvas entirely after real-device frame-rate checks, while desktop home keeps the 350-particle animation.
 - Blog cover placeholders no longer render the notebook emoji; slow or failed covers fall back to quiet gradients.
-- Browser icons prefer the refreshed iridescent `favicon.svg`, with a restored `favicon.png?v=4` fallback for sharing and older clients.
+- Browser icons and share previews use the restored `favicon.png?v=4` brand artwork directly, avoiding a mismatched SVG fallback.
 - Mobile home title styling uses the same animated `title-gradient` colors as desktop, with mobile-only sizing and vertical placement.
 - Mobile blog card bookmark buttons are kept at the smaller 26px visual size so the card action does not dominate the title row.
 - `scripts/smoke-check.mjs` now enforces a single static CSS/JS `?v=` value across HTML entrypoints.
@@ -234,7 +234,7 @@ Read-only public APIs reject non-`GET` methods with `405` and `Cache-Control: no
 |---|---|
 | Static HTML and `/` | `public, max-age=0, must-revalidate` |
 | CSS and JS | `public, max-age=3600, stale-while-revalidate=86400` |
-| `favicon.svg` / `favicon.png` | `public, max-age=86400` |
+| `favicon.png` | `public, max-age=86400` |
 | Successful `/api/image` responses | `public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400` |
 | Public JSON and SSR post HTML | `no-store` |
 | Public API errors | `no-store` |
@@ -266,7 +266,6 @@ Client-side `notion-api.js` keeps a short bounded in-memory post-list response c
 |-- package.json
 |-- vercel.json
 |-- site.config.json
-|-- favicon.svg
 |-- favicon.png
 |-- SITE_ARCHITECTURE.md
 |-- api/

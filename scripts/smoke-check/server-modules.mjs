@@ -5,6 +5,7 @@ export function runServerModuleChecks(context) {
     expectNotIncludes,
     serverBlockServiceJs,
     serverCacheStoreJs,
+    serverCacheStoreHelpers,
     serverCategoryNavigationHelpers,
     serverCategoryNavigationJs,
     serverNotionClientJs,
@@ -53,6 +54,26 @@ export function runServerModuleChecks(context) {
     serverNotionConfigHelpers.normalizePositiveNumber("0", 12),
     12,
     "notion-config.js should reject non-positive numeric env overrides",
+  );
+  const ttlSlot = serverCacheStoreHelpers.createTtlSlot();
+  ttlSlot.set(0, Date.now() + 1_000);
+  assert.equal(
+    ttlSlot.get(),
+    0,
+    "cache-store.js should preserve falsy cached values until they expire",
+  );
+  const lruTtlCache = serverCacheStoreHelpers.createLruTtlCache({ maxEntries: 1 });
+  lruTtlCache.set("", "empty-key", Date.now() + 1_000);
+  lruTtlCache.set("next", "next-key", Date.now() + 1_000);
+  assert.equal(
+    lruTtlCache.get(""),
+    null,
+    "cache-store.js should evict an empty-string key when pruning LRU overflow",
+  );
+  assert.equal(
+    lruTtlCache.get("next"),
+    "next-key",
+    "cache-store.js should retain the newest entry after LRU overflow pruning",
   );
   const categoryNavigationHarness = serverCategoryNavigationHelpers.createCategoryNavigation({
     featured: {

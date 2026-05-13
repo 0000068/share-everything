@@ -8,6 +8,7 @@ import { runNotionApiClientChecks } from "./smoke-check/notion-api-client.mjs";
 import { runPublicContentAndNotionChecks } from "./smoke-check/public-content-notion.mjs";
 import { runRoutingAndVercelChecks } from "./smoke-check/routing-vercel.mjs";
 import { runServerModuleChecks } from "./smoke-check/server-modules.mjs";
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import {
@@ -89,7 +90,7 @@ const siteConfig = JSON.parse(siteConfigJson);
 const configuredSiteOrigin = normalizeConfiguredSiteOrigin(siteConfig.siteUrl);
 const vercelJson = read("vercel.json");
 const envExample = read(".env.example");
-const faviconSvg = read("favicon.svg");
+const faviconPng = readFileSync("favicon.png");
 const licenseText = read("LICENSE");
 const localServerJs = read("scripts/local-server.mjs");
 const styleCss = read("css/style.css");
@@ -149,6 +150,7 @@ const notionArticleRendererHelpers = loadCommonJsModule("js/notion-article-rende
 const notionContentHelpers = loadCommonJsModule("js/notion-content.js");
 const serverNotionConfigHelpers = loadCommonJsModule("server/notion-config.js");
 const serverCategoryNavigationHelpers = loadCommonJsModule("server/category-navigation.js");
+const serverCacheStoreHelpers = loadCommonJsModule("server/cache-store.js");
 const publicContentHelpers = loadCommonJsModule("server/public-content.js");
 const securityPolicyHelpers = loadCommonJsModule("server/security-policy.js");
 const apiNotionHandler = loadCommonJsModule("api/notion.js");
@@ -264,6 +266,7 @@ runServerModuleChecks({
   expectNotIncludes,
   serverBlockServiceJs,
   serverCacheStoreJs,
+  serverCacheStoreHelpers,
   serverCategoryNavigationHelpers,
   serverCategoryNavigationJs,
   serverNotionClientJs,
@@ -295,14 +298,21 @@ expectIncludes(postHtml, 'property="og:image"', "post.html should declare og:ima
   ["blog.html", blogHtml],
   ["post.html", postHtml],
 ].forEach(([label, htmlSource]) => {
-  expectIncludes(htmlSource, 'type="image/svg+xml" href="/favicon.svg?v=2"', `${label} should prefer the crisp SVG favicon`);
-  expectIncludes(htmlSource, 'type="image/png" href="/favicon.png?v=4"', `${label} should retain the PNG favicon fallback`);
+  expectIncludes(htmlSource, 'type="image/png" href="/favicon.png?v=4"', `${label} should use the approved PNG favicon artwork`);
+  expectNotIncludes(htmlSource, "favicon.svg", `${label} should not let a mismatched SVG favicon override the approved PNG artwork`);
 });
-expectIncludes(faviconSvg, "<svg", "favicon.svg should be a vector favicon for crisp browser scaling");
-expectNotIncludes(faviconSvg, "<image", "favicon.svg should not wrap raster image data");
-expectNotIncludes(faviconSvg, "data:image", "favicon.svg should not inline a raster data URL");
-expectNotIncludes(faviconSvg, "filter=", "favicon.svg should avoid fuzzy filter edges");
-assert.ok(faviconSvg.length < 10_000, "favicon.svg should stay a compact vector asset");
+assert.equal(
+  faviconPng.subarray(0, 8).toString("hex"),
+  "89504e470d0a1a0a",
+  "favicon.png should be a valid PNG asset",
+);
+assert.equal(faviconPng.readUInt32BE(16), 1024, "favicon.png should keep the approved 1024px source width");
+assert.equal(faviconPng.readUInt32BE(20), 1024, "favicon.png should keep the approved 1024px source height");
+assert.equal(
+  createHash("sha256").update(faviconPng).digest("hex"),
+  "048586722371a596ef02f4846dcaa2fc30d3f21853b8355e9de7fe10c40a15ba",
+  "favicon.png should match the approved brand artwork",
+);
 expectIncludes(indexHtml, 'id="heroSearchForm"', "index.html should expose a real search form");
 expectIncludes(indexHtml, 'action="/blog.html"', "index.html search should degrade to a real blog route");
 expectIncludes(indexHtml, 'method="get"', "index.html search should work without JavaScript");
@@ -487,7 +497,7 @@ expectIncludes(packageJson, '"dev": "node scripts/local-server.mjs"', "package s
 expectIncludes(packageJson, '"notion:live-check": "node scripts/notion-live-check.mjs"', "package scripts should expose the optional live Notion integration check");
 expectIncludes(packageJson, '"visual:check": "node scripts/visual-regression.mjs"', "package scripts should expose the browser visual regression check");
 expectIncludes(packageJson, '"license": "MIT"', "package metadata should match the published README license");
-expectIncludes(packageJson, '"version": "4.4.0"', "package version should match the next release commit");
+expectIncludes(packageJson, '"version": "4.5.0"', "package version should match the next release commit");
 expectIncludes(localServerJs, '["/api/robots", require("../api/robots.js")]', "local server should expose the dynamic robots handler");
 expectIncludes(localServerJs, 'url.pathname === "/robots.txt"', "local server should map robots.txt to the dynamic handler");
 expectIncludes(localServerJs, "VISUAL_REGRESSION_STATIC_TEMPLATES", "local server should expose static templates only for visual regression");
@@ -498,11 +508,11 @@ expectIncludes(visualRegressionJs, "desktop particles should remain animated", "
 expectIncludes(visualRegressionJs, "mobile home particles should be disabled", "visual regression should guard mobile home particle removal");
 expectIncludes(visualRegressionJs, "mobile blog bookmark button should compute to 26px width", "visual regression should guard mobile card bookmark sizing");
 expectIncludes(visualRegressionJs, "mobile post top dock should stay hidden", "visual regression should guard mobile article dock visibility");
-expectIncludes(readmeMd, "badge/version-4.4.0", "README badge should match package version");
+expectIncludes(readmeMd, "badge/version-4.5.0", "README badge should match package version");
 expectIncludes(readmeMd, "npm.cmd run visual:check", "README should document the browser visual regression check");
 expectIncludes(readmeMd, "VISUAL_STRICT=1", "README should document strict visual regression mode");
-expectIncludes(siteArchitectureMd, "> Version: v4.4", "architecture docs should match the next release commit");
-expectIncludes(siteArchitectureMd, "Version v4.4 Highlights", "architecture docs should describe the current release");
+expectIncludes(siteArchitectureMd, "> Version: v4.5", "architecture docs should match the next release commit");
+expectIncludes(siteArchitectureMd, "Version v4.5 Highlights", "architecture docs should describe the current release");
 expectIncludes(readmeMd, "SITE_URL=https://your-domain.example", "README should use the same SITE_URL placeholder as .env.example");
 expectIncludes(readmeMd, "IMAGE_PROXY_TIMEOUT_MS=10000", "README should document image proxy timeout tuning");
 expectIncludes(readmeMd, "IMAGE_PROXY_MAX_BYTES=8388608", "README should document image proxy size tuning");
@@ -551,7 +561,7 @@ expectIncludes(localServerJs, '[".webp", "image/webp"]', "local dev server shoul
 expectIncludes(localServerJs, '[".jpg", "image/jpeg"]', "local dev server should serve JPEG images with the correct MIME type");
 expectIncludes(localServerJs, '[".jpeg", "image/jpeg"]', "local dev server should serve JPEG images with the correct MIME type");
 expectIncludes(localServerJs, '[".ico", "image/x-icon"]', "local dev server should serve icons with the correct MIME type");
-expectIncludes(localServerJs, '[".svg", "image/svg+xml; charset=utf-8"]', "local dev server should serve SVG icons with the correct MIME type");
+expectIncludes(localServerJs, '[".svg", "image/svg+xml; charset=utf-8"]', "local dev server should serve SVG assets with the correct MIME type");
 expectIncludes(localServerJs, '[".xml", "application/xml; charset=utf-8"]', "local dev server should serve XML with the correct MIME type");
 expectIncludes(localServerJs, '[".mjs", "application/javascript; charset=utf-8"]', "local dev server should serve ESM scripts with the correct MIME type");
 expectIncludes(localServerJs, "path.relative(rootDir, filePath)", "local dev server should validate static paths by relative containment");
