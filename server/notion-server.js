@@ -895,7 +895,7 @@ function buildArticleStructuredData(post) {
 
   return buildSharedArticleStructuredData(post, {
     canonicalUrl: buildPostUrl(post.id),
-    defaultShareImageUrl: `${siteOrigin}/favicon.png?v=2`,
+    defaultShareImageUrl: `${siteOrigin}/favicon.png?v=3`,
     baseOrigin: siteOrigin,
   });
 }

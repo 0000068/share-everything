@@ -688,11 +688,11 @@
       }
       const coverHtml = safeCoverImage
         ? `<div class="blog-card-cover-placeholder blog-card-cover-img" data-cover-gradient="${esc(safeCoverGradient)}" data-cover-emoji="${safeCoverEmoji}" style="background: ${DEFAULT_COVER_GRADIENT}">
-             <span class="blog-card-cover-fallback">${safeCoverEmoji}</span>
+             <span class="blog-card-cover-fallback" aria-hidden="true"></span>
              <img src="${esc(safeCoverImage)}" alt="${safeTitle}" width="640" height="360" loading="${coverLoading}" decoding="async" fetchpriority="${coverFetchPriority}">
            </div>`
         : `<div class="blog-card-cover-placeholder" data-cover-gradient="${esc(safeCoverGradient)}" data-cover-emoji="${safeCoverEmoji}" style="background: ${safeCoverGradient}">
-             <span>${safeCoverEmoji}</span>
+             <span class="blog-card-cover-fallback" aria-hidden="true"></span>
            </div>`;
 
       return `
@@ -719,15 +719,14 @@
     function restoreCoverPlaceholder(placeholder) {
       if (!(placeholder instanceof HTMLElement)) return;
 
-      const coverEmoji = placeholder.dataset.coverEmoji || "📝";
-
       placeholder.classList.remove("blog-card-cover-img");
       placeholder.style.background = DEFAULT_COVER_GRADIENT;
       placeholder.replaceChildren();
 
-      const emoji = document.createElement("span");
-      emoji.textContent = coverEmoji;
-      placeholder.appendChild(emoji);
+      const fallback = document.createElement("span");
+      fallback.className = "blog-card-cover-fallback";
+      fallback.setAttribute("aria-hidden", "true");
+      placeholder.appendChild(fallback);
     }
 
     function renderPagination(data) {

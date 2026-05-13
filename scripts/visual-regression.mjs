@@ -768,10 +768,8 @@ async function checkMobileHome(client, viewport) {
     const ctaRect = ctas.getBoundingClientRect();
     const titleStyle = getComputedStyle(title);
     const canvasStyle = getComputedStyle(canvas);
-    const beforeCanvas = canvas.toDataURL("image/png");
 
     return new Promise((resolve) => setTimeout(() => {
-      const afterCanvas = canvas.toDataURL("image/png");
       const lineHeight = Number.parseFloat(titleStyle.lineHeight) || titleRect.height;
       resolve({
         htmlClass: document.documentElement.className,
@@ -793,9 +791,7 @@ async function checkMobileHome(client, viewport) {
         titleBackground: titleStyle.backgroundImage,
         titleLineHeight: lineHeight,
         canvasDisplay: canvasStyle.display,
-        canvasOpacity: Number.parseFloat(canvasStyle.opacity || "0"),
         canvasDisabled: canvas.dataset.particlesDisabled || "",
-        canvasChanged: beforeCanvas !== afterCanvas,
       });
     }, 650));
   })()`);
@@ -810,10 +806,8 @@ async function checkMobileHome(client, viewport) {
   assert.ok(metrics.searchRect.top > metrics.titleRect.bottom, "mobile search should sit below the title");
   assert.ok(metrics.ctaRect.top > metrics.searchRect.bottom, "mobile icon actions should sit below search");
   assert.ok(metrics.scrollWidth <= viewport.width + 1, "mobile home should not create horizontal overflow");
-  assert.equal(metrics.canvasDisplay, "block", "mobile home particles should remain visible");
-  assert.ok(metrics.canvasOpacity >= 0.7, "mobile home particles should keep visible opacity");
-  assert.equal(metrics.canvasDisabled, "false", "mobile home particles should not be disabled");
-  assert.ok(metrics.canvasChanged, "mobile home particles should animate in the browser");
+  assert.equal(metrics.canvasDisplay, "none", "mobile home particle canvas should not render");
+  assert.equal(metrics.canvasDisabled, "true", "mobile home particles should be disabled");
 }
 
 async function checkMobileBlog(client, viewport) {

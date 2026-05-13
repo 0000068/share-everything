@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Share Everything</title>
+  <defs>
+    <linearGradient id="upper" x1="88" y1="420" x2="424" y2="80" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#b32cff" />
+      <stop offset="0.34" stop-color="#ff4081" />
+      <stop offset="0.66" stop-color="#ff6f3d" />
+      <stop offset="1" stop-color="#ffd43b" />
+    </linearGradient>
+    <linearGradient id="lower" x1="96" y1="160" x2="416" y2="440" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff4081" />
+      <stop offset="0.34" stop-color="#8a2be2" />
+      <stop offset="0.66" stop-color="#20d6ff" />
+      <stop offset="1" stop-color="#9be64a" />
+    </linearGradient>
+  </defs>
+  <path
+    d="M256 62 446 420H66L256 62Z"
+    fill="none"
+    stroke="url(#upper)"
+    stroke-width="48"
+    stroke-linejoin="round"
+    stroke-linecap="round"
+  />
+  <path
+    d="M66 166h380L256 450 66 166Z"
+    fill="none"
+    stroke="url(#lower)"
+    stroke-width="48"
+    stroke-linejoin="round"
+    stroke-linecap="round"
+  />
+</svg>

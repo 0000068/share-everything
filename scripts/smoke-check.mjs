@@ -72,6 +72,7 @@ const siteConfig = JSON.parse(siteConfigJson);
 const configuredSiteOrigin = normalizeConfiguredSiteOrigin(siteConfig.siteUrl);
 const vercelJson = read("vercel.json");
 const envExample = read(".env.example");
+const faviconSvg = read("favicon.svg");
 const licenseText = read("LICENSE");
 const localServerJs = read("scripts/local-server.mjs");
 const styleCss = read("css/style.css");
@@ -222,12 +223,22 @@ expectNotIncludes(serverNotionJs, "0000068.xyz", "server site origin fallback sh
   const expectedUrl = `${configuredSiteOrigin}${routePath}`;
   expectIncludes(htmlSource, `content="${expectedUrl}"`, `${label} should keep fallback og:url in sync with site.config.json`);
   expectIncludes(htmlSource, `href="${expectedUrl}"`, `${label} should keep fallback canonical in sync with site.config.json`);
-  expectIncludes(htmlSource, `content="${configuredSiteOrigin}/favicon.png?v=2"`, `${label} should keep fallback og:image in sync with site.config.json`);
+  expectIncludes(htmlSource, `content="${configuredSiteOrigin}/favicon.png?v=3"`, `${label} should keep fallback og:image in sync with site.config.json`);
 });
 
 expectIncludes(indexHtml, 'property="og:image"', "index.html should declare og:image");
 expectIncludes(blogHtml, 'property="og:image"', "blog.html should declare og:image");
 expectIncludes(postHtml, 'property="og:image"', "post.html should declare og:image");
+[
+  ["index.html", indexHtml],
+  ["blog.html", blogHtml],
+  ["post.html", postHtml],
+].forEach(([label, htmlSource]) => {
+  expectIncludes(htmlSource, 'type="image/svg+xml" href="/favicon.svg?v=1"', `${label} should prefer the crisp SVG favicon`);
+  expectIncludes(htmlSource, 'type="image/png" href="/favicon.png?v=3"', `${label} should retain the PNG favicon fallback`);
+});
+expectIncludes(faviconSvg, "<svg", "favicon.svg should be a vector favicon for crisp browser scaling");
+expectNotIncludes(faviconSvg, "filter=", "favicon.svg should avoid fuzzy filter edges");
 expectIncludes(indexHtml, 'id="heroSearchForm"', "index.html should expose a real search form");
 expectIncludes(indexHtml, 'action="/blog.html"', "index.html search should degrade to a real blog route");
 expectIncludes(indexHtml, 'method="get"', "index.html search should work without JavaScript");
@@ -342,23 +353,21 @@ expectIncludes(blogPageJs, 'loading="${coverLoading}"', "blog cards should keep 
 expectIncludes(blogPageJs, 'fetchpriority="${coverFetchPriority}"', "blog cards should assign browser fetch priority to cover images");
 expectIncludes(blogPageJs, "preloadCoverImages(data.results)", "blog cards should preload the first visible cover images after list data arrives");
 expectIncludes(blogPageJs, "blog-card-cover-fallback", "blog cards should show a stable fallback while remote covers load");
+expectNotIncludes(blogPageJs, ">${safeCoverEmoji}</span>", "blog cover fallback should not render the notebook emoji as visible placeholder text");
 expectIncludes(blogPageCss, ".blog-card-cover-fallback", "blog card cover CSS should keep fallback art visible until the image paints");
 expectIncludes(blogPageCss, "z-index: 2;\n  border-radius: inherit;", "blog card link layer should stay above cover media");
 expectIncludes(blogPageCss, "pointer-events: none;\n}", "blog card cover media should not swallow clicks meant for the card link");
 expectIncludes(blogPageCss, "z-index: 3;\n  display: inline-flex;", "blog card bookmark button should stay above the card link layer");
 expectIncludes(commonJs, "DESKTOP_PARTICLE_COUNT = 350", "particle runtime should preserve the desktop particle density");
-expectIncludes(commonJs, "MOBILE_PARTICLE_COUNT = 120", "particle runtime should use a PC-like but capped mobile home particle density");
-expectIncludes(commonJs, "frameInterval: isMobile && !disabled ? 33 : 0", "particle runtime should cap animated mobile home particles near 30fps");
-expectNotIncludes(commonJs, "staticFrame", "particle runtime should animate mobile home particles instead of drawing a static frame");
-expectIncludes(commonJs, 'MOBILE_PARTICLE_DISABLED_PAGES = new Set(["blog", "post"])', "particle runtime should disable mobile particles on list and article pages");
-expectIncludes(commonJs, "const ParticleCtor = Particle", "particle runtime should use the desktop particle model on mobile home too");
+expectNotIncludes(commonJs, "MOBILE_PARTICLE_COUNT", "particle runtime should not keep a mobile particle profile after disabling mobile particles");
+expectIncludes(commonJs, "return isMobileParticleViewport();", "particle runtime should disable particles on all real mobile pages");
+expectIncludes(commonJs, "count: isMobile ? 0 : DESKTOP_PARTICLE_COUNT", "particle runtime should keep particles desktop-only");
 expectIncludes(commonJs, "siteUtils.isMobileDeviceViewport", "particle runtime should use the shared real-mobile gate before changing density");
 expectIncludes(commonJs, '(hover: none) and (pointer: coarse)', "particle fallback should avoid treating narrow desktop windows as mobile");
 expectNotIncludes(commonJs, "function shouldReduceMotion", "particle runtime should not stop the old particle animation for reduced-motion settings");
 expectNotIncludes(commonJs, "shouldReduceMobileParticles", "particle runtime should avoid reduced-motion gates in the particle loop");
-expectIncludes(commonJs, "if (particlesPausedForScroll)", "particle runtime should only stop animation for the explicit mobile scroll pause");
-expectIncludes(commonJs, "pauseMobileParticlesDuringScroll", "particle runtime should pause mobile particles while scrolling");
-expectIncludes(commonJs, "if (!isMobileParticleViewport()) return;", "particle runtime should keep scroll pauses mobile-only");
+expectNotIncludes(commonJs, "particlesPausedForScroll", "particle runtime should not keep mobile scroll-pause state after disabling mobile particles");
+expectNotIncludes(commonJs, "pauseMobileParticlesDuringScroll", "particle runtime should not attach mobile scroll particle work");
 expectIncludes(siteUtilsJs, 'MOBILE_DEVICE_QUERY = "(max-width: 768px) and (hover: none) and (pointer: coarse)"', "site utils should centralize the real-mobile device query");
 expectIncludes(siteUtilsJs, 'MOBILE_DEVICE_CLASS = "is-mobile-device-viewport"', "site utils should expose a JS fallback class for mobile browsers with broken pointer media queries");
 expectIncludes(siteUtilsJs, "hasTouchInput", "site utils should fall back to touch capability for Brave/vivo mobile detection");
@@ -405,7 +414,7 @@ expectIncludes(visualRegressionJs, "Page.captureScreenshot", "visual regression 
 expectIncludes(visualRegressionJs, "Emulation.setDeviceMetricsOverride", "visual regression should emulate mobile and desktop viewports");
 expectIncludes(visualRegressionJs, "is-mobile-device-viewport", "visual regression should verify the mobile compatibility class");
 expectIncludes(visualRegressionJs, "desktop particles should remain animated", "visual regression should guard desktop particle animation");
-expectIncludes(visualRegressionJs, "mobile home particles should animate", "visual regression should guard mobile home particle animation");
+expectIncludes(visualRegressionJs, "mobile home particles should be disabled", "visual regression should guard mobile home particle removal");
 expectIncludes(visualRegressionJs, "mobile blog bookmark button should compute to 26px width", "visual regression should guard mobile card bookmark sizing");
 expectIncludes(visualRegressionJs, "mobile post top dock should stay hidden", "visual regression should guard mobile article dock visibility");
 expectIncludes(readmeMd, "badge/version-4.0.0", "README badge should match package version");
@@ -462,6 +471,7 @@ expectIncludes(localServerJs, '[".webp", "image/webp"]', "local dev server shoul
 expectIncludes(localServerJs, '[".jpg", "image/jpeg"]', "local dev server should serve JPEG images with the correct MIME type");
 expectIncludes(localServerJs, '[".jpeg", "image/jpeg"]', "local dev server should serve JPEG images with the correct MIME type");
 expectIncludes(localServerJs, '[".ico", "image/x-icon"]', "local dev server should serve icons with the correct MIME type");
+expectIncludes(localServerJs, '[".svg", "image/svg+xml; charset=utf-8"]', "local dev server should serve SVG icons with the correct MIME type");
 expectIncludes(localServerJs, '[".xml", "application/xml; charset=utf-8"]', "local dev server should serve XML with the correct MIME type");
 expectIncludes(localServerJs, '[".mjs", "application/javascript; charset=utf-8"]', "local dev server should serve ESM scripts with the correct MIME type");
 expectIncludes(localServerJs, "path.relative(rootDir, filePath)", "local dev server should validate static paths by relative containment");
@@ -1004,7 +1014,7 @@ const sharedArticleStructuredData = notionContentHelpers.buildArticleStructuredD
   tags: ["Alpha", "Beta"],
 }, {
   canonicalUrl: "https://example.com/posts/post-1",
-  defaultShareImageUrl: "https://example.com/favicon.png?v=2",
+  defaultShareImageUrl: "https://example.com/favicon.png?v=3",
   baseOrigin: "https://example.com",
 });
 assert.equal(
@@ -1425,14 +1435,14 @@ try {
 <meta property="og:description" content="Same description" />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://example.com/post.html" />
-<meta property="og:image" content="https://example.com/favicon.png?v=2" />
+<meta property="og:image" content="https://example.com/favicon.png?v=3" />
 <meta property="og:image:alt" content="Share Everything" />
 <link rel="canonical" href="https://example.com/post.html" />
 </head></html>`, {
     title: "Same title",
     description: "Same description",
     url: "https://example.com/post.html",
-    image: "https://example.com/favicon.png?v=2",
+    image: "https://example.com/favicon.png?v=3",
     imageAlt: "Share Everything",
     canonicalUrl: "https://example.com/post.html",
     robots: "",

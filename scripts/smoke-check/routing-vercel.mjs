@@ -38,6 +38,7 @@ expectIncludes(vercelJson, '"/posts/:id"', "Vercel should rewrite canonical arti
 expectIncludes(vercelJson, '"/robots.txt"', "Vercel should serve a dynamic robots.txt");
 expectIncludes(vercelJson, '"/sitemap.xml"', "Vercel should serve a dynamic sitemap");
 expectIncludes(vercelJson, '"/favicon.png"', "Vercel should set cache headers for the real favicon asset");
+expectIncludes(vercelJson, '"/favicon.svg"', "Vercel should set cache headers for the SVG favicon asset");
 expectIncludes(vercelJson, "max-age=3600, stale-while-revalidate=86400", "Vercel should give versioned static scripts and styles a short browser cache");
 const parsedVercelJson = JSON.parse(vercelJson);
 const rootHeaderRule = parsedVercelJson.headers.find((entry) => entry.source === "/");

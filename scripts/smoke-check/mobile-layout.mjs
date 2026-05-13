@@ -198,10 +198,10 @@ export function runMobileLayoutChecks(context) {
   expectGradientTitle(assert, realMobileStyle, ".hero-title", "real-mobile home");
   expectGradientTitle(assert, mobileFallbackStyle, "html.is-mobile-device-viewport .hero-title", "mobile fallback home");
   expectDeclarations(assert, realMobileStyle, "#particles-canvas", {
-    "opacity": "0.78",
+    "display": "none",
   }, "real-mobile home");
   expectDeclarations(assert, mobileFallbackStyle, "html.is-mobile-device-viewport #particles-canvas", {
-    "opacity": "0.78",
+    "display": "none",
   }, "mobile fallback home");
   expectDeclarations(assert, realMobileStyle, ".hero-section", {
     "padding": "clamp(190px, 27svh, 240px) 0 48px",

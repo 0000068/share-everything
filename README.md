@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="favicon.png" width="80" alt="Share Everything" />
+  <img src="favicon.svg" width="80" alt="Share Everything" />
 </p>
 
 <h1 align="center">Share Everything</h1>
@@ -69,7 +69,7 @@
 - SPA 路由 HTML 缓存（5 分钟 / 最多 6 页）
 - 悬停 + 聚焦预取（尊重 `saveData` 和 2G 网络）
 - 服务端六层缓存体系 + 三层请求去重
-- 真实移动首页静态粒子 28 个（桌面 350 个动态粒子），列表页和文章页移动端禁用粒子，窄屏电脑不降级
+- 真实移动端禁用粒子 canvas（桌面 350 个动态粒子保留），窄屏电脑不降级
 
 ### 🔒 安全
 

@@ -38,14 +38,16 @@ Notion Database
 v4.0 packages the latest mobile hero and production-domain maintenance work while preserving the desktop UI and desktop particle behavior.
 
 - `package.json`, README, and architecture release metadata now match the `v4.0` release tag convention.
-- Mobile home now uses the desktop particle model in a capped mobile profile: 120 particles at roughly 30fps, while mobile blog and post pages still disable particles.
+- Mobile pages now disable the particle canvas entirely after real-device frame-rate checks, while desktop home keeps the 350-particle animation.
+- Blog cover placeholders no longer render the notebook emoji; slow or failed covers fall back to quiet gradients.
+- Browser icons prefer the crisp `favicon.svg`, with a refreshed `favicon.png?v=3` fallback for sharing and older clients.
 - Mobile home title styling uses the same animated `title-gradient` colors as desktop, with mobile-only sizing and vertical placement.
 - Mobile blog card bookmark buttons are kept at the smaller 26px visual size so the card action does not dominate the title row.
 - `scripts/smoke-check.mjs` now enforces a single static CSS/JS `?v=` value across HTML entrypoints.
 - Production-domain fallback references to `0000068.xyz` are centralized around `site.config.json`; `server/notion-server.js`, `/api/sitemap`, and `/api/robots` read the configured origin instead of duplicating the domain literal.
 - `/robots.txt` is served dynamically through `/api/robots` in both Vercel and the local development server.
 - Local repository residue is cleaned up: the ignored `node_modules/` folder is removed, `.local-server.pid` is ignored, and no root log files are left behind.
-- Static checks cover the mobile hero gradient, capped mobile particle profile, small card bookmark action, cache-busting asset version, dynamic robots output, and controlled production-domain hardcoding.
+- Static checks cover the mobile hero gradient, mobile particle removal, small card bookmark action, cache-busting asset version, dynamic robots output, and controlled production-domain hardcoding.
 
 ### v3.8 Highlights
 
@@ -227,7 +229,7 @@ Read-only public APIs reject non-`GET` methods with `405` and `Cache-Control: no
 |---|---|
 | Static HTML and `/` | `public, max-age=0, must-revalidate` |
 | CSS and JS | `public, max-age=3600, stale-while-revalidate=86400` |
-| `favicon.png` | `public, max-age=86400` |
+| `favicon.svg` / `favicon.png` | `public, max-age=86400` |
 | Successful `/api/image` responses | `public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400` |
 | Public JSON and SSR post HTML | `no-store` |
 | Public API errors | `no-store` |
@@ -259,6 +261,7 @@ Client-side `notion-api.js` keeps a short bounded in-memory post-list response c
 |-- package.json
 |-- vercel.json
 |-- site.config.json
+|-- favicon.svg
 |-- favicon.png
 |-- SITE_ARCHITECTURE.md
 |-- api/
@@ -432,7 +435,7 @@ For browser-level visual regression:
 npm.cmd run visual:check
 ```
 
-`scripts/visual-regression.mjs` starts the local server, launches the local Chrome or Edge executable in headless + CDP mode, captures screenshots into the system temp directory, and checks the mobile home, mobile blog, mobile post empty state, and desktop home particle/title contracts without adding third-party dependencies. Visual assertion failures are never downgraded to screenshot fallback. If the current machine cannot complete real-browser screenshots, it writes a skipped report by default; with `VISUAL_STRICT=1`, CDP contract checks must be available and any assertion failure fails the command.
+`scripts/visual-regression.mjs` starts the local server, launches the local Chrome or Edge executable in headless + CDP mode, captures screenshots into the system temp directory, and checks the mobile home, mobile blog, mobile post empty state, and desktop home particle/title contracts without adding third-party dependencies. Mobile scenarios assert that the particle canvas stays disabled, while desktop home still guards animated particles. Visual assertion failures are never downgraded to screenshot fallback. If the current machine cannot complete real-browser screenshots, it writes a skipped report by default; with `VISUAL_STRICT=1`, CDP contract checks must be available and any assertion failure fails the command.
 
 PowerShell may block `npm run check` because `npm.ps1` execution is disabled on the system, so `npm.cmd` is the reliable form on this machine.
 

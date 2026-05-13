@@ -641,7 +641,7 @@ body.has-cursor-glow .cursor-glow {
   }
 
   #particles-canvas {
-    opacity: 0.78;
+    display: none;
   }
 
   .content-layer {
@@ -997,9 +997,7 @@ body.has-cursor-glow .cursor-glow {
   }
 
   body[data-page="blog"] .glow-orb,
-  body[data-page="post"] .glow-orb,
-  body[data-page="blog"] #particles-canvas,
-  body[data-page="post"] #particles-canvas {
+  body[data-page="post"] .glow-orb {
     display: none;
   }
 
@@ -1019,7 +1017,7 @@ html.is-mobile-device-viewport .glow-orb {
 }
 
 html.is-mobile-device-viewport #particles-canvas {
-  opacity: 0.78;
+  display: none;
 }
 
 html.is-mobile-device-viewport .content-layer {
@@ -1199,8 +1197,6 @@ html.is-mobile-device-viewport body[data-page="post"] .ambient-background {
 
 html.is-mobile-device-viewport body[data-page="blog"] .glow-orb,
 html.is-mobile-device-viewport body[data-page="post"] .glow-orb,
-html.is-mobile-device-viewport body[data-page="blog"] #particles-canvas,
-html.is-mobile-device-viewport body[data-page="post"] #particles-canvas,
 html.is-mobile-device-viewport .cursor-glow {
   display: none;
 }
