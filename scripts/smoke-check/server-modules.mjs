@@ -78,4 +78,36 @@ export function runServerModuleChecks(context) {
     publicCategoriesFromSplitModule.some((category) => category.label === "\u6280\u672f"),
     "category-navigation.js should apply configured display labels to Notion categories",
   );
+
+  const repeatedColorCategoryNavigation = serverCategoryNavigationHelpers.createCategoryNavigation({
+    featured: {
+      name: "\u7cbe\u9009",
+      emoji: "\u{1f31f}",
+    },
+  });
+  const repeatedColorCategories = repeatedColorCategoryNavigation.buildPublicCategories({
+    database: {
+      properties: {
+        Category: {
+          id: "category-id",
+          name: "Category",
+          type: "select",
+          select: {
+            options: [
+              { name: "\u5de5\u5177", color: "yellow" },
+              { name: "\u6280\u672f", color: "yellow" },
+              { name: "\u6559\u7a0b", color: "yellow" },
+            ],
+          },
+        },
+      },
+    },
+    schema: { category: { id: "category-id", name: "Category", type: "select" } },
+  });
+  const repeatedColorEmojis = repeatedColorCategories.map((category) => category.emoji).filter(Boolean);
+  assert.equal(
+    new Set(repeatedColorEmojis).size,
+    repeatedColorEmojis.length,
+    "category-navigation.js should avoid duplicate automatic category icons when Notion colors repeat",
+  );
 }

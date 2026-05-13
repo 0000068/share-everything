@@ -47,6 +47,42 @@ const CATEGORY_FALLBACK_STYLES = Object.freeze([
     cardColor: Object.freeze({ bg: "rgba(255, 64, 129, 0.1)", color: "#ff4081", border: "rgba(255, 64, 129, 0.2)" }),
     gradient: "linear-gradient(135deg, #3b0a45, #6d1a7e)",
   }),
+  Object.freeze({
+    emoji: "\u{1f9ea}",
+    color: "teal",
+    cardColor: Object.freeze({ bg: "rgba(38, 198, 218, 0.1)", color: "#26c6da", border: "rgba(38, 198, 218, 0.2)" }),
+    gradient: "linear-gradient(135deg, #06333b, #0d6874)",
+  }),
+  Object.freeze({
+    emoji: "\u{1f9f0}",
+    color: "amber",
+    cardColor: Object.freeze({ bg: "rgba(255, 193, 7, 0.1)", color: "#ffc107", border: "rgba(255, 193, 7, 0.2)" }),
+    gradient: "linear-gradient(135deg, #2d2400, #725900)",
+  }),
+  Object.freeze({
+    emoji: "\u{1f4dd}",
+    color: "indigo",
+    cardColor: Object.freeze({ bg: "rgba(92, 107, 192, 0.1)", color: "#8c9eff", border: "rgba(140, 158, 255, 0.2)" }),
+    gradient: "linear-gradient(135deg, #111a44, #293a8f)",
+  }),
+  Object.freeze({
+    emoji: "\u{1f52d}",
+    color: "violet",
+    cardColor: Object.freeze({ bg: "rgba(156, 39, 176, 0.1)", color: "#ce93d8", border: "rgba(206, 147, 216, 0.2)" }),
+    gradient: "linear-gradient(135deg, #2b0a38, #5e1a7a)",
+  }),
+  Object.freeze({
+    emoji: "\u{1f3af}",
+    color: "rose",
+    cardColor: Object.freeze({ bg: "rgba(244, 67, 54, 0.1)", color: "#ff8a80", border: "rgba(255, 138, 128, 0.2)" }),
+    gradient: "linear-gradient(135deg, #3a0f16, #7a1f31)",
+  }),
+  Object.freeze({
+    emoji: "\u{1f9e9}",
+    color: "lime",
+    cardColor: Object.freeze({ bg: "rgba(174, 213, 129, 0.1)", color: "#aed581", border: "rgba(174, 213, 129, 0.2)" }),
+    gradient: "linear-gradient(135deg, #1f3310, #4c6f1f)",
+  }),
 ]);
 
 const NOTION_COLOR_STYLE_INDEX = Object.freeze({
@@ -215,15 +251,35 @@ function hashCategoryName(name) {
   ), 0);
 }
 
-function getFallbackCategoryStyle(name, notionColor = "") {
+function getFallbackCategoryStyleIndex(name, notionColor = "") {
   const colorKey = normalizeName(notionColor);
   const indexedColor = NOTION_COLOR_STYLE_INDEX[colorKey];
   if (Number.isInteger(indexedColor) && CATEGORY_FALLBACK_STYLES[indexedColor]) {
-    return CATEGORY_FALLBACK_STYLES[indexedColor];
+    return indexedColor;
   }
 
-  const index = Math.abs(hashCategoryName(name)) % CATEGORY_FALLBACK_STYLES.length;
-  return CATEGORY_FALLBACK_STYLES[index] || CATEGORY_FALLBACK_STYLES[0];
+  return Math.abs(hashCategoryName(name)) % CATEGORY_FALLBACK_STYLES.length;
+}
+
+function getFallbackCategoryStyle(name, notionColor = "") {
+  return CATEGORY_FALLBACK_STYLES[getFallbackCategoryStyleIndex(name, notionColor)] || CATEGORY_FALLBACK_STYLES[0];
+}
+
+function getUnusedFallbackCategoryEmoji(name, notionColor = "", usedEmojis = null) {
+  const firstIndex = getFallbackCategoryStyleIndex(name, notionColor);
+  const fallback = CATEGORY_FALLBACK_STYLES[firstIndex] || CATEGORY_FALLBACK_STYLES[0];
+  if (!usedEmojis || !usedEmojis.has(fallback.emoji)) {
+    return fallback.emoji;
+  }
+
+  for (let offset = 1; offset < CATEGORY_FALLBACK_STYLES.length; offset += 1) {
+    const candidate = CATEGORY_FALLBACK_STYLES[(firstIndex + offset) % CATEGORY_FALLBACK_STYLES.length];
+    if (candidate?.emoji && !usedEmojis.has(candidate.emoji)) {
+      return candidate.emoji;
+    }
+  }
+
+  return fallback.emoji;
 }
 
 function createCategoryNavigation(rawConfig = {}) {
@@ -247,17 +303,22 @@ function createCategoryNavigation(rawConfig = {}) {
     };
   }
 
-  function buildCategoryPresentation(name, { notionColor = "default", optionIndex = Number.POSITIVE_INFINITY } = {}) {
+  function buildCategoryPresentation(name, {
+    notionColor = "default",
+    optionIndex = Number.POSITIVE_INFINITY,
+    usedEmojis = null,
+  } = {}) {
     const normalizedName = normalizeCategoryName(name);
     const fallback = getFallbackCategoryStyle(normalizedName, notionColor);
     const configured = getConfiguredCategoryPresentation(normalizedName);
     const cardColor = configured.cardColor || fallback.cardColor || DEFAULT_CATEGORY_COLOR;
     const gradient = configured.gradient || fallback.gradient || DEFAULT_COVER_GRADIENT;
+    const fallbackEmoji = getUnusedFallbackCategoryEmoji(normalizedName, notionColor, usedEmojis);
 
     return {
       name: normalizedName,
       label: configured.label || normalizedName,
-      emoji: configured.emoji || fallback.emoji || "\u{1f3f7}\ufe0f",
+      emoji: configured.emoji || fallbackEmoji || "\u{1f3f7}\ufe0f",
       color: fallback.color || notionColor || "default",
       categoryColor: {
         bg: cardColor.bg || DEFAULT_CATEGORY_COLOR.bg,
@@ -304,21 +365,36 @@ function createCategoryNavigation(rawConfig = {}) {
       config.order.map((name, index) => [normalizeName(name), index]),
     );
     const featuredKey = normalizeName(config.featuredName);
-    const categoryItems = Array.from(byKey.values())
-      .map((entry) => buildCategoryPresentation(entry.name, entry))
+    const sortedCategoryEntries = Array.from(byKey.values())
+      .map((entry) => ({
+        entry,
+        presentation: buildCategoryPresentation(entry.name, entry),
+      }))
       .sort((left, right) => {
-        const leftKey = normalizeName(left.name);
-        const rightKey = normalizeName(right.name);
+        const leftKey = normalizeName(left.presentation.name);
+        const rightKey = normalizeName(right.presentation.name);
         if (leftKey === featuredKey) return -1;
         if (rightKey === featuredKey) return 1;
 
         const leftOrder = orderLookup.has(leftKey) ? orderLookup.get(leftKey) : Number.POSITIVE_INFINITY;
         const rightOrder = orderLookup.has(rightKey) ? orderLookup.get(rightKey) : Number.POSITIVE_INFINITY;
         if (leftOrder !== rightOrder) return leftOrder - rightOrder;
-        if (left.optionIndex !== right.optionIndex) return left.optionIndex - right.optionIndex;
-        return left.label.localeCompare(right.label, "zh-Hans-CN");
-      })
-      .map(({ optionIndex, ...item }) => item);
+        if (left.presentation.optionIndex !== right.presentation.optionIndex) {
+          return left.presentation.optionIndex - right.presentation.optionIndex;
+        }
+        return left.presentation.label.localeCompare(right.presentation.label, "zh-Hans-CN");
+      });
+    const usedCategoryEmojis = new Set(["\u{1f4cb}"]);
+    const categoryItems = sortedCategoryEntries.map(({ entry }) => {
+      const { optionIndex, ...item } = buildCategoryPresentation(entry.name, {
+        ...entry,
+        usedEmojis: usedCategoryEmojis,
+      });
+      if (item.emoji) {
+        usedCategoryEmojis.add(item.emoji);
+      }
+      return item;
+    });
 
     return [
       {

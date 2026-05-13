@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v4.2
+> Version: v4.3
 > Updated: 2026-05-13
 
 ## 1. Overview
@@ -33,11 +33,11 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v4.2 Highlights
+## 2. Version v4.3 Highlights
 
-v4.2 packages the latest Notion content module split, release verification, and production-domain maintenance work while preserving the desktop UI and desktop particle behavior.
+v4.3 packages automatic category icon de-duplication, the latest Notion content module split, release verification, and production-domain maintenance work while preserving the desktop UI and desktop particle behavior.
 
-- `package.json`, README, and architecture release metadata now match the `v4.2` release tag convention.
+- `package.json`, README, and architecture release metadata now match the `v4.3` release tag convention.
 - Mobile pages now disable the particle canvas entirely after real-device frame-rate checks, while desktop home keeps the 350-particle animation.
 - Blog cover placeholders no longer render the notebook emoji; slow or failed covers fall back to quiet gradients.
 - Browser icons prefer the crisp `favicon.svg`, with a refreshed `favicon.png?v=3` fallback for sharing and older clients.
