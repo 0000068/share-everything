@@ -101,8 +101,20 @@ function createLruTtlCache({ maxEntries = Number.POSITIVE_INFINITY } = {}) {
   };
 }
 
-function createSingleFlight() {
+function createSingleFlight({ errorCooldownMs = 0 } = {}) {
   let pending = null;
+  let cooledError = null;
+  let cooledErrorExpiresAt = 0;
+  const safeErrorCooldownMs = Math.max(0, Math.trunc(Number(errorCooldownMs) || 0));
+
+  function clearExpiredCooledError(now = Date.now()) {
+    if (!cooledError || now < cooledErrorExpiresAt) {
+      return;
+    }
+
+    cooledError = null;
+    cooledErrorExpiresAt = 0;
+  }
 
   return {
     get() {
@@ -113,8 +125,24 @@ function createSingleFlight() {
         return pending;
       }
 
+      clearExpiredCooledError();
+      if (cooledError) {
+        return Promise.reject(cooledError);
+      }
+
       pending = Promise.resolve()
         .then(loader)
+        .then((value) => {
+          cooledError = null;
+          cooledErrorExpiresAt = 0;
+          return value;
+        }, (error) => {
+          if (safeErrorCooldownMs > 0) {
+            cooledError = error;
+            cooledErrorExpiresAt = Date.now() + safeErrorCooldownMs;
+          }
+          throw error;
+        })
         .finally(() => {
           pending = null;
         });

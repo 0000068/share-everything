@@ -5,6 +5,8 @@
   const DEFAULT_PAGE_SIZE = 9;
   const EAGER_COVER_IMAGE_COUNT = 3;
   const MOBILE_EAGER_COVER_IMAGE_COUNT = 1;
+  const PAGINATION_SIBLING_COUNT = 2;
+  const PAGINATION_MAX_NUMBERED_BUTTONS = (PAGINATION_SIBLING_COUNT * 2) + 3;
   const FALLBACK_BOOKMARK_ONLY_CATEGORIES = Object.freeze([
     { name: BOOKMARK_CATEGORY, emoji: "📚" },
   ]);
@@ -60,9 +62,7 @@
   const MOBILE_PRELOAD_COVER_IMAGE_COUNT = 1;
 
   function buildBookmarkSearchText(post) {
-    return typeof post?._searchText === "string" && post._searchText
-      ? post._searchText
-      : buildSharedPostSearchText(post);
+    return buildSharedPostSearchText(post);
   }
 
   function buildBookmarkPageData({ bookmarkManager, search, page, pageSize, onBeforeRead } = {}) {
@@ -180,6 +180,7 @@
     let didNormalizeRoute = false;
     let hashChangeHandler = null;
     const preloadedCoverImages = new Set();
+    const preloadedCoverLinks = new Set();
     let categories = hasRemoteSource ? notionApi.getCategories() : BOOKMARK_ONLY_CATEGORIES;
     let validCategories = new Set([...categories.map((cat) => cat.name), BOOKMARK_CATEGORY]);
 
@@ -251,10 +252,6 @@
     }
 
     const pageSize = notionApi?.getPageSize?.() || DEFAULT_PAGE_SIZE;
-    if (!hasRemoteSource && !validCategories.has(currentCategory)) {
-      currentCategory = defaultCategory;
-      didNormalizeRoute = true;
-    }
     searchInput.setAttribute("aria-controls", "blogGrid");
 
     function clearCardReveal() {
@@ -482,6 +479,7 @@
     }
 
     function preloadCoverImages(posts = []) {
+      cleanupPreloadedCoverLinks();
       if (!Array.isArray(posts) || posts.length === 0) return;
 
       const preloadCount = isMobileDeviceViewport()
@@ -499,12 +497,29 @@
         link.href = coverImage;
         link.fetchPriority = "high";
         link.setAttribute("fetchpriority", "high");
+        link.dataset.blogCoverPreload = "true";
+        link.setAttribute("data-blog-cover-preload", "true");
+        preloadedCoverLinks.add(link);
         document.head?.appendChild(link);
       });
     }
 
+    function cleanupPreloadedCoverLinks() {
+      const links = new Set(preloadedCoverLinks);
+      document.head?.querySelectorAll?.('link[data-blog-cover-preload="true"]').forEach((link) => {
+        links.add(link);
+      });
+
+      links.forEach((link) => {
+        link.remove?.();
+      });
+      preloadedCoverLinks.clear();
+      preloadedCoverImages.clear();
+    }
+
     function showEmptyState(options = {}) {
       clearCardReveal();
+      cleanupPreloadedCoverLinks();
       setGridBusy(false);
       gridEl.innerHTML = "";
       emptyEl.innerHTML = renderEmptyStateMarkup(options);
@@ -779,16 +794,77 @@
       placeholder.appendChild(fallback);
     }
 
+    function buildPaginationPages(currentPageValue, totalPagesValue) {
+      if (totalPagesValue <= PAGINATION_MAX_NUMBERED_BUTTONS) {
+        return Array.from({ length: totalPagesValue }, (_, index) => index + 1);
+      }
+
+      const innerLastPage = totalPagesValue - 1;
+      const windowSize = (PAGINATION_SIBLING_COUNT * 2) + 1;
+      let windowStart = Math.max(2, currentPageValue - PAGINATION_SIBLING_COUNT);
+      let windowEnd = Math.min(innerLastPage, currentPageValue + PAGINATION_SIBLING_COUNT);
+      const visibleWindowSize = windowEnd - windowStart + 1;
+
+      if (visibleWindowSize < windowSize) {
+        const missingPages = windowSize - visibleWindowSize;
+        if (windowStart === 2) {
+          windowEnd = Math.min(innerLastPage, windowEnd + missingPages);
+        } else if (windowEnd === innerLastPage) {
+          windowStart = Math.max(2, windowStart - missingPages);
+        }
+      }
+
+      const pages = [1];
+      for (let page = windowStart; page <= windowEnd; page += 1) {
+        pages.push(page);
+      }
+      pages.push(totalPagesValue);
+
+      return [...new Set(pages)].sort((left, right) => left - right);
+    }
+
+    function renderPaginationNavButton({ direction, page, disabled }) {
+      const label = direction === "previous" ? "上一页" : "下一页";
+      const symbol = direction === "previous" ? "&lsaquo;" : "&rsaquo;";
+      const disabledAttributes = disabled ? ' disabled aria-disabled="true"' : "";
+      return `<button type="button" class="page-btn page-btn-nav page-btn-${direction}" data-page="${page}" aria-label="${label}" title="${label}"${disabledAttributes}>${symbol}</button>`;
+    }
+
+    function renderPaginationPageButton(page, currentPageValue) {
+      const isCurrentPage = page === currentPageValue;
+      return `<button type="button" class="page-btn${isCurrentPage ? " active" : ""}" data-page="${page}" aria-label="第 ${page} 页"${isCurrentPage ? ' aria-current="page"' : ""}>${page}</button>`;
+    }
+
     function renderPagination(data) {
-      if (data.totalPages <= 1) {
+      const totalPages = normalizeListingPage(data.totalPages);
+      const dataCurrentPage = normalizeListingPage(data.currentPage);
+      const currentPageValue = Math.min(dataCurrentPage, totalPages);
+      if (totalPages <= 1) {
         paginationEl.innerHTML = "";
         return;
       }
 
-      let html = "";
-      for (let i = 1; i <= data.totalPages; i++) {
-        html += `<button type="button" class="page-btn${i === data.currentPage ? " active" : ""}" data-page="${i}">${i}</button>`;
+      const pages = buildPaginationPages(currentPageValue, totalPages);
+      let html = renderPaginationNavButton({
+        direction: "previous",
+        page: Math.max(1, currentPageValue - 1),
+        disabled: currentPageValue <= 1,
+      });
+      let previousPage = 0;
+
+      for (const page of pages) {
+        if (previousPage > 0 && page - previousPage > 1) {
+          html += '<span class="pagination-ellipsis" aria-hidden="true">&hellip;</span>';
+        }
+        html += renderPaginationPageButton(page, currentPageValue);
+        previousPage = page;
       }
+
+      html += renderPaginationNavButton({
+        direction: "next",
+        page: Math.min(totalPages, currentPageValue + 1),
+        disabled: currentPageValue >= totalPages,
+      });
       paginationEl.innerHTML = html;
     }
 
@@ -882,8 +958,12 @@
     function handlePaginationClick(event) {
       const button = event.target.closest(".page-btn");
       if (!button || !paginationEl.contains(button)) return;
+      if (button.disabled) return;
 
-      currentPage = parseInt(button.dataset.page || "1", 10) || 1;
+      const nextPage = normalizeListingPage(button.dataset.page, currentPage);
+      if (nextPage === currentPage) return;
+
+      currentPage = nextPage;
       syncListingUrl(HISTORY_MODE_PUSH);
       renderPosts();
       window.scrollTo({ top: 0, behavior: "auto" });
@@ -929,6 +1009,35 @@
       if (!nowBookmarked && isBookmarkView()) {
         setTimeout(() => renderPosts(), 300);
       }
+    }
+
+    function syncBookmarkButton(button) {
+      const postId = button.dataset.bookmarkId;
+      if (!postId) return;
+
+      const isBookmarked = bookmarkManager.isBookmarked(postId);
+      const postTitle = button.dataset.bookmarkTitle || "Untitled";
+      const bookmarkAriaLabel = `${isBookmarked ? "取消收藏" : "收藏"}文章：${postTitle}`;
+
+      button.classList.toggle("bookmarked", isBookmarked);
+      button.title = isBookmarked ? "取消收藏" : "收藏";
+      button.setAttribute("aria-pressed", isBookmarked ? "true" : "false");
+      button.setAttribute("aria-label", bookmarkAriaLabel);
+    }
+
+    function syncRenderedBookmarkButtons() {
+      gridEl.querySelectorAll(".card-bookmark-btn").forEach(syncBookmarkButton);
+    }
+
+    function handleBookmarksUpdated() {
+      if (isDisposed) return;
+
+      if (isBookmarkView()) {
+        renderPosts();
+        return;
+      }
+
+      syncRenderedBookmarkButtons();
     }
 
     function handleGridMediaError(event) {
@@ -1015,6 +1124,7 @@
     gridEl.addEventListener("error", handleGridMediaError, true);
     emptyEl.addEventListener("click", handleEmptyStateClick);
     topActionsEl?.addEventListener("click", handleTopActionsClick);
+    window.addEventListener?.("bookmarks:updated", handleBookmarksUpdated);
     bindBookmarkHashNavigation();
 
     renderPosts();
@@ -1031,10 +1141,12 @@
       gridEl.removeEventListener("error", handleGridMediaError, true);
       emptyEl.removeEventListener("click", handleEmptyStateClick);
       topActionsEl?.removeEventListener("click", handleTopActionsClick);
+      window.removeEventListener?.("bookmarks:updated", handleBookmarksUpdated);
       if (hashChangeHandler) {
         window.removeEventListener("hashchange", hashChangeHandler);
         hashChangeHandler = null;
       }
+      cleanupPreloadedCoverLinks();
       clearStatusAnnouncement();
       setGridBusy(false);
       if (statusEl) statusEl.textContent = "";

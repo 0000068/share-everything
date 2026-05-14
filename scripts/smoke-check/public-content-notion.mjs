@@ -111,8 +111,37 @@ publicContentHelpers.applyPublicErrorHeaders({
 });
 assert.equal(
   JSON.stringify(publicErrorHeaders),
-  JSON.stringify([["Retry-After", "30"]]),
-  "public content helper should forward Retry-After headers for rate-limited upstream responses",
+  JSON.stringify([["Cache-Control", "no-store"], ["Retry-After", "30"]]),
+  "public content helper should keep public errors non-cacheable while forwarding Retry-After",
+);
+const serverErrorLogs = [];
+const originalConsoleError = console.error;
+console.error = (...args) => {
+  serverErrorLogs.push(args);
+};
+try {
+  publicContentHelpers.logServerError("Public route failed", {
+    message: "Upstream failed",
+    status: 429,
+    code: "notion_request_error",
+    notionCode: "rate_limited",
+    stack: "internal stack should stay out of logs",
+  });
+} finally {
+  console.error = originalConsoleError;
+}
+assert.equal(
+  JSON.stringify(serverErrorLogs),
+  JSON.stringify([[
+    "Public route failed:",
+    {
+      message: "Upstream failed",
+      status: 429,
+      code: "notion_request_error",
+      notionCode: "rate_limited",
+    },
+  ]]),
+  "public content helper should log only sanitized server error fields",
 );
 const sanitizedPublicError = publicContentHelpers.serializePublicError({
   code: "notion_config_error",
@@ -853,6 +882,230 @@ assert.equal(
   invalidMetadataFetchCounts.database,
   2,
   "server notion layer should fall back to the default database metadata TTL when the env value is invalid",
+);
+const vercelTimerStarts = [];
+const vercelPostService = loadCommonJsModule("server/post-service.js", [], {
+  process: {
+    env: {
+      ...process.env,
+      VERCEL: "1",
+    },
+  },
+  setInterval() {
+    vercelTimerStarts.push("started");
+    return { unref() {} };
+  },
+});
+assert.equal(
+  vercelTimerStarts.length,
+  0,
+  "post service should not start a background cache sweep interval inside Vercel serverless functions",
+);
+assert.equal(
+  vercelPostService.shouldStartCacheSweepTimer(),
+  false,
+  "post service should report cache sweep timers as disabled in Vercel",
+);
+const localTimerStarts = [];
+const localTimerEnv = { ...process.env };
+delete localTimerEnv.VERCEL;
+const localPostService = loadCommonJsModule("server/post-service.js", [], {
+  process: {
+    env: localTimerEnv,
+  },
+  setInterval(_callback, intervalMs) {
+    localTimerStarts.push(intervalMs);
+    return {
+      unref() {
+        localTimerStarts.push("unref");
+      },
+    };
+  },
+});
+assert.equal(
+  localTimerStarts[0],
+  localPostService.CACHE_SWEEP_INTERVAL_MS,
+  "post service should still start cache sweeping in long-lived local/server runtimes",
+);
+assert.equal(
+  localTimerStarts[1],
+  "unref",
+  "post service should keep the local cache sweep interval from pinning the process",
+);
+
+const blockBudgetRequests = [];
+const blockBudgetWarnings = [];
+const blockBudgetService = loadCommonJsModule("server/block-service.js", [], {
+  process: {
+    env: {
+      ...process.env,
+      NOTION_TOKEN: "test-token",
+      NOTION_DATABASE_ID: "block-budget-database",
+      NOTION_BLOCK_CHILD_CONCURRENCY: "1",
+      NOTION_BLOCK_TOTAL_LIMIT: "3",
+    },
+  },
+  console: {
+    ...console,
+    warn(message, ...args) {
+      blockBudgetWarnings.push([message, ...args].join(" "));
+    },
+  },
+  fetch: async (url) => {
+    const requestUrl = String(url);
+    blockBudgetRequests.push(requestUrl);
+
+    if (requestUrl.includes("/blocks/deep-root/children?")) {
+      return createJsonResponse({
+        results: [
+          { id: "child-a", type: "toggle", has_children: true },
+          { id: "child-b", type: "toggle", has_children: true },
+        ],
+        has_more: false,
+        next_cursor: null,
+      });
+    }
+
+    if (requestUrl.includes("/blocks/child-a/children?")) {
+      return createJsonResponse({
+        results: [
+          { id: "grandchild-a", type: "paragraph", has_children: false },
+          { id: "grandchild-b", type: "paragraph", has_children: false },
+        ],
+        has_more: false,
+        next_cursor: null,
+      });
+    }
+
+    throw new Error(`Unexpected Notion request during block budget test: ${requestUrl}`);
+  },
+});
+const budgetedBlocks = await blockBudgetService.fetchAllBlockChildren("deep-root");
+assert.equal(
+  blockBudgetService.NOTION_BLOCK_TOTAL_LIMIT,
+  3,
+  "block service should read the configured total block budget",
+);
+assert.equal(
+  budgetedBlocks.length,
+  2,
+  "block service should keep root blocks already inside the total budget",
+);
+assert.equal(
+  budgetedBlocks[0].children.length,
+  1,
+  "block service should truncate nested children when the total block budget is exhausted",
+);
+assert.equal(
+  budgetedBlocks[1].children,
+  undefined,
+  "block service should stop descending into sibling children after the budget is exhausted",
+);
+assert.equal(
+  blockBudgetRequests.some((requestUrl) => requestUrl.includes("/blocks/child-b/children?")),
+  false,
+  "block service should avoid fetching more nested child trees once the total block budget is exhausted",
+);
+assert.ok(
+  blockBudgetWarnings.some((message) => message.includes("total block budget (3) exhausted")),
+  "block service should warn when the total block budget truncates a deep Notion page",
+);
+
+let singleFlightCooldownNow = 50_000;
+class SingleFlightCooldownDate extends Date {
+  static now() {
+    return singleFlightCooldownNow;
+  }
+}
+const singleFlightCooldownFetchCounts = {
+  database: 0,
+  query: 0,
+};
+const singleFlightCooldownServerNotion = loadCommonJsModule("server/notion-server.js", [], {
+  Date: SingleFlightCooldownDate,
+  process: {
+    env: {
+      ...process.env,
+      NOTION_TOKEN: "test-token",
+      NOTION_DATABASE_ID: "single-flight-cooldown-database",
+      NOTION_SINGLE_FLIGHT_ERROR_COOLDOWN_MS: "1000",
+      SITE_URL: "https://example.com",
+      VERCEL: "1",
+    },
+  },
+  fetch: async (url) => {
+    const requestUrl = String(url);
+
+    if (requestUrl.endsWith("/databases/single-flight-cooldown-database")) {
+      singleFlightCooldownFetchCounts.database += 1;
+      if (singleFlightCooldownNow < 51_001) {
+        return createJsonResponse({
+          message: "Rate limited",
+          code: "rate_limited",
+        }, {
+          status: 429,
+          headers: { "retry-after": "1" },
+        });
+      }
+
+      return createJsonResponse({
+        properties: {
+          Name: { id: "title", name: "Name", type: "title" },
+        },
+      });
+    }
+
+    if (requestUrl.endsWith("/databases/single-flight-cooldown-database/query")) {
+      singleFlightCooldownFetchCounts.query += 1;
+      return createJsonResponse({
+        results: [],
+        has_more: false,
+        next_cursor: null,
+      });
+    }
+
+    throw new Error(`Unexpected Notion request during single-flight cooldown test: ${requestUrl}`);
+  },
+});
+await assert.rejects(
+  () => singleFlightCooldownServerNotion.queryPublicPosts(),
+  (error) => {
+    assert.equal(error?.status, 429);
+    assert.equal(error?.notionCode, "rate_limited");
+    return true;
+  },
+  "server notion layer should surface the first upstream rate-limit error",
+);
+await assert.rejects(
+  () => singleFlightCooldownServerNotion.queryPublicPosts(),
+  (error) => {
+    assert.equal(error?.status, 429);
+    assert.equal(error?.notionCode, "rate_limited");
+    return true;
+  },
+  "server notion layer should reuse the cooled single-flight error inside the cooldown window",
+);
+assert.equal(
+  singleFlightCooldownFetchCounts.database,
+  1,
+  "server notion layer should avoid hammering Notion while a single-flight error cooldown is active",
+);
+singleFlightCooldownNow = 51_001;
+const recoveredCooldownQuery = await singleFlightCooldownServerNotion.queryPublicPosts();
+assert.equal(
+  singleFlightCooldownFetchCounts.database,
+  2,
+  "server notion layer should retry Notion after the single-flight error cooldown expires",
+);
+assert.equal(
+  singleFlightCooldownFetchCounts.query,
+  1,
+  "server notion layer should continue the public list query after metadata recovers",
+);
+assert.equal(
+  recoveredCooldownQuery.total,
+  0,
+  "server notion layer should return the recovered empty post list after a cooled rate-limit error",
 );
 assert.ok(
   !serverNotionJs.includes("鍔″繀鍚屾鏇存柊 js/notion-api.js"),

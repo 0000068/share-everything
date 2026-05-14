@@ -84,7 +84,7 @@ async function requestNotionJson(path, init = {}) {
 
   let response;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), normalizePositiveNumber(NOTION_REQUEST_TIMEOUT_MS, 12_000));
+  const timeoutId = setTimeout(() => controller.abort(), NOTION_REQUEST_TIMEOUT_MS);
 
   try {
     response = await fetch(`${NOTION_BASE}${path}`, {

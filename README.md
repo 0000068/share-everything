@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-4.5.0-00e5ff?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/version-4.6.0-00e5ff?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/deploy-Vercel-000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel" />
   <img src="https://img.shields.io/badge/CMS-Notion-000?style=flat-square&logo=notion&logoColor=white" alt="Notion" />
@@ -79,6 +79,8 @@
 - 旧 API 代理永久禁用 (410 Gone)
 - 错误信息脱敏，仅调试模式暴露详情
 - `frame-ancestors 'none'` + `X-Frame-Options: DENY`
+- 静态 HTML 的 CSP meta 用于静态 fallback；SSR 文章页会由 `api/post.js` 基于模板重写 CSP/OG/canonical，并通过响应 header 承载 `frame-ancestors`
+- `scripts/smoke-check.mjs` 中关于 `shouldReduceMotion` / `prefers-reduced-motion` 的反向断言是动效常开设计守卫，不要作为无障碍修复顺手移除
 
 ### ♿ 无障碍
 
@@ -213,8 +215,10 @@ SITE_URL=https://your-domain.example
 DATABASE_METADATA_TTL_MS=300000
 PUBLIC_PAGE_SUMMARY_CACHE_TTL_MS=120000
 PUBLIC_POST_CACHE_TTL_MS=60000
+NOTION_SINGLE_FLIGHT_ERROR_COOLDOWN_MS=2000
 NOTION_REQUEST_TIMEOUT_MS=12000
 NOTION_BLOCK_CHILD_CONCURRENCY=4
+NOTION_BLOCK_TOTAL_LIMIT=2000
 IMAGE_PROXY_TIMEOUT_MS=10000
 IMAGE_PROXY_MAX_BYTES=8388608
 IMAGE_PROXY_MAX_REDIRECTS=4
@@ -238,7 +242,7 @@ npm.cmd run dev
 npm.cmd run check
 ```
 
-需要复核移动端/桌面视觉时：
+`npm test` 与 `npm.cmd run check` 等价，只跑无浏览器依赖的 smoke suite，适合本地快速反馈。需要复核移动端/桌面视觉时：
 
 ```powershell
 npm.cmd run visual:check
@@ -250,7 +254,7 @@ npm.cmd run visual:check
 npm.cmd run verify:release
 ```
 
-该命令会先运行冒烟检查，再用 `VISUAL_STRICT=1` 运行真实浏览器视觉回归。视觉脚本会启动本地服务，优先使用本机 Chrome 或 Edge 的 headless + CDP 模式截图并执行布局契约断言，覆盖移动首页、移动总览、移动文章空态和桌面首页。普通 `visual:check` 在当前机器无法完成截图时会生成 skipped 报告；`verify:release` 会把这类浏览器不可用问题视为失败。
+该命令会并行运行 smoke suite 和 `VISUAL_STRICT=1` 真实浏览器视觉回归，是发布与 CI 的严格门禁。视觉脚本会启动本地服务，优先使用本机 Chrome 或 Edge 的 headless + CDP 模式截图并执行布局契约断言，覆盖移动首页、移动总览、移动文章空态和桌面首页。普通 `visual:check` 在当前机器无法完成截图时会生成 skipped 报告；`verify:release` 会把这类浏览器不可用问题视为失败。
 
 ---
 
@@ -356,8 +360,10 @@ NOTION_READ_TIME_PROPERTY_NAMES=ReadTime,Read Time,Reading Time,阅读时间
 | `DATABASE_METADATA_TTL_MS` | ❌ | `300000` | 数据库元数据缓存时间 (ms) |
 | `PUBLIC_PAGE_SUMMARY_CACHE_TTL_MS` | ❌ | `120000` | 页面摘要缓存时间 (ms) |
 | `PUBLIC_POST_CACHE_TTL_MS` | ❌ | `60000` | 单篇文章缓存时间 (ms) |
+| `NOTION_SINGLE_FLIGHT_ERROR_COOLDOWN_MS` | ❌ | `2000` | 元数据/列表 single-flight 失败后的短冷却窗口 (ms) |
 | `NOTION_REQUEST_TIMEOUT_MS` | ❌ | `12000` | Notion API 超时 (ms) |
 | `NOTION_BLOCK_CHILD_CONCURRENCY` | ❌ | `4` | 块子元素并发获取数 |
+| `NOTION_BLOCK_TOTAL_LIMIT` | ❌ | `2000` | 单篇文章递归获取的最大 Notion block 数 |
 | `IMAGE_PROXY_TIMEOUT_MS` | ❌ | `10000` | 图片代理上游请求超时 (ms) |
 | `IMAGE_PROXY_MAX_BYTES` | ❌ | `8388608` | 图片代理最大响应体字节数 |
 | `IMAGE_PROXY_MAX_REDIRECTS` | ❌ | `4` | 图片代理最大重定向跳数 |

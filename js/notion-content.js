@@ -361,6 +361,7 @@
       state.index += 1;
     }
     if (state.index > start) return state.source.slice(start, state.index);
+    if (state.index >= state.source.length) return "";
     return state.source[state.index++] || "";
   }
 
@@ -747,7 +748,11 @@
     };
 
     if (includeSearchText) {
-      mappedPage._searchText = buildPostSearchText({ title, excerpt, tags });
+      Object.defineProperty(mappedPage, "_searchText", {
+        value: buildPostSearchText({ title, excerpt, tags }),
+        enumerable: false,
+        configurable: true,
+      });
     }
 
     return mappedPage;

@@ -31,7 +31,10 @@ export function runServerModuleChecks(context) {
   expectIncludes(serverPublicPolicyJs, "function buildPublicAccessPolicyFromDatabase", "public-policy.js should own public access policy assembly");
   expectIncludes(serverPostServiceJs, "function queryPublicPosts", "post-service.js should own public list and pagination behavior");
   expectIncludes(serverBlockServiceJs, "function fetchAllBlockChildren", "block-service.js should own recursive block loading");
+  expectIncludes(serverBlockServiceJs, "NOTION_BLOCK_TOTAL_LIMIT", "block-service.js should bound total recursive block loading");
   expectIncludes(serverCacheStoreJs, "function createLruTtlCache", "cache-store.js should own reusable TTL/LRU caches");
+  expectIncludes(serverCacheStoreJs, "errorCooldownMs", "cache-store.js should support optional single-flight error cooldowns");
+  expectIncludes(serverPostServiceJs, "shouldStartCacheSweepTimer", "post-service.js should gate cache sweep timers by runtime");
   expectIncludes(serverRenderServiceJs, "function buildArticleStructuredData", "render-service.js should own SSR structured data helpers");
   expectIncludes(serverNotionConfigJs, "function normalizeSiteOrigin", "notion-config.js should own site-origin normalization");
   expectIncludes(serverNotionConfigJs, "function createAsyncLimiter", "notion-config.js should own the async concurrency limiter");
@@ -44,6 +47,7 @@ export function runServerModuleChecks(context) {
   expectIncludes(siteArchitectureMd, "`server/category-navigation.js` owns Notion-driven category presentation", "architecture docs should describe the server category split");
   expectIncludes(siteArchitectureMd, "`server/notion-client.js` owns Notion HTTP requests", "architecture docs should describe the Notion client split");
   expectIncludes(siteArchitectureMd, "`server/post-service.js` owns public post listing, filtering, pagination", "architecture docs should describe the post service split");
+  expectIncludes(siteArchitectureMd, "`NOTION_BLOCK_TOTAL_LIMIT`", "architecture docs should describe the block budget tuning knob");
 
   assert.equal(
     serverNotionConfigHelpers.normalizeSiteOrigin("https://user:pass@example.com/blog/?preview=1#top"),

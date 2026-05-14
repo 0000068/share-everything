@@ -2,6 +2,7 @@ const { fetchPublicPost } = require("../server/notion-server");
 const {
   applyPublicErrorHeaders,
   getPublicPostErrorStatus,
+  logServerError,
   rejectUnsupportedReadMethod,
   readQueryString,
   serializePublicError,
@@ -26,11 +27,10 @@ module.exports = async function handler(req, res) {
   } catch (error) {
     const status = getPublicPostErrorStatus(error);
     if (status !== 404) {
-      console.error("Failed to load post data:", error);
+      logServerError("Failed to load post data", error);
     }
 
     applyPublicErrorHeaders(res, error);
-    res.setHeader("Cache-Control", "no-store");
     return res.status(status).json(
       serializePublicError(
         error,

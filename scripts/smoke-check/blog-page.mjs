@@ -161,6 +161,212 @@ assert.equal(
   "blog page should push overview navigation without falling back to native hash routing",
 );
 blogPageCleanup?.();
+const paginationRegisteredPages = new Map();
+const paginationFiltersEl = new FakeElement();
+const paginationSearchEl = new FakeElement();
+const paginationGridEl = new FakeElement();
+const paginationEmptyEl = new FakeElement();
+const paginationEl = new FakeElement();
+const paginationStatusEl = new FakeElement();
+const paginationTitleEl = new FakeElement();
+const paginationLocation = new URL("https://example.com/blog.html?page=25");
+const paginationHistory = {
+  pushCalls: [],
+  replaceCalls: [],
+  pushState(state, title, nextUrl) {
+    this.pushCalls.push(String(nextUrl));
+    paginationLocation.href = new URL(String(nextUrl), paginationLocation.href).href;
+  },
+  replaceState(state, title, nextUrl) {
+    this.replaceCalls.push(String(nextUrl));
+    paginationLocation.href = new URL(String(nextUrl), paginationLocation.href).href;
+  },
+};
+const paginationQueryPages = [];
+const paginationScrollCalls = [];
+const paginationPreloadNodes = [];
+const paginationHead = {
+  appendChild(node) {
+    paginationPreloadNodes.push(node);
+    node.remove = () => {
+      const index = paginationPreloadNodes.indexOf(node);
+      if (index >= 0) {
+        paginationPreloadNodes.splice(index, 1);
+      }
+    };
+    return node;
+  },
+  querySelectorAll(selector) {
+    if (selector !== 'link[data-blog-cover-preload="true"]') return [];
+    return paginationPreloadNodes.filter((node) => (
+      node.dataset?.blogCoverPreload === "true" ||
+      node.getAttribute?.("data-blog-cover-preload") === "true"
+    ));
+  },
+};
+loadBrowserScript("js/blog-page.js", {
+  window: {
+    location: paginationLocation,
+    history: paginationHistory,
+    scrollTo: (options) => paginationScrollCalls.push(options),
+    NotionAPI: {
+      escapeHtml: (value) => String(value ?? ""),
+      getCategoryColor: () => ({ bg: "#000", color: "#fff", border: "#222" }),
+      getCategories: () => [
+        { name: "All", emoji: "📚" },
+        { name: "AI", emoji: "🤖" },
+      ],
+      getPageSize: () => 9,
+      queryPosts: async ({ page }) => {
+        paginationQueryPages.push(page);
+        return {
+          results: [{
+            id: "pagination-window-post",
+            title: "Pagination window",
+            excerpt: "A fixture that keeps the listing non-empty.",
+            category: "AI",
+            date: "2026-05-14",
+            readTime: "1 min",
+            coverImage: `https://cdn.example.com/cover-${page}.jpg`,
+            coverEmoji: "📝",
+            coverGradient: "linear-gradient(135deg, #111111, #222222)",
+            tags: ["Pagination"],
+          }],
+          categories: [
+            { name: "All", label: "All", emoji: "📚" },
+            { name: "AI", label: "AI Lab", emoji: "🤖" },
+          ],
+          total: 450,
+          totalPages: 50,
+          currentPage: page,
+        };
+      },
+    },
+    PageRuntime: {
+      register(pageId, pageModule) {
+        paginationRegisteredPages.set(pageId, pageModule);
+      },
+    },
+    SiteUtils: {
+      rememberBlogReturnUrl: () => {},
+      sanitizeCoverBackground: (value, fallback) => value || fallback,
+      resolveDisplayImageUrl: (value) => value,
+      sanitizeImageUrl: (value) => value,
+      buildPostPath: (postId) => `/posts/${postId}`,
+      buildBookmarkListingUrl: buildBookmarkListingUrlMock,
+      parseBookmarkListingHash: parseBookmarkListingHashMock,
+    },
+    updateSeoMeta: () => {},
+    initBlogCardReveal: () => null,
+    requestAnimationFrame: () => 1,
+    cancelAnimationFrame: () => {},
+  },
+  document: {
+    head: paginationHead,
+    getElementById(id) {
+      return {
+        blogFilters: paginationFiltersEl,
+        blogSearch: paginationSearchEl,
+        blogGrid: paginationGridEl,
+        emptyState: paginationEmptyEl,
+        pagination: paginationEl,
+        blogStatus: paginationStatusEl,
+      }[id] || null;
+    },
+    querySelector(selector) {
+      return selector === ".page-title" ? paginationTitleEl : null;
+    },
+    querySelectorAll() {
+      return [];
+    },
+    createElement() {
+      return new FakeElement();
+    },
+  },
+});
+const paginationCleanup = paginationRegisteredPages.get("blog")?.init?.();
+await Promise.resolve();
+await new Promise((resolve) => setTimeout(resolve, 0));
+const paginationHtml = paginationEl.innerHTML;
+const paginationButtonCount = (paginationHtml.match(/<button\b/g) || []).length;
+const numberedPageButtonCount = (paginationHtml.match(/aria-label="第 \d+ 页"/g) || []).length;
+assert.equal(
+  paginationQueryPages.at(0),
+  25,
+  "blog pagination fixture should start on the requested deep page",
+);
+assert.ok(
+  paginationButtonCount <= 9,
+  "blog pagination should cap the rendered button count for long result sets",
+);
+assert.ok(
+  numberedPageButtonCount <= 7,
+  "blog pagination should cap numbered page buttons while preserving prev/next controls",
+);
+[1, 23, 24, 25, 26, 27, 50].forEach((page) => {
+  assert.ok(
+    paginationHtml.includes(`data-page="${page}"`),
+    `blog pagination should keep page ${page} visible in the window`,
+  );
+});
+assert.ok(
+  paginationHtml.includes('data-page="25" aria-label="第 25 页" aria-current="page"'),
+  "blog pagination should mark the current page in the page window",
+);
+assert.ok(
+  paginationHtml.includes('class="pagination-ellipsis"'),
+  "blog pagination should collapse skipped ranges behind ellipsis markers",
+);
+assert.ok(
+  paginationHtml.includes('aria-label="上一页"') && paginationHtml.includes('aria-label="下一页"'),
+  "blog pagination should render previous and next controls",
+);
+assert.equal(
+  paginationPreloadNodes.length,
+  1,
+  "blog page should keep only the current render's cover preload links in the document head",
+);
+assert.equal(
+  paginationPreloadNodes[0]?.dataset?.blogCoverPreload,
+  "true",
+  "blog page should mark cover preload links for later cleanup",
+);
+const paginationNextButton = {
+  dataset: { page: "26" },
+  disabled: false,
+  closest(selector) {
+    return selector === ".page-btn" ? this : null;
+  },
+};
+paginationEl.dispatch("click", { target: paginationNextButton });
+await Promise.resolve();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(
+  paginationHistory.pushCalls.at(-1),
+  "/blog.html?page=26",
+  "blog pagination next control should push the requested page into the listing URL",
+);
+assert.equal(
+  paginationScrollCalls.at(-1)?.behavior,
+  "auto",
+  "blog pagination should keep instant scroll behavior after changing pages",
+);
+assert.equal(
+  paginationPreloadNodes.length,
+  1,
+  "blog page should replace stale cover preload links instead of growing the document head",
+);
+assert.equal(
+  paginationPreloadNodes[0]?.href,
+  "https://cdn.example.com/cover-26.jpg",
+  "blog page should keep the newest cover preload link after pagination changes",
+);
+paginationCleanup?.();
+assert.equal(
+  paginationPreloadNodes.length,
+  0,
+  "blog page should remove cover preload links when the page runtime is disposed",
+);
 const legacyBookmarkRegisteredPages = new Map();
 const legacyBookmarkFiltersEl = new FakeElement();
 const legacyBookmarkSearchEl = new FakeElement();
@@ -271,6 +477,7 @@ const bookmarkHashPaginationEl = new FakeElement();
 const bookmarkHashStatusEl = new FakeElement();
 const bookmarkHashTitleEl = new FakeElement();
 const bookmarkHashHandlers = new Set();
+const bookmarkHashUpdateHandlers = new Set();
 const bookmarkHashOverviewAction = {
   classList: createClassList(),
   querySelector: (selector) => (selector === "span" ? { textContent: "鎬昏" } : null),
@@ -292,24 +499,25 @@ const bookmarkHashHistory = {
     bookmarkHashLocation.href = new URL(String(nextUrl), bookmarkHashLocation.href).href;
   },
 };
+let bookmarkHashEntries = [{
+  id: "bookmark-hit",
+  title: "Bookmark hit",
+  excerpt: "Local only",
+  category: "",
+  date: "",
+  readTime: "",
+  coverImage: null,
+  coverEmoji: "馃摑",
+  coverGradient: "linear-gradient(135deg, #111111, #222222)",
+  tags: ["TypeScript", "Testing"],
+}];
 loadBrowserScript("js/blog-page.js", {
   window: {
     location: bookmarkHashLocation,
     history: bookmarkHashHistory,
     scrollTo: () => {},
     BookmarkManager: {
-      getAll: () => [{
-        id: "bookmark-hit",
-        title: "Bookmark hit",
-        excerpt: "Local only",
-        category: "",
-        date: "",
-        readTime: "",
-        coverImage: null,
-        coverEmoji: "馃摑",
-        coverGradient: "linear-gradient(135deg, #111111, #222222)",
-        tags: ["TypeScript", "Testing"],
-      }],
+      getAll: () => bookmarkHashEntries,
       isBookmarked: () => true,
       toggleById: () => true,
       hasLegacyMetadata: () => false,
@@ -334,11 +542,15 @@ loadBrowserScript("js/blog-page.js", {
     addEventListener(type, handler) {
       if (type === "hashchange") {
         bookmarkHashHandlers.add(handler);
+      } else if (type === "bookmarks:updated") {
+        bookmarkHashUpdateHandlers.add(handler);
       }
     },
     removeEventListener(type, handler) {
       if (type === "hashchange") {
         bookmarkHashHandlers.delete(handler);
+      } else if (type === "bookmarks:updated") {
+        bookmarkHashUpdateHandlers.delete(handler);
       }
     },
   },
@@ -377,6 +589,14 @@ assert.ok(
   bookmarkHashGridEl.innerHTML.includes("Bookmark hit"),
   "blog page should keep bookmark search matches when the query contains extra whitespace",
 );
+bookmarkHashEntries = [];
+bookmarkHashUpdateHandlers.forEach((handler) => handler());
+await Promise.resolve();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.ok(
+  !bookmarkHashGridEl.innerHTML.includes("Bookmark hit"),
+  "blog page should refresh the local bookmark view after cross-tab bookmark updates",
+);
 bookmarkHashLocation.hash = "";
 bookmarkHashHandlers.forEach((handler) => handler());
 assert.equal(
@@ -385,5 +605,10 @@ assert.equal(
   "blog page should keep the local bookmark view pinned to the bookmark hash route when the remote source is unavailable",
 );
 bookmarkHashCleanup?.();
+assert.equal(
+  bookmarkHashUpdateHandlers.size,
+  0,
+  "blog page should remove cross-tab bookmark listeners during cleanup",
+);
 
 }

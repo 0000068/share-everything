@@ -1,7 +1,7 @@
 # Share Everything Site Architecture
 
-> Version: v4.5
-> Updated: 2026-05-13
+> Version: v4.6
+> Updated: 2026-05-14
 
 ## 1. Overview
 
@@ -33,11 +33,16 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v4.5 Highlights
+## 2. Version v4.6 Highlights
 
-v4.5 packages automatic category icon de-duplication, the latest Notion content module split, the server Notion service split, the ES module frontend entry, release verification, production-domain maintenance work, and the corrected approved PNG favicon path while preserving the desktop UI and desktop particle behavior.
+v4.6 packages the completed Batch 1-8 repair work into a single release commit, including the public API search-text cleanup, server cache/resource hardening, stricter release verification, CI matrix coverage, and final fix-list documentation consolidation while preserving the desktop UI and desktop particle behavior.
 
-- `package.json`, README, changelog, and architecture release metadata now match the `v4.5` release commit convention.
+- `package.json`, README, changelog, and architecture release metadata now match the `v4.6` release commit convention.
+- Public client payloads no longer expose or regenerate `_searchText`; server-side search text stays non-enumerable and internal.
+- Server-side Notion block rendering now has a configurable total block budget, bounded recursive fan-out, and single-flight failure cooldowns.
+- Browser-side post summary caching and `sessionStorage` cleanup are bounded and throttled to reduce repeated tab-sync work.
+- Release verification runs the smoke suite and strict visual regression in parallel, and GitHub Actions now covers Node 18, 20, and 22 with stale workflow cancellation.
+- `FIX_TODO.md` is the single authoritative repair status document; summary documents point back to it instead of carrying duplicate stale checklists.
 - Mobile pages now disable the particle canvas entirely after real-device frame-rate checks, while desktop home keeps the 350-particle animation.
 - Blog cover placeholders no longer render the notebook emoji; slow or failed covers fall back to quiet gradients.
 - Browser icons and share previews use the restored `favicon.png?v=4` brand artwork directly, avoiding a mismatched SVG fallback.
@@ -358,13 +363,14 @@ Page-specific scripts are then loaded as needed:
 The HTML templates load one shared module script:
 
 ```html
-<script type="module" src="/js/app.js?v=20260513-content-modules" data-spa-runtime></script>
+<script type="module" src="/js/app.js?v=20260514-v46" data-spa-runtime></script>
 ```
 
 `js/app.js` owns the frontend dependency order. The project still exposes browser runtime
 helpers through `window.*` for compatibility, but templates no longer rely on a long list
-of ordered classic scripts. The module graph is intentionally incremental and keeps the
-current vanilla JS files as side-effect imports:
+of ordered classic scripts. The module graph is intentionally incremental; each side-effect
+import carries the same `?v=` cache key as the HTML entry so nested ESM modules cannot reuse
+an older browser or edge-cache copy after a release:
 
 ```
   font-loader.js
@@ -459,8 +465,8 @@ actual behavior:
 - `server/notion-schema.js` owns Notion content property candidate overrides, schema resolution, list sorting, and category prefilters.
 - `server/public-policy.js` owns the database-wide public access policy and page-public assertions.
 - `server/post-service.js` owns public post listing, filtering, pagination, search, metadata loading, detail loading, and post payload construction.
-- `server/block-service.js` owns recursive block fetching with pagination and child-fetch concurrency limits.
-- `server/cache-store.js` owns reusable TTL slots, LRU TTL caches, single-flight loading, and pending request maps.
+- `server/block-service.js` owns recursive block fetching with pagination, child-fetch concurrency limits, and a per-post total block budget.
+- `server/cache-store.js` owns reusable TTL slots, LRU TTL caches, single-flight loading with optional error cooldowns, and pending request maps.
 - `server/render-service.js` owns SSR post HTML rendering, canonical post URLs, and article structured data preparation.
 
 `server/notion-config.js` owns environment and site-origin normalization, checked-in
@@ -481,6 +487,7 @@ Main server-side caches:
 | Filtered results | Memory Map | Follows summary cache |
 | Single post details | Memory LRU | 60 seconds / 20 entries |
 | In-flight post requests | Promise Map | Request lifetime |
+| Database/list single-flight failures | Memory | 2 seconds |
 
 ## 11. Local Development
 
@@ -536,8 +543,10 @@ Optional:
 | `DATABASE_METADATA_TTL_MS` | `300000` | Database metadata cache TTL |
 | `PUBLIC_PAGE_SUMMARY_CACHE_TTL_MS` | `120000` | Public list summary cache TTL |
 | `PUBLIC_POST_CACHE_TTL_MS` | `60000` | Single post cache TTL |
+| `NOTION_SINGLE_FLIGHT_ERROR_COOLDOWN_MS` | `2000` | Short error cooldown for database/list single-flight requests |
 | `NOTION_REQUEST_TIMEOUT_MS` | `12000` | Server-side Notion request timeout |
 | `NOTION_BLOCK_CHILD_CONCURRENCY` | `4` | Concurrent child block fetches |
+| `NOTION_BLOCK_TOTAL_LIMIT` | `2000` | Maximum recursive Notion blocks loaded for one post |
 | `IMAGE_PROXY_TIMEOUT_MS` | `10000` | Remote image proxy request timeout |
 | `IMAGE_PROXY_MAX_BYTES` | `8388608` | Remote image proxy response size limit |
 | `IMAGE_PROXY_MAX_REDIRECTS` | `4` | Remote image proxy redirect hop limit |
@@ -561,7 +570,7 @@ Category navigation is Notion-driven. The server reads the resolved `Category` /
 
 ## 14. Checks
 
-`scripts/smoke-check.mjs` is the single `npm.cmd run check` entrypoint. `npm.cmd run verify:release` runs the smoke suite plus `visual-regression.mjs` with `VISUAL_STRICT=1`, and the same command is wired into `.github/workflows/release-check.yml` for push and pull request validation. Shared harness utilities and heavier domain checks live in focused modules under `scripts/smoke-check/`:
+`scripts/smoke-check.mjs` is the single `npm.cmd run check` entrypoint. `npm.cmd run verify:release` runs the smoke suite and `visual-regression.mjs` with `VISUAL_STRICT=1` in parallel, and the same strict command is wired into `.github/workflows/release-check.yml` across the Node 18/20/22 matrix for push and pull request validation. Shared harness utilities and heavier domain checks live in focused modules under `scripts/smoke-check/`:
 
 - `harness.mjs` for VM/module loading helpers, fake DOM primitives, and common assertions.
 - `api-contracts.mjs` for final API handler payload contracts such as `/api/posts-data` category presentation metadata.
@@ -604,7 +613,7 @@ The smoke suite currently covers:
 
 ## 15. Known Optimization Backlog
 
-- No open structural optimization backlog items are currently tracked here.
+- Non-blocking backlog items are tracked in `FIX_TODO.md`; this architecture document only keeps structural guidance.
 
 ## 16. Latest Verification
 

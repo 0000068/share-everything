@@ -50,6 +50,10 @@ const PUBLIC_PAGE_SUMMARY_CACHE_TTL_MS = normalizeNonNegativeNumber(process.env.
 const PUBLIC_PAGE_QUERY_CACHE_MAX_ENTRIES = 24;
 const PUBLIC_POST_CACHE_TTL_MS = normalizeNonNegativeNumber(process.env.PUBLIC_POST_CACHE_TTL_MS, 60_000);
 const PUBLIC_POST_CACHE_MAX_ENTRIES = 20;
+const NOTION_SINGLE_FLIGHT_ERROR_COOLDOWN_MS = normalizeNonNegativeNumber(
+  process.env.NOTION_SINGLE_FLIGHT_ERROR_COOLDOWN_MS,
+  2_000,
+);
 const CATEGORY_NAVIGATION = createCategoryNavigation(SITE_CONFIG?.categoryNavigation);
 const {
   buildCategoryPresentation,
@@ -59,12 +63,16 @@ const {
 const POST_SEARCH_TEXT_SYMBOL = Symbol("postSearchText");
 
 const databaseMetadataCache = createTtlSlot();
-const databaseMetadataSingleFlight = createSingleFlight();
+const databaseMetadataSingleFlight = createSingleFlight({
+  errorCooldownMs: NOTION_SINGLE_FLIGHT_ERROR_COOLDOWN_MS,
+});
 const publicPageQueryCache = createLruTtlCache({ maxEntries: PUBLIC_PAGE_QUERY_CACHE_MAX_ENTRIES });
 const publicPageSummaryCache = createTtlSlot({
   onExpire: () => publicPageQueryCache.clear(),
 });
-const publicPageSummarySingleFlight = createSingleFlight();
+const publicPageSummarySingleFlight = createSingleFlight({
+  errorCooldownMs: NOTION_SINGLE_FLIGHT_ERROR_COOLDOWN_MS,
+});
 const publicPostCache = createLruTtlCache({ maxEntries: PUBLIC_POST_CACHE_MAX_ENTRIES });
 const pendingPublicPostRequests = createPendingRequestMap();
 
@@ -240,7 +248,7 @@ function hasPostQueryFilters(filters) {
 }
 
 async function getPublicPageSummaries() {
-  const cacheTtlMs = normalizeNonNegativeNumber(PUBLIC_PAGE_SUMMARY_CACHE_TTL_MS, 15_000);
+  const cacheTtlMs = PUBLIC_PAGE_SUMMARY_CACHE_TTL_MS;
   if (cacheTtlMs > 0) {
     const cached = getCachedPublicPageSummaries();
     if (cached?.pages) {
@@ -310,7 +318,7 @@ async function loadPublicPagesForQuery(filters) {
     schema: metadata.contentSchema,
   });
 
-  const cacheTtlMs = normalizeNonNegativeNumber(PUBLIC_PAGE_SUMMARY_CACHE_TTL_MS, 15_000);
+  const cacheTtlMs = PUBLIC_PAGE_SUMMARY_CACHE_TTL_MS;
   return {
     pages,
     expiresAt: cacheTtlMs > 0 ? Date.now() + cacheTtlMs : 0,
@@ -453,7 +461,11 @@ function sweepExpiredCacheEntries() {
   publicPageSummaryCache.sweep(now);
 }
 
-if (typeof setInterval === "function") {
+function shouldStartCacheSweepTimer() {
+  return typeof setInterval === "function" && process.env.VERCEL !== "1";
+}
+
+if (shouldStartCacheSweepTimer()) {
   const cacheSweepTimer = setInterval(sweepExpiredCacheEntries, CACHE_SWEEP_INTERVAL_MS);
   if (typeof cacheSweepTimer.unref === "function") {
     cacheSweepTimer.unref();
@@ -464,6 +476,7 @@ module.exports = {
   CACHE_SWEEP_INTERVAL_MS,
   DATABASE_METADATA_TTL_MS,
   DEFAULT_POST_PAGE_SIZE,
+  NOTION_SINGLE_FLIGHT_ERROR_COOLDOWN_MS,
   POST_SEARCH_TEXT_SYMBOL,
   PUBLIC_PAGE_QUERY_CACHE_MAX_ENTRIES,
   PUBLIC_PAGE_SUMMARY_CACHE_TTL_MS,
@@ -496,6 +509,7 @@ module.exports = {
   queryDatabasePages,
   queryPublicPages,
   queryPublicPosts,
+  shouldStartCacheSweepTimer,
   sortPostsByDateDesc,
   sweepExpiredCacheEntries,
   withPendingPublicPostRequest,

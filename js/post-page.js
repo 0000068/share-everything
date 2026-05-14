@@ -39,6 +39,8 @@
     let bookmarkControlsVisible = false;
     let mediaQueryCleanup = null;
     let statusAnnouncementHandle = null;
+    let activeBookmarkPostId = null;
+    let bookmarksUpdatedHandler = null;
 
     function getCurrentPostId() {
       if (typeof siteUtils.getPostIdFromUrl === "function") {
@@ -93,6 +95,13 @@
         element.removeEventListener("click", handler);
       });
       bookmarkBindings = [];
+    }
+
+    function cleanupBookmarkUpdates() {
+      if (!bookmarksUpdatedHandler) return;
+
+      window.removeEventListener?.("bookmarks:updated", bookmarksUpdatedHandler);
+      bookmarksUpdatedHandler = null;
     }
 
     function clearStatusAnnouncement() {
@@ -152,6 +161,16 @@
           label.textContent = labelText;
         }
       });
+    }
+
+    function bindBookmarkUpdates() {
+      if (!bookmarkManager || bookmarksUpdatedHandler) return;
+
+      bookmarksUpdatedHandler = () => {
+        if (isDisposed || !activeBookmarkPostId) return;
+        syncBookmarkControls(bookmarkManager.isBookmarked(activeBookmarkPostId));
+      };
+      window.addEventListener?.("bookmarks:updated", bookmarksUpdatedHandler);
     }
 
     function cleanupBackHandler() {
@@ -284,8 +303,10 @@
       }
 
       cleanupBookmarkHandlers();
+      activeBookmarkPostId = post.id;
       setBookmarkControlsVisible(true);
       syncBookmarkControls(bookmarkManager.isBookmarked(post.id));
+      bindBookmarkUpdates();
 
       bookmarkElements.forEach((element) => {
         const handler = () => {
@@ -332,6 +353,7 @@
 
       return () => {
         cleanupBookmarkHandlers();
+        cleanupBookmarkUpdates();
         cleanupBackHandler();
         clearStatusAnnouncement();
         if (statusEl) statusEl.textContent = "";
@@ -435,6 +457,7 @@
     return () => {
       isDisposed = true;
       cleanupBookmarkHandlers();
+      cleanupBookmarkUpdates();
       cleanupBackHandler();
       clearStatusAnnouncement();
       if (statusEl) statusEl.textContent = "";

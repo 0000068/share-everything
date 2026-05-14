@@ -6,6 +6,7 @@ const {
 const {
   applyPublicErrorHeaders,
   getPublicContentErrorStatus,
+  logServerError,
   rejectUnsupportedReadMethod,
   serializePublicError,
 } = require("../server/public-content");
@@ -51,10 +52,9 @@ module.exports = async function handler(req, res) {
     return res.status(200).send(xml);
   } catch (error) {
     const status = getPublicContentErrorStatus(error);
-    console.error("Failed to generate sitemap:", error);
+    logServerError("Failed to generate sitemap", error);
 
     applyPublicErrorHeaders(res, error);
-    res.setHeader("Cache-Control", "no-store");
     return res.status(status).json(
       serializePublicError(
         error,

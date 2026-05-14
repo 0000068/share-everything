@@ -3,6 +3,7 @@ export async function runNotionApiClientChecks(context) {
     assert,
     createJsonResponse,
     createQuotaLimitedStorageMock,
+    createStorageMock,
     ephemeralCoverImage,
     loadBrowserScript,
     notionContentHelpers,
@@ -100,8 +101,8 @@ assert.equal(
   "notion client should restore compacted session summaries without re-fetching the post detail",
 );
 assert.ok(
-  restoredSessionSummary?._searchText?.includes("alpha"),
-  "notion client should rebuild derived search text when reading a compacted summary back from sessionStorage",
+  !Object.prototype.hasOwnProperty.call(restoredSessionSummary, "_searchText"),
+  "notion client should not reintroduce derived search text when restoring compacted session summaries",
 );
 const memoryOnlySummaryStorage = createQuotaLimitedStorageMock({ maxChars: 0 });
 let summaryLruFetchCount = 0;
@@ -167,6 +168,98 @@ assert.equal(
   summaryLruHarness.window.NotionAPI.getCategoryColor("AI").color,
   "#2979ff",
   "notion client should use API-provided category colors for cards",
+);
+
+let throttledSessionNow = 10_000_000;
+class ThrottledSessionDate extends Date {
+  static now() {
+    return throttledSessionNow;
+  }
+}
+const throttledStaleSummaryKey = "notion_post_summary_throttled_stale";
+const throttledFreshSummaryKey = "notion_post_summary_throttled_fresh";
+const throttledBaseStorage = createStorageMock({
+  [throttledStaleSummaryKey]: JSON.stringify({
+    timestamp: throttledSessionNow - 1000 * 60 * 31,
+    data: { id: "throttled-stale", title: "Expired summary" },
+  }),
+  [throttledFreshSummaryKey]: JSON.stringify({
+    timestamp: throttledSessionNow - 1000,
+    data: { id: "throttled-fresh", title: "Fresh summary" },
+  }),
+});
+let throttledSessionKeyReads = 0;
+const throttledSessionStorage = {
+  getItem(key) {
+    return throttledBaseStorage.getItem(key);
+  },
+  setItem(key, value) {
+    throttledBaseStorage.setItem(key, value);
+  },
+  removeItem(key) {
+    throttledBaseStorage.removeItem(key);
+  },
+  clear() {
+    throttledBaseStorage.clear();
+  },
+  key(index) {
+    throttledSessionKeyReads += 1;
+    return throttledBaseStorage.key(index);
+  },
+  get length() {
+    return throttledBaseStorage.length;
+  },
+};
+let throttledFetchCount = 0;
+const throttledSummaryHarness = loadBrowserScript("js/notion-api.js", {
+  window: {
+    location: new URL("https://example.com/blog.html"),
+    NotionContent: notionContentHelpers,
+  },
+  sessionStorage: throttledSessionStorage,
+  globals: {
+    Date: ThrottledSessionDate,
+  },
+  fetch: async () => {
+    throttledFetchCount += 1;
+    const resultCount = throttledFetchCount === 1 ? 3 : 1;
+    return createJsonResponse({
+      results: Array.from({ length: resultCount }, (_, index) => ({
+        id: `throttled-${throttledFetchCount}-${index}`,
+        title: `Throttled summary ${throttledFetchCount}-${index}`,
+        excerpt: "",
+        tags: [],
+      })),
+      categories: [],
+      total: resultCount,
+      totalPages: 1,
+      currentPage: 1,
+    });
+  },
+});
+await throttledSummaryHarness.window.NotionAPI.queryPosts({ search: "first" });
+const firstSweepKeyReads = throttledSessionKeyReads;
+assert.equal(
+  throttledBaseStorage.getItem(throttledStaleSummaryKey),
+  null,
+  "notion client should still clear expired session summaries on the first throttled sweep",
+);
+assert.equal(
+  firstSweepKeyReads,
+  2,
+  "notion client should inspect sessionStorage once while priming multiple summaries in the same tick",
+);
+await throttledSummaryHarness.window.NotionAPI.queryPosts({ search: "second" });
+assert.equal(
+  throttledSessionKeyReads,
+  firstSweepKeyReads,
+  "notion client should throttle repeated sessionStorage sweeps inside the 30 second window",
+);
+throttledSessionNow += 30_000;
+await throttledSummaryHarness.window.NotionAPI.queryPosts({ search: "third" });
+assert.ok(
+  throttledSessionKeyReads > firstSweepKeyReads,
+  "notion client should allow another sessionStorage sweep once the throttle window elapses",
 );
 
 }

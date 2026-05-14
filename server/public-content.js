@@ -14,10 +14,32 @@ function readRetryAfter(error) {
 }
 
 function applyPublicErrorHeaders(res, error) {
+  res.setHeader("Cache-Control", "no-store");
   const retryAfter = readRetryAfter(error);
   if (retryAfter) {
     res.setHeader("Retry-After", retryAfter);
   }
+}
+
+function logServerError(label, error) {
+  const payload = {};
+  const message = typeof error?.message === "string" ? error.message.trim() : "";
+  const status = Number(error?.status);
+
+  if (message) {
+    payload.message = message;
+  }
+  if (Number.isFinite(status)) {
+    payload.status = status;
+  }
+  if (typeof error?.code === "string" && error.code) {
+    payload.code = error.code;
+  }
+  if (typeof error?.notionCode === "string" && error.notionCode) {
+    payload.notionCode = error.notionCode;
+  }
+
+  console.error(`${label}:`, payload);
 }
 
 function rejectUnsupportedReadMethod(req, res) {
@@ -167,6 +189,7 @@ module.exports = {
   applyPublicErrorHeaders,
   getPublicContentErrorStatus,
   getPublicPostErrorStatus,
+  logServerError,
   rejectUnsupportedReadMethod,
   readPositiveInteger,
   readQueryString,

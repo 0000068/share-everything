@@ -14,6 +14,7 @@ const {
 const {
   applyPublicErrorHeaders,
   getPublicPostErrorStatus,
+  logServerError,
   rejectUnsupportedReadMethod,
   readQueryString,
 } = require("../server/public-content");
@@ -109,21 +110,25 @@ function replaceContentSecurityPolicyMeta(html, options = {}) {
       includeFrameAncestors: false,
     }),
   )}" />`;
-  let didReplace = false;
+  let cspMetaCount = 0;
   const result = html.replace(META_TAG_PATTERN, (metaTag) => {
     if (!isContentSecurityPolicyMetaTag(metaTag)) {
       return metaTag;
     }
 
-    if (didReplace) {
+    cspMetaCount += 1;
+    if (cspMetaCount > 1) {
       return "";
     }
 
-    didReplace = true;
     return markup;
   });
 
-  if (didReplace) {
+  if (cspMetaCount > 1) {
+    console.warn(`SSR: Found ${cspMetaCount} CSP meta tags in post.html; removed duplicates after the first.`);
+  }
+
+  if (cspMetaCount > 0) {
     return result;
   }
 
@@ -347,7 +352,7 @@ module.exports = async function handler(req, res) {
     const status = getPublicPostErrorStatus(error);
     const fallback = status === 404 ? buildNotFoundContent() : buildUnavailableContent();
     if (status !== 404) {
-      console.error("Failed to render post route:", error);
+      logServerError("Failed to render post route", error);
     }
 
     applyPublicErrorHeaders(res, error);
@@ -358,7 +363,6 @@ module.exports = async function handler(req, res) {
       imageAlt: "Share Everything",
     });
     res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.setHeader("Cache-Control", "no-store");
     applyHtmlSecurityHeaders(res);
     return res.status(status).send(html);
   }

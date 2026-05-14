@@ -5,6 +5,7 @@
   width: 100%;
   max-width: 100%;
   min-height: 100vh;
+  min-height: 100dvh;
   padding: 100px 24px 80px;
   display: flex;
   flex-direction: column;

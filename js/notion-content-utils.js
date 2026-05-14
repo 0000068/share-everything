@@ -46,7 +46,7 @@
   }
 
   function escapeHtml(value) {
-    if (!value) return "";
+    if (value == null) return "";
     return String(value)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")

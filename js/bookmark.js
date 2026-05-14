@@ -6,7 +6,6 @@
   const BookmarkManager = (() => {
     const BOOKMARK_KEY = "bookmarked_posts";
     const BOOKMARK_METADATA_VERSION = 4;
-    const sharedContent = window.NotionContent || {};
     const siteUtils = window.SiteUtils || {};
     const resolveDisplayImageUrl = siteUtils.resolveDisplayImageUrl;
     const sanitizeImageUrl = siteUtils.sanitizeImageUrl;
@@ -32,23 +31,6 @@
       return value
         .map((tag) => normalizeText(tag).trim())
         .filter(Boolean);
-    }
-
-    // @canonical-source: notion-content.js → buildPostSearchText
-    function buildBookmarkSearchText({ title = "", excerpt = "", tags = [] } = {}) {
-      if (typeof sharedContent.buildPostSearchText === "function") {
-        return sharedContent.buildPostSearchText({
-          title: normalizeText(title),
-          excerpt: normalizeText(excerpt),
-          tags: normalizeTags(tags),
-        });
-      }
-
-      return [
-        normalizeText(title),
-        normalizeText(excerpt),
-        ...normalizeTags(tags),
-      ].join(" ").toLowerCase().trim().replace(/\s+/g, " ");
     }
 
     function normalizePersistentCoverImage(value) {
@@ -91,7 +73,6 @@
             : null,
         tags,
         metadataVersion,
-        _searchText: buildBookmarkSearchText({ title, excerpt, tags }),
         timestamp: Number.isFinite(Number(entry.timestamp)) ? Number(entry.timestamp) : Date.now(),
       };
     }
@@ -127,6 +108,16 @@
       } catch (error) {
         return false;
       }
+    }
+
+    function dispatchBookmarksUpdated() {
+      if (typeof window.dispatchEvent !== "function") return;
+
+      const detail = { bookmarks: getAll() };
+      const event = typeof window.CustomEvent === "function"
+        ? new window.CustomEvent("bookmarks:updated", { detail })
+        : { type: "bookmarks:updated", detail };
+      window.dispatchEvent(event);
     }
 
     function isBookmarked(id) {
@@ -320,6 +311,8 @@
       } catch (error) {
         bookmarksCache = [];
       }
+
+      dispatchBookmarksUpdated();
     });
 
     return {

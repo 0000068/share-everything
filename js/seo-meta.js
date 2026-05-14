@@ -111,6 +111,21 @@
   });
   window.updateSeoMeta = updateSeoMeta;
 
+  function getUrlWithoutTrackingQuery(value) {
+    const resolvedUrl = new URL(value, window.location.href);
+    resolvedUrl.hash = "";
+    resolvedUrl.search = "";
+    return resolvedUrl.href;
+  }
+
+  const initialOgUrl =
+    document.querySelector('meta[property="og:url"]')?.content ||
+    document.querySelector('link[rel="canonical"]')?.href ||
+    getUrlWithoutTrackingQuery(window.location.href);
+  const initialCanonicalUrl =
+    document.querySelector('link[rel="canonical"]')?.href ||
+    initialOgUrl;
+
   updateSeoMeta({
     title: document.title,
     description: document.querySelector('meta[name="description"]')?.content,
@@ -123,7 +138,7 @@
       document.querySelector('meta[property="og:image:alt"]')?.content || DEFAULT_OG_IMAGE_ALT,
     ogType: document.querySelector('meta[property="og:type"]')?.content || "website",
     robots: document.querySelector('meta[name="robots"]')?.content ?? null,
-    url: window.location.href,
-    canonicalUrl: document.querySelector('link[rel="canonical"]')?.href || window.location.href,
+    url: initialOgUrl,
+    canonicalUrl: initialCanonicalUrl,
   });
 })();

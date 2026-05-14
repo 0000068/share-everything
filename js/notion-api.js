@@ -14,7 +14,10 @@
     const POSTS_REQUEST_KEY_PREFIX = "notion_query_posts";
     const POST_REQUEST_KEY_PREFIX = "notion_page_";
     const POST_SUMMARY_CACHE_TTL = 1000 * 60 * 30;
+    const POST_SUMMARY_CACHE_SWEEP_INTERVAL_MS = 1000 * 30;
+    const POST_SUMMARY_QUOTA_SWEEP_INTERVAL_MS = 1000 * 60;
     const POSTS_RESPONSE_CACHE_TTL = 1000 * 20;
+    const POSTS_RESPONSE_CACHE_MAX_ENTRIES = 12;
     const POST_SUMMARY_MEMORY_CACHE_LIMIT = 200;
     const POST_SUMMARY_SESSION_MAX_TITLE_LENGTH = 160;
     const POST_SUMMARY_SESSION_MAX_EXCERPT_LENGTH = 320;
@@ -47,6 +50,8 @@
       border: "rgba(0, 229, 255, 0.2)",
     });
     const fallbackCoverGradient = sharedContent.DEFAULT_COVER_GRADIENT || "linear-gradient(135deg, #1a1a2e, #16213e)";
+    let lastPostSummaryCacheSweepAt = 0;
+    let lastPostSummaryQuotaSweepAt = 0;
     // @canonical-source: notion-content.js → escapeHtml
     const escapeHtml = sharedContent.escapeHtml || ((value) =>
       String(value ?? "")
@@ -171,19 +176,6 @@
       return "";
     }
 
-    // @canonical-source: notion-content.js → buildPostSearchText
-    function buildPostSearchText(post) {
-      if (typeof sharedContent.buildPostSearchText === "function") {
-        return sharedContent.buildPostSearchText(post);
-      }
-
-      return normalizeSearchText([
-        post?.title || "",
-        post?.excerpt || "",
-        ...(Array.isArray(post?.tags) ? post.tags : []),
-      ].join(" "));
-    }
-
     function createRequestError(message, { status, notionCode, code, detail } = {}) {
       const error = new Error(message);
       if (Number.isFinite(Number(status))) {
@@ -250,10 +242,32 @@
       return entries.sort((left, right) => left.timestamp - right.timestamp);
     }
 
-    function removeExpiredPostSummaryCacheEntries(maxAge = POST_SUMMARY_CACHE_TTL, excludeKey) {
-      if (!(maxAge > 0)) return 0;
+    function shouldRunPostSummarySweep(now, intervalMs, lastSweepAt) {
+      const safeIntervalMs = Math.max(0, Number(intervalMs) || 0);
+      if (safeIntervalMs <= 0) return true;
+      if (!Number.isFinite(lastSweepAt) || lastSweepAt <= 0) return true;
+      return now - lastSweepAt >= safeIntervalMs;
+    }
 
-      const expirationThreshold = Date.now() - maxAge;
+    function removeExpiredPostSummaryCacheEntries(
+      maxAge = POST_SUMMARY_CACHE_TTL,
+      excludeKey,
+      { force = false, now = Date.now() } = {},
+    ) {
+      if (!(maxAge > 0)) return 0;
+      if (!force && !shouldRunPostSummarySweep(
+        now,
+        POST_SUMMARY_CACHE_SWEEP_INTERVAL_MS,
+        lastPostSummaryCacheSweepAt,
+      )) {
+        return 0;
+      }
+
+      if (!force) {
+        lastPostSummaryCacheSweepAt = now;
+      }
+
+      const expirationThreshold = now - maxAge;
       let removedCount = 0;
       collectPostSummaryCacheEntries(excludeKey).forEach((entry) => {
         if (entry.timestamp > 0 && entry.timestamp < expirationThreshold) {
@@ -263,6 +277,19 @@
       });
 
       return removedCount;
+    }
+
+    function shouldRunPostSummaryQuotaSweep(now = Date.now()) {
+      if (!shouldRunPostSummarySweep(
+        now,
+        POST_SUMMARY_QUOTA_SWEEP_INTERVAL_MS,
+        lastPostSummaryQuotaSweepAt,
+      )) {
+        return false;
+      }
+
+      lastPostSummaryQuotaSweepAt = now;
+      return true;
     }
 
     function trySetSessionCacheItem(key, payload) {
@@ -352,8 +379,14 @@
         data: compactPostSummaryForSession(data),
       });
 
-      removeExpiredPostSummaryCacheEntries(POST_SUMMARY_CACHE_TTL, key);
+      const now = Date.now();
+      removeExpiredPostSummaryCacheEntries(POST_SUMMARY_CACHE_TTL, key, { now });
       if (trySetSessionCacheItem(key, payload)) return;
+
+      if (shouldRunPostSummaryQuotaSweep(Date.now())) {
+        removeExpiredPostSummaryCacheEntries(POST_SUMMARY_CACHE_TTL, key, { force: true });
+        if (trySetSessionCacheItem(key, payload)) return;
+      }
 
       // Expired-entry cleanup was not enough; evict oldest entries one by one.
       const existingEntries = collectPostSummaryCacheEntries(key);
@@ -397,7 +430,6 @@
         coverEmoji,
         coverGradient,
         tags,
-        _searchText: post._searchText || buildPostSearchText({ title, excerpt, tags }),
       };
     }
 
@@ -653,7 +685,7 @@
         expiresAt: Date.now() + POSTS_RESPONSE_CACHE_TTL,
       });
 
-      while (postsResponseCache.size > 12) {
+      while (postsResponseCache.size > POSTS_RESPONSE_CACHE_MAX_ENTRIES) {
         const oldestKey = postsResponseCache.keys().next().value;
         if (!oldestKey) break;
         postsResponseCache.delete(oldestKey);
