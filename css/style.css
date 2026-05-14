@@ -720,7 +720,7 @@ body.has-cursor-glow .cursor-glow {
     -webkit-text-fill-color: transparent;
     background-clip: text;
     filter: none;
-    animation: fadeInUp 0.9s var(--transition-smooth) 0.25s both;
+    animation: title-gradient 6s linear infinite, fadeInUp 0.9s var(--transition-smooth) 0.25s both;
   }
 
   .hero-search {
@@ -1106,7 +1106,7 @@ html.is-mobile-device-viewport .hero-title {
   -webkit-text-fill-color: transparent;
   background-clip: text;
   filter: none;
-  animation: fadeInUp 0.9s var(--transition-smooth) 0.25s both;
+  animation: title-gradient 6s linear infinite, fadeInUp 0.9s var(--transition-smooth) 0.25s both;
 }
 
 html.is-mobile-device-viewport .hero-search {

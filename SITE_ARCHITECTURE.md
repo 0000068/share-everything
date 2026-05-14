@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v4.6
+> Version: v4.7
 > Updated: 2026-05-14
 
 ## 1. Overview
@@ -33,9 +33,9 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v4.6 Highlights
+## 2. Version v4.7 Highlights
 
-v4.6 packages the completed Batch 1-8 repair work into a single release commit, including the public API search-text cleanup, server cache/resource hardening, stricter release verification, CI matrix coverage, and final fix-list documentation consolidation while preserving the desktop UI and desktop particle behavior.
+v4.7 packages the completed Batch 1-8 repair work into a single release commit, including the public API search-text cleanup, server cache/resource hardening, stricter release verification, CI matrix coverage, and final fix-list documentation consolidation while preserving the desktop UI and desktop particle behavior.
 
 - `package.json`, README, changelog, and architecture release metadata now match the `v4.6` release commit convention.
 - Public client payloads no longer expose or regenerate `_searchText`; server-side search text stays non-enumerable and internal.

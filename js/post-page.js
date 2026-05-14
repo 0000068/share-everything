@@ -138,7 +138,7 @@
           return;
         }
 
-        if (isMobileViewport || element === navBookmark) {
+        if (element === navBookmark) {
           element.style.display = "none";
           return;
         }

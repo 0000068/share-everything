@@ -202,7 +202,7 @@ const {
   "renderPostContent",
 ]);
 
-const assetVersionValue = "20260514-v50";
+const assetVersionValue = "20260514-v53";
 const assetVersion = `v=${assetVersionValue}`;
 const defaultShareImagePath = "/og-image.jpg?v=4";
 const productionDomainPattern = /0000068\.xyz/;
@@ -630,8 +630,8 @@ expectIncludes(readmeMd, "npm.cmd run visual:check", "README should document the
 expectIncludes(readmeMd, "VISUAL_STRICT=1", "README should document strict visual regression mode");
 expectIncludes(readmeMd, "npm test` 与 `npm.cmd run check` 等价", "README should document that npm test stays a fast smoke check");
 expectIncludes(readmeMd, "并行运行 smoke suite 和 `VISUAL_STRICT=1`", "README should document parallel strict release checks");
-expectIncludes(siteArchitectureMd, "> Version: v4.6", "architecture docs should match the next release commit");
-expectIncludes(siteArchitectureMd, "Version v4.6 Highlights", "architecture docs should describe the current release");
+expectIncludes(siteArchitectureMd, "> Version: v4.7", "architecture docs should match the next release commit");
+expectIncludes(siteArchitectureMd, "Version v4.7 Highlights", "architecture docs should describe the current release");
 expectIncludes(readmeMd, "SITE_URL=https://your-domain.example", "README should use the same SITE_URL placeholder as .env.example");
 expectIncludes(readmeMd, "IMAGE_PROXY_TIMEOUT_MS=10000", "README should document image proxy timeout tuning");
 expectIncludes(readmeMd, "IMAGE_PROXY_MAX_BYTES=8388608", "README should document image proxy size tuning");
@@ -1487,7 +1487,7 @@ expectIncludes(postPageJs, 'console.warn("NotionAPI is unavailable on post page.
 expectNotIncludes(postPageJs, 'console.error("NotionAPI is unavailable on post page.")', "post page should not write expected SSR fallback to stderr as an error");
 expectIncludes(postPageJs, "canBookmarkFromInitialData", "post page should recover bookmark controls from SSR initial data when the client API is unavailable");
 expectIncludes(postPageJs, "initBookmark(initialPostData);", "post page should still wire bookmark controls from SSR summary data in fallback mode");
-expectIncludes(postPageJs, "isMobileViewport || element === navBookmark", "post page should hide article bookmark controls on mobile through JavaScript state");
+expectIncludes(postPageJs, "element === navBookmark", "post page should hide the nav bookmark control while keeping the fab visible on mobile");
 expectIncludes(postPageJs, "createMobileDeviceQueryList", "post page should use the shared real-mobile query for bookmark control placement");
 expectIncludes(postPageJs, 'window.addEventListener?.("bookmarks:updated", bookmarksUpdatedHandler)', "post page should listen for cross-tab bookmark updates");
 assert.ok(

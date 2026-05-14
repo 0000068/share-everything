@@ -265,8 +265,14 @@ const server = createServer(async (req, res) => {
 
     const postMatch = url.pathname.match(/^\/posts\/([^/?#]+)/);
     if (postMatch) {
+      let postId;
+      try {
+        postId = decodeURIComponent(postMatch[1]);
+      } catch {
+        throw createHttpError(400, "Invalid post URL encoding");
+      }
       await invokeApiHandler(getApiHandler("/api/post"), req, res, {
-        id: decodeURIComponent(postMatch[1]),
+        id: postId,
       });
       return;
     }

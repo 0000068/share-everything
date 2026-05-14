@@ -519,10 +519,16 @@ module.exports = async function handler(req, res) {
       throw error;
     }
 
-    const body = await readBoundedImageBuffer(response);
     res.setHeader("Cache-Control", IMAGE_PROXY_CACHE_CONTROL);
     res.setHeader("Content-Type", contentType);
     res.setHeader("X-Content-Type-Options", "nosniff");
+
+    if (req.method === "HEAD") {
+      response.discardBody?.();
+      return res.status(200).end();
+    }
+
+    const body = await readBoundedImageBuffer(response);
     return res.status(200).send(body);
   } catch (error) {
     const status = Number(error?.status) || (error?.name === "AbortError" ? 504 : 502);

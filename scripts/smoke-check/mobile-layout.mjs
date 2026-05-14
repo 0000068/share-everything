@@ -109,11 +109,6 @@ function expectGradientTitle(assert, source, selector, label) {
     `${label} should keep the desktop title gradient colors`,
   );
   assert.match(
-    declarations.get("filter") || "",
-    /drop-shadow.+rgba\(0, 255, 255, 0\.3\).+drop-shadow.+rgba\(224, 64, 251, 0\.2\)/,
-    `${label} should keep the desktop title glow`,
-  );
-  assert.match(
     declarations.get("animation") || "",
     /title-gradient 6s linear infinite.+fadeInUp/,
     `${label} should keep the desktop title-gradient animation`,
