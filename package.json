@@ -12,11 +12,12 @@
     "vanilla-js"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "scripts": {
-    "check": "node scripts/smoke-check.mjs",
+    "check": "node scripts/inject-site-meta.mjs --check && node scripts/smoke-check.mjs",
     "dev": "node scripts/local-server.mjs",
+    "meta:inject": "node scripts/inject-site-meta.mjs",
     "notion:live-check": "node scripts/notion-live-check.mjs",
     "test": "npm run check",
     "verify": "npm run verify:release",

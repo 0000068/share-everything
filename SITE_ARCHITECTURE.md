@@ -41,11 +41,11 @@ v4.6 packages the completed Batch 1-8 repair work into a single release commit, 
 - Public client payloads no longer expose or regenerate `_searchText`; server-side search text stays non-enumerable and internal.
 - Server-side Notion block rendering now has a configurable total block budget, bounded recursive fan-out, and single-flight failure cooldowns.
 - Browser-side post summary caching and `sessionStorage` cleanup are bounded and throttled to reduce repeated tab-sync work.
-- Release verification runs the smoke suite and strict visual regression in parallel, and GitHub Actions now covers Node 18, 20, and 22 with stale workflow cancellation.
+- Release verification runs the smoke suite and strict visual regression in parallel, and GitHub Actions now covers Node 22 and 24 with stale workflow cancellation.
 - `FIX_TODO.md` is the single authoritative repair status document; summary documents point back to it instead of carrying duplicate stale checklists.
 - Mobile pages now disable the particle canvas entirely after real-device frame-rate checks, while desktop home keeps the 350-particle animation.
 - Blog cover placeholders no longer render the notebook emoji; slow or failed covers fall back to quiet gradients.
-- Browser icons and share previews use the restored `favicon.png?v=4` brand artwork directly, avoiding a mismatched SVG fallback.
+- Browser icons keep using the restored `favicon.png` brand artwork directly, while share previews use a lightweight `og-image.jpg` derivative so SEO metadata no longer ships the 1.36 MB source image.
 - Mobile home title styling uses the same animated `title-gradient` colors as desktop, with mobile-only sizing and vertical placement.
 - Mobile blog card bookmark buttons are kept at the smaller 26px visual size so the card action does not dominate the title row.
 - `scripts/smoke-check.mjs` now enforces a single static CSS/JS `?v=` value across HTML entrypoints.
@@ -239,7 +239,7 @@ Read-only public APIs reject non-`GET` methods with `405` and `Cache-Control: no
 |---|---|
 | Static HTML and `/` | `public, max-age=0, must-revalidate` |
 | CSS and JS | `public, max-age=3600, stale-while-revalidate=86400` |
-| `favicon.png` | `public, max-age=86400` |
+| `favicon.png`, `og-image.jpg` | `public, max-age=86400` |
 | Successful `/api/image` responses | `public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400` |
 | Public JSON and SSR post HTML | `no-store` |
 | Public API errors | `no-store` |
@@ -253,12 +253,12 @@ Client-side `notion-api.js` keeps a short bounded in-memory post-list response c
 
 ## 6. Security
 
-- Global Vercel headers keep frame protection through `frame-ancestors 'none'` and `X-Frame-Options: DENY`.
+- Global Vercel headers keep frame protection through `frame-ancestors 'none'` and `X-Frame-Options: DENY`, and also emit HSTS, Referrer-Policy, and Permissions-Policy.
 - Static pages use CSP meta tags generated from `server/security-policy.js`.
 - SSR article pages generate request-scoped nonces for CSP, JSON-LD, and initial post data.
 - `connect-src` remains same-origin so browser data requests continue through semantic API routes.
 - `/api/image` only accepts `https:` upstream URLs, rejects localhost/private literal hosts and private DNS results, pins the validated DNS answer to the actual HTTPS request through a custom lookup, validates every redirect hop manually, enforces image content types, limits image size, applies a timeout, and sends `X-Content-Type-Options: nosniff`.
-- Embed iframes intentionally use a permissive sandbox subset (`allow-scripts`, `allow-same-origin`, popups, forms, and presentation) so trusted providers such as YouTube, Bilibili, Figma, and CodePen can render; this is a deliberate usability tradeoff, while page-level `frame-src`, same-origin API boundaries, and `frame-ancestors 'none'` still constrain where embeds can load and how this site can be framed.
+- Embed iframes intentionally use a permissive sandbox subset (`allow-scripts`, `allow-same-origin`, popups, forms, and presentation) so trusted providers such as YouTube, Bilibili, Vimeo, Figma, Loom, and CodePen can render; this is a deliberate usability tradeoff, while page-level `frame-src`, same-origin API boundaries, and `frame-ancestors 'none'` still constrain where embeds can load and how this site can be framed.
 - Public error details are hidden unless `EXPOSE_PUBLIC_ERROR_DETAILS=true` is set for local debugging.
 
 ## 7. Repository Structure
@@ -272,6 +272,7 @@ Client-side `notion-api.js` keeps a short bounded in-memory post-list response c
 |-- vercel.json
 |-- site.config.json
 |-- favicon.png
+|-- og-image.jpg
 |-- SITE_ARCHITECTURE.md
 |-- api/
 |   |-- image.js
@@ -570,7 +571,7 @@ Category navigation is Notion-driven. The server reads the resolved `Category` /
 
 ## 14. Checks
 
-`scripts/smoke-check.mjs` is the single `npm.cmd run check` entrypoint. `npm.cmd run verify:release` runs the smoke suite and `visual-regression.mjs` with `VISUAL_STRICT=1` in parallel, and the same strict command is wired into `.github/workflows/release-check.yml` across the Node 18/20/22 matrix for push and pull request validation. Shared harness utilities and heavier domain checks live in focused modules under `scripts/smoke-check/`:
+`scripts/smoke-check.mjs` is the single `npm.cmd run check` entrypoint. `npm.cmd run verify:release` runs the smoke suite and `visual-regression.mjs` with `VISUAL_STRICT=1` in parallel, and the same strict command is wired into `.github/workflows/release-check.yml` across the Node 22/24 matrix for push and pull request validation. Shared harness utilities and heavier domain checks live in focused modules under `scripts/smoke-check/`:
 
 - `harness.mjs` for VM/module loading helpers, fake DOM primitives, and common assertions.
 - `api-contracts.mjs` for final API handler payload contracts such as `/api/posts-data` category presentation metadata.

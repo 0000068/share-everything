@@ -7,6 +7,70 @@ import { fileURLToPath } from "node:url";
 const require = createRequire(import.meta.url);
 const rootDir = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
 
+function parseDotEnvValue(rawValue) {
+  const trimmed = String(rawValue || "").trim();
+  if (!trimmed) return "";
+
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    return trimmed
+      .slice(1, -1)
+      .replace(/\\n/g, "\n")
+      .replace(/\\r/g, "\r")
+      .replace(/\\t/g, "\t")
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, "\\");
+  }
+
+  if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
+    return trimmed.slice(1, -1);
+  }
+
+  return trimmed.replace(/\s+#.*$/, "").trim();
+}
+
+function parseDotEnvLine(rawLine) {
+  const line = String(rawLine || "").trim();
+  if (!line || line.startsWith("#")) return null;
+
+  const normalizedLine = line.startsWith("export ")
+    ? line.slice("export ".length).trim()
+    : line;
+  const separatorIndex = normalizedLine.indexOf("=");
+  if (separatorIndex <= 0) return null;
+
+  const key = normalizedLine.slice(0, separatorIndex).trim();
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) return null;
+
+  return {
+    key,
+    value: parseDotEnvValue(normalizedLine.slice(separatorIndex + 1)),
+  };
+}
+
+async function loadDotEnvFile() {
+  let source = "";
+  try {
+    source = await readFile(path.join(rootDir, ".env"), "utf8");
+  } catch (error) {
+    if (isMissingStaticFileError(error)) return;
+    throw error;
+  }
+
+  source
+    .replace(/^\uFEFF/, "")
+    .split(/\r?\n/)
+    .forEach((line) => {
+      const parsed = parseDotEnvLine(line);
+      if (!parsed || Object.prototype.hasOwnProperty.call(process.env, parsed.key)) {
+        return;
+      }
+
+      process.env[parsed.key] = parsed.value;
+    });
+}
+
+await loadDotEnvFile();
+
 // Enable development-mode behavior (e.g. template hot-reload) before loading
 // API handlers that inspect NODE_ENV at require time.
 if (!process.env.NODE_ENV) {
@@ -30,15 +94,17 @@ const mimeTypes = new Map([
   [".webp", "image/webp"],
   [".xml", "application/xml; charset=utf-8"],
 ]);
-const apiHandlers = new Map([
-  ["/api/image", require("../api/image.js")],
-  ["/api/notion", require("../api/notion.js")],
-  ["/api/post", require("../api/post.js")],
-  ["/api/post-data", require("../api/post-data.js")],
-  ["/api/posts-data", require("../api/posts-data.js")],
-  ["/api/robots", require("../api/robots.js")],
-  ["/api/sitemap", require("../api/sitemap.js")],
+const apiHandlerSpecifiers = new Map([
+  ["/api/image", "../api/image.js"],
+  ["/api/notion", "../api/notion.js"],
+  ["/api/post", "../api/post.js"],
+  ["/api/post-data", "../api/post-data.js"],
+  ["/api/posts-data", "../api/posts-data.js"],
+  ["/api/robots", "../api/robots.js"],
+  ["/api/sitemap", "../api/sitemap.js"],
 ]);
+const apiHandlers = new Map();
+const deniedStaticRootSegments = new Set(["api", "server", "scripts"]);
 
 function createHttpError(statusCode, message) {
   const error = new Error(message);
@@ -68,6 +134,22 @@ function readQuery(url) {
     query[key] = value;
   });
   return query;
+}
+
+function getApiHandler(pathname) {
+  const specifier = apiHandlerSpecifiers.get(pathname);
+  if (!specifier) return null;
+  if (apiHandlers.has(pathname)) {
+    return apiHandlers.get(pathname);
+  }
+
+  const handler = require(specifier);
+  if (typeof handler !== "function") {
+    throw createHttpError(500, `Invalid API handler for ${pathname}`);
+  }
+
+  apiHandlers.set(pathname, handler);
+  return handler;
 }
 
 function createApiResponse(res) {
@@ -121,6 +203,18 @@ async function invokeApiHandler(handler, req, res, query = {}) {
   }, createApiResponse(res));
 }
 
+function isDeniedStaticPath(relativePath) {
+  const segments = String(relativePath || "")
+    .split(path.sep)
+    .filter(Boolean);
+  const rootSegment = segments[0]?.toLowerCase() || "";
+
+  return (
+    deniedStaticRootSegments.has(rootSegment) ||
+    segments.some((segment) => segment.startsWith("."))
+  );
+}
+
 async function serveStatic(url, res) {
   let pathname = "";
   try {
@@ -133,6 +227,9 @@ async function serveStatic(url, res) {
   const filePath = path.resolve(rootDir, `.${pathname}`);
   const relativePath = path.relative(rootDir, filePath);
   if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    throw createHttpError(403, "Forbidden");
+  }
+  if (isDeniedStaticPath(relativePath)) {
     throw createHttpError(403, "Forbidden");
   }
 
@@ -168,30 +265,30 @@ const server = createServer(async (req, res) => {
 
     const postMatch = url.pathname.match(/^\/posts\/([^/?#]+)/);
     if (postMatch) {
-      await invokeApiHandler(apiHandlers.get("/api/post"), req, res, {
+      await invokeApiHandler(getApiHandler("/api/post"), req, res, {
         id: decodeURIComponent(postMatch[1]),
       });
       return;
     }
 
     if (url.pathname === "/post.html") {
-      await invokeApiHandler(apiHandlers.get("/api/post"), req, res, readQuery(url));
+      await invokeApiHandler(getApiHandler("/api/post"), req, res, readQuery(url));
       return;
     }
 
-    const apiHandler = apiHandlers.get(url.pathname);
+    const apiHandler = getApiHandler(url.pathname);
     if (apiHandler) {
       await invokeApiHandler(apiHandler, req, res, readQuery(url));
       return;
     }
 
     if (url.pathname === "/sitemap.xml") {
-      await invokeApiHandler(apiHandlers.get("/api/sitemap"), req, res, readQuery(url));
+      await invokeApiHandler(getApiHandler("/api/sitemap"), req, res, readQuery(url));
       return;
     }
 
     if (url.pathname === "/robots.txt") {
-      await invokeApiHandler(apiHandlers.get("/api/robots"), req, res, readQuery(url));
+      await invokeApiHandler(getApiHandler("/api/robots"), req, res, readQuery(url));
       return;
     }
 

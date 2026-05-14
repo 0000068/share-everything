@@ -19,7 +19,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-4.7.0-00e5ff?style=flat-square" alt="Version" />
-  <img src="https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
+  <img src="https://img.shields.io/badge/node-%3E%3D22-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/deploy-Vercel-000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel" />
   <img src="https://img.shields.io/badge/CMS-Notion-000?style=flat-square&logo=notion&logoColor=white" alt="Notion" />
   <img src="https://img.shields.io/badge/framework-none-d500f9?style=flat-square" alt="No Framework" />
@@ -78,7 +78,7 @@
 - XSS 防护（HTML 转义 + URL 协议白名单 + CSS 值白名单）
 - 旧 API 代理永久禁用 (410 Gone)
 - 错误信息脱敏，仅调试模式暴露详情
-- `frame-ancestors 'none'` + `X-Frame-Options: DENY`
+- `frame-ancestors 'none'` + `X-Frame-Options: DENY` + HSTS / Referrer-Policy / Permissions-Policy
 - 静态 HTML 的 CSP meta 用于静态 fallback；SSR 文章页会由 `api/post.js` 基于模板重写 CSP/OG/canonical，并通过响应 header 承载 `frame-ancestors`
 - `scripts/smoke-check.mjs` 中关于 `shouldReduceMotion` / `prefers-reduced-motion` 的反向断言是动效常开设计守卫，不要作为无障碍修复顺手移除
 
@@ -186,7 +186,7 @@ Notion Database
 
 ### 前置条件
 
-- [Node.js](https://nodejs.org/) ≥ 18
+- [Node.js](https://nodejs.org/) ≥ 22
 - 一个 [Notion](https://www.notion.so/) 数据库
 - 一个 [Notion Integration Token](https://developers.notion.com/docs/getting-started)
 

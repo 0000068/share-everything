@@ -37,7 +37,8 @@ expectIncludes(apiRobotsJs, "Sitemap:", "dynamic robots should emit a sitemap di
 expectIncludes(vercelJson, '"/posts/:id"', "Vercel should rewrite canonical article routes");
 expectIncludes(vercelJson, '"/robots.txt"', "Vercel should serve a dynamic robots.txt");
 expectIncludes(vercelJson, '"/sitemap.xml"', "Vercel should serve a dynamic sitemap");
-expectIncludes(vercelJson, '"/favicon.png"', "Vercel should set cache headers for the real favicon asset");
+expectIncludes(vercelJson, '"/favicon.png"', "Vercel should set cache headers for the approved brand favicon asset");
+expectIncludes(vercelJson, '"/og-image.jpg"', "Vercel should set cache headers for the Open Graph image asset");
 expectNotIncludes(vercelJson, '"/favicon.svg"', "Vercel should not preserve a cache rule for the removed SVG favicon");
 expectIncludes(vercelJson, "max-age=3600, stale-while-revalidate=86400", "Vercel should give versioned static scripts and styles a short browser cache");
 const parsedVercelJson = JSON.parse(vercelJson);
@@ -51,8 +52,21 @@ assert.ok(
   !apiHeaderRule?.headers?.some((header) => String(header.key).toLowerCase() === "cache-control"),
   "Vercel should leave API Cache-Control decisions to individual handlers so /api/image can be edge-cacheable",
 );
+const globalHeaderRule = parsedVercelJson.headers.find((entry) => entry.source === "/(.*)");
 expectIncludes(vercelJson, "frame-ancestors 'none'", "Vercel global CSP should preserve clickjacking protection");
 expectIncludes(vercelJson, '"X-Frame-Options"', "Vercel should retain legacy frame-denial protection");
+assert.ok(
+  globalHeaderRule?.headers?.some((header) => header.key === "Strict-Transport-Security" && header.value === "max-age=31536000; includeSubDomains"),
+  "Vercel should emit HSTS on all routes",
+);
+assert.ok(
+  globalHeaderRule?.headers?.some((header) => header.key === "Referrer-Policy" && header.value === "strict-origin-when-cross-origin"),
+  "Vercel should emit a strict referrer policy on all routes",
+);
+assert.ok(
+  globalHeaderRule?.headers?.some((header) => header.key === "Permissions-Policy" && header.value === "camera=(), microphone=(), geolocation=()"),
+  "Vercel should deny unused powerful browser features on all routes",
+);
 expectNotIncludes(vercelJson, "script-src-elem 'self' 'unsafe-inline'", "Vercel global CSP should not allow arbitrary inline script elements");
 expectNotIncludes(vercelJson, "default-src 'self'; script-src", "Vercel global CSP should leave script policy to static meta tags and SSR nonce headers");
 expectNotIncludes(vercelJson, '"/api/:path*"', "Vercel should not rewrite semantic API routes through the disabled legacy proxy");

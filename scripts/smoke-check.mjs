@@ -57,6 +57,7 @@ import {
   "js/site-utils.js",
   "js/spa-router.js",
   "js/ui-effects.js",
+  "scripts/inject-site-meta.mjs",
   "scripts/release-check.mjs",
   "api/notion.js",
   "api/image.js",
@@ -90,9 +91,12 @@ const siteArchitectureMd = read("SITE_ARCHITECTURE.md");
 const siteConfigJson = read("site.config.json");
 const siteConfig = JSON.parse(siteConfigJson);
 const configuredSiteOrigin = normalizeConfiguredSiteOrigin(siteConfig.siteUrl);
+const featuredCategoryName = siteConfig.categoryNavigation.featured.name;
+const featuredCategoryHref = `/blog.html?category=${encodeURIComponent(featuredCategoryName)}`;
 const vercelJson = read("vercel.json");
 const envExample = read(".env.example");
 const faviconPng = readFileSync("favicon.png");
+const ogImageJpg = readFileSync("og-image.jpg");
 const licenseText = read("LICENSE");
 const localServerJs = read("scripts/local-server.mjs");
 const releaseCheckJs = read("scripts/release-check.mjs");
@@ -200,6 +204,7 @@ const {
 
 const assetVersionValue = "20260514-v47";
 const assetVersion = `v=${assetVersionValue}`;
+const defaultShareImagePath = "/og-image.jpg?v=4";
 const productionDomainPattern = /0000068\.xyz/;
 const allowedProductionDomainFiles = new Set([
   "FIX_TODO.md",
@@ -250,6 +255,27 @@ function normalizeConfiguredSiteOrigin(value) {
   return url.origin;
 }
 
+function readJpegDimensions(buffer, label) {
+  assert.equal(buffer[0], 0xff, `${label} should start with a JPEG SOI marker`);
+  assert.equal(buffer[1], 0xd8, `${label} should start with a JPEG SOI marker`);
+  let offset = 2;
+  while (offset < buffer.length) {
+    while (buffer[offset] === 0xff) offset += 1;
+    const marker = buffer[offset];
+    offset += 1;
+    if (marker === 0xd9 || marker === 0xda) break;
+    const length = buffer.readUInt16BE(offset);
+    if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
+      return {
+        height: buffer.readUInt16BE(offset + 3),
+        width: buffer.readUInt16BE(offset + 5),
+      };
+    }
+    offset += length;
+  }
+  assert.fail(`${label} should include JPEG dimensions`);
+}
+
 const productionDomainFiles = listProjectTextFiles().filter((filePath) => (
   productionDomainPattern.test(readFileSync(filePath, "utf8"))
 ));
@@ -289,7 +315,7 @@ runServerModuleChecks({
   const expectedUrl = `${configuredSiteOrigin}${routePath}`;
   expectIncludes(htmlSource, `content="${expectedUrl}"`, `${label} should keep fallback og:url in sync with site.config.json`);
   expectIncludes(htmlSource, `href="${expectedUrl}"`, `${label} should keep fallback canonical in sync with site.config.json`);
-  expectIncludes(htmlSource, `content="${configuredSiteOrigin}/favicon.png?v=4"`, `${label} should keep fallback og:image in sync with site.config.json`);
+  expectIncludes(htmlSource, `content="${configuredSiteOrigin}${defaultShareImagePath}"`, `${label} should keep fallback og:image in sync with site.config.json`);
 });
 
 expectIncludes(indexHtml, 'property="og:image"', "index.html should declare og:image");
@@ -300,7 +326,7 @@ expectIncludes(postHtml, 'property="og:image"', "post.html should declare og:ima
   ["blog.html", blogHtml],
   ["post.html", postHtml],
 ].forEach(([label, htmlSource]) => {
-  expectIncludes(htmlSource, 'type="image/png" href="/favicon.png?v=4"', `${label} should use the approved PNG favicon artwork`);
+  expectIncludes(htmlSource, 'type="image/png" href="/favicon.png?v=4"', `${label} should keep the approved PNG favicon artwork`);
   expectNotIncludes(htmlSource, "favicon.svg", `${label} should not let a mismatched SVG favicon override the approved PNG artwork`);
 });
 assert.equal(
@@ -315,6 +341,8 @@ assert.equal(
   "048586722371a596ef02f4846dcaa2fc30d3f21853b8355e9de7fe10c40a15ba",
   "favicon.png should match the approved brand artwork",
 );
+assert.deepEqual(readJpegDimensions(ogImageJpg, "og-image.jpg"), { width: 1200, height: 630 }, "og-image.jpg should use the standard Open Graph image size");
+assert.ok(ogImageJpg.length <= 80 * 1024, "og-image.jpg should stay at or below the 80KB Task D budget");
 expectIncludes(indexHtml, 'id="heroSearchForm"', "index.html should expose a real search form");
 expectIncludes(indexHtml, 'action="/blog.html"', "index.html search should degrade to a real blog route");
 expectIncludes(indexHtml, 'method="get"', "index.html search should work without JavaScript");
@@ -328,7 +356,8 @@ expectIncludes(blogHtml, 'href="/"', "blog.html should point the home action to 
 expectIncludes(postHtml, 'href="/"', "post.html should point the home action to the canonical root route");
 expectIncludes(indexHtml, 'href="/blog.html#bookmarks"', "index.html should keep bookmark navigation on a hash-only route");
 expectIncludes(indexHtml, 'id="ctaHome" href="/blog.html" aria-label="总览"', "index hero overview CTA should expose an accessible name");
-expectIncludes(indexHtml, 'id="ctaStart" href="/blog.html?category=%E7%B2%BE%E9%80%89" aria-label="精选"', "index hero featured CTA should expose an accessible name");
+expectIncludes(indexHtml, `id="ctaStart" href="${featuredCategoryHref}" aria-label="${featuredCategoryName}"`, "index hero featured CTA should expose an accessible name from site.config.json");
+expectIncludes(indexHtml, `<span class="btn-tooltip">${featuredCategoryName}</span>`, "index hero featured CTA tooltip should follow site.config.json");
 expectIncludes(indexHtml, 'id="ctaWiki" href="/blog.html#bookmarks" rel="nofollow" aria-label="收藏"', "index hero bookmark CTA should expose an accessible name");
 expectIncludes(blogHtml, 'href="/blog.html#bookmarks"', "blog.html should keep bookmark navigation on a hash-only route");
 expectIncludes(postHtml, 'href="/blog.html#bookmarks"', "post.html should keep bookmark navigation on a hash-only route");
@@ -361,12 +390,27 @@ assert.equal(
   "static CSS/JS assets should not carry multiple cache-busting versions",
 );
 const expectedStaticContentSecurityPolicy = securityPolicyHelpers.buildStaticContentSecurityPolicy();
+expectIncludes(expectedStaticContentSecurityPolicy, "https://fonts.googleapis.com", "shared CSP should allow the global Google Fonts CSS endpoint");
+expectIncludes(expectedStaticContentSecurityPolicy, "https://fonts.googleapis.cn", "shared CSP should keep the China Google Fonts CSS endpoint allowed");
+expectIncludes(expectedStaticContentSecurityPolicy, "https://fonts.gstatic.com", "shared CSP should allow the global Google Fonts file endpoint");
+expectIncludes(expectedStaticContentSecurityPolicy, "https://fonts.gstatic.cn", "shared CSP should keep the China Google Fonts file endpoint allowed");
+expectIncludes(expectedStaticContentSecurityPolicy, "https://www.youtube.com", "shared CSP should allow YouTube embeds");
+expectIncludes(expectedStaticContentSecurityPolicy, "https://player.bilibili.com", "shared CSP should allow Bilibili embeds");
+expectIncludes(expectedStaticContentSecurityPolicy, "https://player.vimeo.com", "shared CSP should allow Vimeo embeds");
+expectIncludes(expectedStaticContentSecurityPolicy, "https://codepen.io", "shared CSP should allow CodePen embeds");
+expectIncludes(expectedStaticContentSecurityPolicy, "https://www.figma.com", "shared CSP should allow Figma embeds");
+expectIncludes(expectedStaticContentSecurityPolicy, "https://www.loom.com", "shared CSP should allow Loom embeds");
+expectNotIncludes(expectedStaticContentSecurityPolicy, "frame-src 'self' https:;", "shared CSP should not allow every HTTPS frame origin");
 pageHtmlByLabel.forEach(([label, htmlSource]) => {
   assert.equal(
     extractContentSecurityPolicyMetaContent(htmlSource),
     expectedStaticContentSecurityPolicy,
     `${label} static CSP meta should match the shared security policy builder`,
   );
+  expectIncludes(htmlSource, 'rel="preconnect" href="https://fonts.googleapis.com"', `${label} should preconnect to the global Google Fonts CSS endpoint`);
+  expectIncludes(htmlSource, 'rel="preconnect" href="https://fonts.gstatic.com"', `${label} should preconnect to the global Google Fonts file endpoint`);
+  expectIncludes(htmlSource, 'rel="preconnect" href="https://fonts.googleapis.cn"', `${label} should keep the China Google Fonts CSS preconnect`);
+  expectIncludes(htmlSource, 'rel="preconnect" href="https://fonts.gstatic.cn"', `${label} should keep the China Google Fonts file preconnect`);
 
   expectIncludes(
     htmlSource,
@@ -460,6 +504,12 @@ expectIncludes(blogPageJs, 'fetchpriority="${coverFetchPriority}"', "blog cards 
 expectIncludes(blogPageJs, "preloadCoverImages(data.results)", "blog cards should preload the first visible cover images after list data arrives");
 expectIncludes(blogPageJs, 'data-blog-cover-preload', "blog cards should mark temporary cover preload links for cleanup");
 expectIncludes(blogPageJs, 'window.addEventListener?.("bookmarks:updated", handleBookmarksUpdated)', "blog page should listen for cross-tab bookmark updates");
+expectNotIncludes(blogPageJs, "@canonical-source", "blog page should not keep dead local copies of shared helper fallbacks");
+expectIncludes(blogPageJs, "const sanitizeCssColor = SHARED_CONTENT.sanitizeCssColorValue;", "blog page should call the shared CSS sanitizer directly");
+expectIncludes(blogPageJs, "const normalizeBookmarkSearchQuery = SHARED_CONTENT.normalizeSearchText;", "blog page should call the shared search normalizer directly");
+expectIncludes(blogPageJs, "const buildSharedPostSearchText = SHARED_CONTENT.buildPostSearchText;", "blog page should call the shared search text builder directly");
+expectIncludes(blogPageJs, "const parseBookmarkListingHash = siteUtils.parseBookmarkListingHash;", "blog page should rely on the shared bookmark hash parser");
+expectIncludes(blogPageJs, "const buildBookmarkListingUrl = siteUtils.buildBookmarkListingUrl;", "blog page should rely on the shared bookmark route builder");
 expectIncludes(blogPageJs, "blog-card-cover-fallback", "blog cards should show a stable fallback while remote covers load");
 expectNotIncludes(blogPageJs, ">${safeCoverEmoji}</span>", "blog cover fallback should not render the notebook emoji as visible placeholder text");
 expectIncludes(blogPageCss, ".blog-card-cover-fallback", "blog card cover CSS should keep fallback art visible until the image paints");
@@ -472,6 +522,8 @@ expectIncludes(commonJs, "return isMobileParticleViewport();", "particle runtime
 expectIncludes(commonJs, "count: isMobile ? 0 : DESKTOP_PARTICLE_COUNT", "particle runtime should keep particles desktop-only");
 expectIncludes(commonJs, "siteUtils.isMobileDeviceViewport", "particle runtime should use the shared real-mobile gate before changing density");
 expectIncludes(commonJs, '(hover: none) and (pointer: coarse)', "particle fallback should avoid treating narrow desktop windows as mobile");
+expectIncludes(commonJs, "bucketArrays[color] = [];", "particle buckets should grow densely instead of preallocating holey arrays");
+expectNotIncludes(commonJs, "bucketArrays[color] = Array(particleCount)", "particle buckets should not allocate holey arrays for every color");
 expectNotIncludes(commonJs, "function shouldReduceMotion", "particle runtime should not stop the old particle animation for reduced-motion settings");
 expectNotIncludes(commonJs, "shouldReduceMobileParticles", "particle runtime should avoid reduced-motion gates in the particle loop");
 expectNotIncludes(commonJs, "particlesPausedForScroll", "particle runtime should not keep mobile scroll-pause state after disabling mobile particles");
@@ -539,11 +591,23 @@ expectNotIncludes(releaseCheckJs, "spawnSync", "release check should not seriali
 expectIncludes(releaseCheckWorkflowYml, "concurrency:", "release workflow should cancel stale runs for the same ref");
 expectIncludes(releaseCheckWorkflowYml, "cancel-in-progress: true", "release workflow should cancel in-progress stale runs");
 expectIncludes(releaseCheckWorkflowYml, "timeout-minutes: 10", "release workflow should bound CI runtime");
-expectIncludes(releaseCheckWorkflowYml, "node-version: [18, 20, 22]", "release workflow should test the supported Node engine range");
+expectIncludes(packageJson, '"node": ">=22"', "package engines should require an active LTS Node runtime");
+expectIncludes(readmeMd, "node-%3E%3D22", "README badge should advertise the supported Node engine floor");
+expectIncludes(readmeMd, "Node.js](https://nodejs.org/) ≥ 22", "README prerequisites should match package engines");
+expectIncludes(siteArchitectureMd, "Node 22/24 matrix", "architecture docs should describe the current release-check Node matrix");
+expectIncludes(releaseCheckWorkflowYml, "node-version: [22, 24]", "release workflow should test the supported Node engine range");
+expectNotIncludes(releaseCheckWorkflowYml, "node-version: [18, 20, 22]", "release workflow should drop EOL Node versions");
 expectIncludes(releaseCheckWorkflowYml, "node-version: ${{ matrix.node-version }}", "release workflow should use the Node matrix value");
 expectNotIncludes(releaseCheckWorkflowYml, 'node-version: "20"', "release workflow should not pin checks to Node 20 only");
 expectNotIncludes(releaseCheckWorkflowYml, "master", "release workflow should not keep a dead master branch trigger");
-expectIncludes(localServerJs, '["/api/robots", require("../api/robots.js")]', "local server should expose the dynamic robots handler");
+expectIncludes(localServerJs, "await loadDotEnvFile();", "local server should load .env before reading runtime configuration");
+expectIncludes(localServerJs, "Object.prototype.hasOwnProperty.call(process.env, parsed.key)", "local server should not override shell-provided environment variables with .env values");
+expectIncludes(localServerJs, '["/api/robots", "../api/robots.js"]', "local server should expose the dynamic robots handler");
+expectIncludes(localServerJs, "function getApiHandler", "local server should lazy-load API handlers by route");
+expectNotIncludes(localServerJs, '["/api/post", require("../api/post.js")]', "local server should not eager-load every API handler at startup");
+expectIncludes(localServerJs, "function isDeniedStaticPath", "local server should centralize static denylist checks");
+expectIncludes(localServerJs, 'new Set(["api", "server", "scripts"])', "local server should deny source directories from static serving");
+expectIncludes(localServerJs, 'segment.startsWith(".")', "local server should deny dotfiles including .env and .git paths");
 expectIncludes(localServerJs, 'url.pathname === "/robots.txt"', "local server should map robots.txt to the dynamic handler");
 expectIncludes(localServerJs, "VISUAL_REGRESSION_STATIC_TEMPLATES", "local server should expose static templates only for visual regression");
 expectIncludes(visualRegressionJs, "Page.captureScreenshot", "visual regression should capture real browser screenshots");
@@ -602,8 +666,8 @@ expectNotIncludes(
   "Convert the central `notion-content.js` block-type switch",
   "architecture backlog should not list the now-registered block renderer structure",
 );
-expectIncludes(localServerJs, '["/api/image", require("../api/image.js")]', "local dev server should route the image proxy endpoint");
-expectIncludes(localServerJs, '["/api/notion", require("../api/notion.js")]', "local dev server should route the disabled legacy Notion proxy");
+expectIncludes(localServerJs, '["/api/image", "../api/image.js"]', "local dev server should route the image proxy endpoint");
+expectIncludes(localServerJs, '["/api/notion", "../api/notion.js"]', "local dev server should route the disabled legacy Notion proxy");
 expectIncludes(localServerJs, '[".webp", "image/webp"]', "local dev server should serve WebP images with the correct MIME type");
 expectIncludes(localServerJs, '[".jpg", "image/jpeg"]', "local dev server should serve JPEG images with the correct MIME type");
 expectIncludes(localServerJs, '[".jpeg", "image/jpeg"]', "local dev server should serve JPEG images with the correct MIME type");
@@ -624,6 +688,8 @@ expectIncludes(spaRouterJs, "ROUTE_LOCAL_POST_FALLBACK_MS", "SPA router should q
 expectIncludes(spaRouterJs, "ROUTE_STUCK_FALLBACK_MS", "SPA router should recover if a route transition gets stuck in the exit state");
 expectIncludes(spaRouterJs, "getNavigationFallbackUrl", "SPA router stuck fallback should use local-compatible post URLs");
 expectIncludes(spaRouterJs, "pendingPageFetches", "SPA router should coalesce in-flight page HTML prefetch and navigation requests");
+expectIncludes(spaRouterJs, "MAX_PENDING_PAGE_FETCHES = 4", "SPA router should cap concurrent cacheable page fetches");
+expectIncludes(spaRouterJs, "pendingPageFetches.size >= MAX_PENDING_PAGE_FETCHES", "SPA router should skip new warm prefetches once pending fetches are saturated");
 expectIncludes(spaRouterJs, "buildPostTemplateFallbackUrl", "SPA router should recover post navigation when the local server lacks /posts rewrites");
 expectIncludes(spaRouterJs, "shouldUsePostTemplateFallbackFirst", "SPA router should prefer the static post template on local dev origins");
 expectIncludes(spaRouterJs, '"127.0.0.1"', "SPA router local post template preference should cover the bundled local server host");
@@ -876,6 +942,9 @@ expectIncludes(runtimeCoreJs, "focusSpaContent", "runtime-core.js should expose 
 expectIncludes(runtimeCoreJs, "cleanupTemporaryFocus", "runtime-core.js should clean up temporary SPA focus tabindex attributes");
 expectIncludes(runtimeCoreJs, 'removeAttribute("tabindex")', "runtime-core.js should remove managed tabindex after programmatic focus");
 expectIncludes(runtimeCoreJs, "const PageRuntime = (() => {", "runtime-core.js should own page module registration and cleanup");
+expectIncludes(runtimeCoreJs, "function start(pageId = getPageIdFromUrl(window.location.href))", "runtime-core.js should split page registration from initial startup");
+expectNotIncludes(runtimeCoreJs, "if (pageId === getPageIdFromUrl(window.location.href))", "PageRuntime.register should not initialize pages during module import");
+expectIncludes(appJs, "window.PageRuntime?.start?.();", "app.js should start the current page after all page modules register");
 expectIncludes(bookmarkJs, "parseSerializedTags", "bookmark fallback should recover serialized tags");
 expectIncludes(bookmarkJs, "createBookmarkEntry", "bookmark manager should centralize bookmark record creation");
 expectIncludes(bookmarkJs, "buildCardBookmarkSource", "bookmark manager should centralize DOM snapshot extraction");
@@ -889,6 +958,10 @@ expectIncludes(bookmarkJs, "if (!save(bookmarks)) return null;", "bookmark toggl
 expectIncludes(bookmarkJs, "if (!save(nextBookmarks))", "bookmark hydration should fail cleanly when persistence is unavailable");
 expectIncludes(bookmarkJs, "return null;", "bookmark toggleById should signal persistence failures");
 expectIncludes(bookmarkJs, 'new window.CustomEvent("bookmarks:updated"', "bookmark manager should broadcast storage-driven bookmark updates");
+expectIncludes(bookmarkJs, 'if (typeof window.CustomEvent !== "function") return;', "bookmark manager should require real CustomEvent support instead of dispatching plain objects");
+expectNotIncludes(bookmarkJs, 'type: "bookmarks:updated", detail', "bookmark manager should not keep the invalid plain-object event fallback");
+expectIncludes(bookmarkJs, "clearTimeout(storageSyncTimer);", "bookmark storage sync should debounce cross-tab updates");
+expectIncludes(bookmarkJs, "}, 100);", "bookmark storage sync should use the Task F debounce window");
 runContentModuleChecks({
   assert,
   expectIncludes,
@@ -1091,6 +1164,39 @@ assert.equal(
   4,
   "bookmark manager should persist the upgraded metadata version for new bookmarks",
 );
+assert.equal(
+  bookmarkUpdatedEvents.length,
+  1,
+  "bookmark manager should broadcast after direct toggle changes",
+);
+assert.equal(
+  bookmarkUpdatedEvents[0]?.detail?.bookmarks?.[0]?.id,
+  "bookmark-1",
+  "direct bookmark toggle events should include the latest bookmark snapshot",
+);
+assert.equal(
+  bookmarkManagerHarness.window.BookmarkManager.toggleById("bookmark-1"),
+  false,
+  "bookmark manager should remove an existing bookmark by id",
+);
+assert.equal(
+  bookmarkUpdatedEvents.length,
+  2,
+  "bookmark manager should broadcast after toggleById changes",
+);
+assert.equal(
+  bookmarkUpdatedEvents.at(-1)?.detail?.bookmarks?.length,
+  0,
+  "toggleById bookmark events should include the post-removal snapshot",
+);
+bookmarkStorageHandler?.({
+  key: "bookmarked_posts",
+  newValue: JSON.stringify([{
+    id: "storage-bookmark-old",
+    title: "Old storage bookmark",
+    tags: ["Cross tab"],
+  }]),
+});
 bookmarkStorageHandler?.({
   key: "bookmarked_posts",
   newValue: JSON.stringify([{
@@ -1099,6 +1205,17 @@ bookmarkStorageHandler?.({
     tags: ["Cross tab"],
   }]),
 });
+assert.equal(
+  bookmarkUpdatedEvents.length,
+  2,
+  "bookmark manager should debounce rapid cross-tab storage events before broadcasting",
+);
+await new Promise((resolve) => setTimeout(resolve, 130));
+assert.equal(
+  bookmarkUpdatedEvents.length,
+  3,
+  "bookmark manager should coalesce rapid cross-tab storage events into one broadcast",
+);
 assert.equal(
   bookmarkUpdatedEvents.at(-1)?.type,
   "bookmarks:updated",
@@ -1206,7 +1323,7 @@ const sharedArticleStructuredData = notionContentHelpers.buildArticleStructuredD
   tags: ["Alpha", "Beta"],
 }, {
   canonicalUrl: "https://example.com/posts/post-1",
-  defaultShareImageUrl: "https://example.com/favicon.png?v=4",
+  defaultShareImageUrl: "https://example.com/og-image.jpg?v=4",
   baseOrigin: "https://example.com",
 });
 assert.equal(
@@ -1298,6 +1415,12 @@ expectIncludes(notionApiJs, 'postEndpoint: "/api/post-data"', "notion client sho
 expectIncludes(notionApiJs, "sharedContent.renderPostArticle", "notion client should reuse the shared article renderer instead of duplicating article markup");
 expectIncludes(notionApiJs, "POST_SUMMARY_CACHE_TTL", "notion client should keep a separate summary cache for bookmarks");
 expectIncludes(notionApiJs, "window.NotionContent", "notion client should reuse shared notion content helpers");
+expectIncludes(notionApiJs, "const sharedContent = window.NotionContent;", "notion client should require the shared content module loaded by app.js");
+expectIncludes(notionApiJs, "const escapeHtml = sharedContent.escapeHtml;", "notion client should use the shared HTML escaper directly");
+expectIncludes(notionApiJs, "return sharedContent.normalizeSearchText(value);", "notion client should use the shared search normalizer directly");
+expectNotIncludes(notionApiJs, "@canonical-source", "notion client should not keep dead local copies of shared helper fallbacks");
+expectNotIncludes(notionApiJs, "FALLBACK_REMOTE_BLOG_CATEGORIES", "notion client should not keep duplicated category fallbacks");
+expectIncludes(notionApiJs, 'console.debug("Failed to persist Notion session cache:", error);', "notion client should surface session cache persistence failures for debugging");
 assert.ok(
   !notionApiJs.includes("const RESPONSE_CACHE_TTL"),
   "notion client should remove zero-effect response cache branches instead of carrying disabled cache code",
@@ -1335,6 +1458,9 @@ expectIncludes(indexPageJs, "window.location.href = url", "index page should fal
 expectIncludes(indexPageJs, 'searchForm.addEventListener("submit", handleSearchSubmit);', "index page should intercept the real search form for SPA navigation");
 expectIncludes(indexPageJs, 'ctaHome.href = "/blog.html";', "index page should preserve a native home/blog link fallback");
 expectIncludes(indexPageJs, "siteUtils.buildBookmarkListingUrl", "index page should reuse the shared bookmark-listing URL helper");
+expectNotIncludes(indexPageJs, "ctaHome.addEventListener", "index page should leave CTA link navigation to the shared SPA router");
+expectNotIncludes(indexPageJs, "ctaStart.addEventListener", "index page should leave featured CTA navigation to the shared SPA router");
+expectNotIncludes(indexPageJs, "ctaWiki.addEventListener", "index page should leave bookmark CTA navigation to the shared SPA router");
 expectIncludes(indexPageJs, 'navigateTo(`/blog.html?search=${encodeURIComponent(query)}`);', "index page search navigation should use root-relative paths");
 expectIncludes(postPageJs, 'window.StructuredData?.set?.("post-article"', "post page should publish article structured data");
 expectIncludes(postPageJs, "sharedContent.buildArticleStructuredData", "post page should reuse the shared article structured-data helper");
@@ -1689,14 +1815,14 @@ try {
 <meta property="og:description" content="Same description" />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://example.com/post.html" />
-<meta property="og:image" content="https://example.com/favicon.png?v=4" />
+<meta property="og:image" content="https://example.com/og-image.jpg?v=4" />
 <meta property="og:image:alt" content="Share Everything" />
 <link rel="canonical" href="https://example.com/post.html" />
 </head></html>`, {
     title: "Same title",
     description: "Same description",
     url: "https://example.com/post.html",
-    image: "https://example.com/favicon.png?v=4",
+    image: "https://example.com/og-image.jpg?v=4",
     imageAlt: "Share Everything",
     canonicalUrl: "https://example.com/post.html",
     robots: "",

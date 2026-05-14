@@ -15,3 +15,5 @@ import "./bookmark.js?v=20260514-v47";
 import "./index-page.js?v=20260514-v47";
 import "./blog-page.js?v=20260514-v47";
 import "./post-page.js?v=20260514-v47";
+
+window.PageRuntime?.start?.();

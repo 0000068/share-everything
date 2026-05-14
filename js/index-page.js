@@ -36,31 +36,26 @@
       executeSearch();
     }
 
-    function handleLinkClick(event) {
-      event.preventDefault();
-      const href = event.currentTarget?.getAttribute("href");
-      if (href) {
-        navigateTo(href);
+    function syncButtonLabel(button, label) {
+      button.setAttribute("aria-label", label);
+      const tooltip = button.querySelector(".btn-tooltip");
+      if (tooltip) {
+        tooltip.textContent = label;
       }
     }
 
     ctaHome.href = "/blog.html";
     ctaStart.href = `/blog.html?category=${encodeURIComponent(featuredCategory)}`;
+    syncButtonLabel(ctaStart, featuredCategory);
     ctaWiki.href =
       typeof siteUtils.buildBookmarkListingUrl === "function"
         ? siteUtils.buildBookmarkListingUrl()
         : "/blog.html#bookmarks";
 
     searchForm.addEventListener("submit", handleSearchSubmit);
-    ctaHome.addEventListener("click", handleLinkClick);
-    ctaStart.addEventListener("click", handleLinkClick);
-    ctaWiki.addEventListener("click", handleLinkClick);
 
     return () => {
       searchForm.removeEventListener("submit", handleSearchSubmit);
-      ctaHome.removeEventListener("click", handleLinkClick);
-      ctaStart.removeEventListener("click", handleLinkClick);
-      ctaWiki.removeEventListener("click", handleLinkClick);
     };
   }
 

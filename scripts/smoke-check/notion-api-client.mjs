@@ -106,12 +106,21 @@ assert.ok(
 );
 const memoryOnlySummaryStorage = createQuotaLimitedStorageMock({ maxChars: 0 });
 let summaryLruFetchCount = 0;
+const summaryLruDebugEvents = [];
 const summaryLruHarness = loadBrowserScript("js/notion-api.js", {
   window: {
     location: new URL("https://example.com/blog.html"),
     NotionContent: notionContentHelpers,
   },
   sessionStorage: memoryOnlySummaryStorage,
+  globals: {
+    console: {
+      ...console,
+      debug(message, ...args) {
+        summaryLruDebugEvents.push([message, ...args]);
+      },
+    },
+  },
   fetch: async (url) => {
     summaryLruFetchCount += 1;
     assert.equal(
@@ -148,6 +157,13 @@ assert.equal(
   summaryLruFetchCount,
   1,
   "notion client should prime the summary LRU from one listing request",
+);
+assert.ok(
+  summaryLruDebugEvents.some(([message, error]) => (
+    message === "Failed to persist Notion session cache:" &&
+    error?.name === "QuotaExceededError"
+  )),
+  "notion client should debug-log session cache quota failures without hiding their cause",
 );
 assert.equal(
   summaryLruHarness.window.NotionAPI.getPostSummary("lru-post-0"),

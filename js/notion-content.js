@@ -325,6 +325,7 @@
     vmatrix: ["|", "|"],
     Vmatrix: ["‖", "‖"],
   });
+  const MAX_LATEX_PARSE_DEPTH = 32;
 
   function normalizeLatexExpression(expression) {
     let source = String(expression || "").trim();
@@ -414,10 +415,30 @@
     return `<mo>${escapeHtml(value)}</mo>`;
   }
 
+  function enterLatexParseDepth(state) {
+    state.depth = (state.depth || 0) + 1;
+    if (state.depth > MAX_LATEX_PARSE_DEPTH) {
+      throw new Error("LaTeX expression exceeds the supported nesting depth");
+    }
+  }
+
+  function exitLatexParseDepth(state) {
+    state.depth = Math.max(0, (state.depth || 0) - 1);
+  }
+
+  function renderMathFallback(source, { display = false } = {}) {
+    const className = display
+      ? "post-math post-math-display post-math-fallback"
+      : "post-math post-math-inline post-math-fallback";
+    const label = escapeHtml(source);
+    return `<span class="${className}" aria-label="${label}">${label}</span>`;
+  }
+
   function parseLatexFragment(source) {
     const state = {
       source: normalizeLatexExpression(source),
       index: 0,
+      depth: 0,
     };
     return parseLatexSequence(state);
   }
@@ -591,13 +612,18 @@
   }
 
   function parseLatexSequence(state, stopCharacter = "") {
-    const nodes = [];
-    while (state.index < state.source.length) {
-      if (stopCharacter && state.source[state.index] === stopCharacter) break;
-      const atom = parseLatexAtom(state);
-      if (atom) nodes.push(applyLatexScripts(state, atom));
+    enterLatexParseDepth(state);
+    try {
+      const nodes = [];
+      while (state.index < state.source.length) {
+        if (stopCharacter && state.source[state.index] === stopCharacter) break;
+        const atom = parseLatexAtom(state);
+        if (atom) nodes.push(applyLatexScripts(state, atom));
+      }
+      return nodes.join("");
+    } finally {
+      exitLatexParseDepth(state);
     }
-    return nodes.join("");
   }
 
   function renderMathExpression(expression, { display = false } = {}) {
@@ -607,7 +633,12 @@
     const className = display ? "post-math post-math-display" : "post-math post-math-inline";
     const displayAttribute = display ? ' display="block"' : "";
     const label = escapeHtml(source);
-    const bodyHtml = wrapMathRow(parseLatexFragment(source));
+    let bodyHtml = "";
+    try {
+      bodyHtml = wrapMathRow(parseLatexFragment(source));
+    } catch (error) {
+      return renderMathFallback(source, { display });
+    }
 
     return `<math class="${className}" xmlns="http://www.w3.org/1998/Math/MathML"${displayAttribute} aria-label="${label}"><semantics>${bodyHtml}<annotation encoding="application/x-tex">${label}</annotation></semantics></math>`;
   }
@@ -682,20 +713,23 @@
   }
 
   function richTextToPlain(richText) {
-    return (richText || []).map((item) => item.plain_text).join("");
+    return (Array.isArray(richText) ? richText : [])
+      .map((item) => item?.plain_text || "")
+      .join("");
   }
 
   function richTextToHtml(richText, { baseOrigin } = {}) {
-    if (!richText?.length) return "";
+    const items = Array.isArray(richText) ? richText : [];
+    if (!items.length) return "";
 
-    return richText.map((item) => {
+    return items.map((item) => {
       const equationExpression = item?.type === "equation" || item?.equation?.expression
         ? item?.equation?.expression || item?.plain_text || ""
         : "";
       let text = equationExpression
         ? renderMathExpression(equationExpression)
-        : escapeHtml(item.plain_text);
-      const annotations = item.annotations || {};
+        : escapeHtml(item?.plain_text || "");
+      const annotations = item?.annotations || {};
 
       if (!equationExpression) {
         if (annotations.code) text = `<code>${text}</code>`;
@@ -759,40 +793,41 @@
   }
 
   function mapNotionBlock(block, options = {}) {
-    const type = block.type;
-    const children = Array.isArray(block.children)
+    const type = typeof block?.type === "string" && block.type ? block.type : "unsupported";
+    const blockData = block?.[type] && typeof block[type] === "object" ? block[type] : {};
+    const children = Array.isArray(block?.children)
       ? block.children.map((child) => mapNotionBlock(child, options)).filter(Boolean)
       : [];
     const withChildren = (payload) => (children.length > 0 ? { ...payload, children } : payload);
 
     const handlers = {
-      paragraph: () => withChildren({ type, text: richTextToHtml(block.paragraph.rich_text, options) }),
-      heading_1: () => withChildren(buildHeadingBlock(type, block.id, block.heading_1.rich_text, options)),
-      heading_2: () => withChildren(buildHeadingBlock(type, block.id, block.heading_2.rich_text, options)),
-      heading_3: () => withChildren(buildHeadingBlock(type, block.id, block.heading_3.rich_text, options)),
-      bulleted_list_item: () => withChildren({ type, text: richTextToHtml(block.bulleted_list_item.rich_text, options) }),
-      numbered_list_item: () => withChildren({ type, text: richTextToHtml(block.numbered_list_item.rich_text, options) }),
-      code: () => ({ type, language: block.code.language || "", text: richTextToPlain(block.code.rich_text) }),
-      quote: () => withChildren({ type, text: richTextToHtml(block.quote.rich_text, options) }),
+      paragraph: () => withChildren({ type, text: richTextToHtml(blockData.rich_text, options) }),
+      heading_1: () => withChildren(buildHeadingBlock(type, block?.id, blockData.rich_text, options)),
+      heading_2: () => withChildren(buildHeadingBlock(type, block?.id, blockData.rich_text, options)),
+      heading_3: () => withChildren(buildHeadingBlock(type, block?.id, blockData.rich_text, options)),
+      bulleted_list_item: () => withChildren({ type, text: richTextToHtml(blockData.rich_text, options) }),
+      numbered_list_item: () => withChildren({ type, text: richTextToHtml(blockData.rich_text, options) }),
+      code: () => ({ type, language: blockData.language || "", text: richTextToPlain(blockData.rich_text) }),
+      quote: () => withChildren({ type, text: richTextToHtml(blockData.rich_text, options) }),
       callout: () => withChildren({
         type,
-        text: richTextToHtml(block.callout.rich_text, options),
-        icon: block.callout.icon?.emoji || "",
+        text: richTextToHtml(blockData.rich_text, options),
+        icon: blockData.icon?.emoji || "",
       }),
-      toggle: () => withChildren({ type, text: richTextToHtml(block.toggle.rich_text, options) }),
+      toggle: () => withChildren({ type, text: richTextToHtml(blockData.rich_text, options) }),
       to_do: () => withChildren({
         type,
-        text: richTextToHtml(block.to_do.rich_text, options),
-        checked: Boolean(block.to_do.checked),
+        text: richTextToHtml(blockData.rich_text, options),
+        checked: Boolean(blockData.checked),
       }),
       equation: () => ({
         type,
-        expression: block.equation?.expression || "",
+        expression: blockData.expression || "",
       }),
-      bookmark: () => ({ type, url: block.bookmark.url || "" }),
-      link_preview: () => buildResourceBlock(type, block.link_preview, options),
-      child_page: () => ({ type, title: block.child_page?.title || "" }),
-      child_database: () => ({ type, title: block.child_database?.title || "" }),
+      bookmark: () => ({ type, url: blockData.url || "" }),
+      link_preview: () => buildResourceBlock(type, blockData, options),
+      child_page: () => ({ type, title: blockData.title || "" }),
+      child_database: () => ({ type, title: blockData.title || "" }),
       synced_block: () => ({ type, children }),
       table_of_contents: () => ({ type }),
       column_list: () => ({ type: "container", children }),
@@ -800,25 +835,25 @@
       divider: () => ({ type: "divider" }),
       image: () => ({
         type: "image",
-        url: block.image.file?.url || block.image.external?.url || "",
-        caption: richTextToPlain(block.image.caption),
-        captionHtml: richTextToHtml(block.image.caption, options),
+        url: blockData.file?.url || blockData.external?.url || "",
+        caption: richTextToPlain(blockData.caption),
+        captionHtml: richTextToHtml(blockData.caption, options),
       }),
-      embed: () => buildResourceBlock(type, block.embed, options),
-      video: () => buildResourceBlock(type, block.video, options),
-      file: () => buildResourceBlock(type, block.file, options),
-      pdf: () => buildResourceBlock(type, block.pdf, options),
-      audio: () => buildResourceBlock(type, block.audio, options),
+      embed: () => buildResourceBlock(type, blockData, options),
+      video: () => buildResourceBlock(type, blockData, options),
+      file: () => buildResourceBlock(type, blockData, options),
+      pdf: () => buildResourceBlock(type, blockData, options),
+      audio: () => buildResourceBlock(type, blockData, options),
       table: () => ({
         type,
-        hasColumnHeader: Boolean(block.table?.has_column_header),
-        hasRowHeader: Boolean(block.table?.has_row_header),
+        hasColumnHeader: Boolean(blockData.has_column_header),
+        hasRowHeader: Boolean(blockData.has_row_header),
         children,
       }),
       table_row: () => ({
         type,
-        cells: Array.isArray(block.table_row?.cells)
-          ? block.table_row.cells.map((cell) => richTextToHtml(cell, options))
+        cells: Array.isArray(blockData.cells)
+          ? blockData.cells.map((cell) => richTextToHtml(cell, options))
           : [],
       }),
     };
@@ -1143,7 +1178,7 @@
     const resolvedDefaultShareImageUrl = resolveDisplayImageUrl(
       defaultShareImageUrl,
       resolvedBaseOrigin,
-    ) || new URL("favicon.png?v=4", resolvedBaseOrigin).href;
+    ) || new URL("og-image.jpg?v=4", resolvedBaseOrigin).href;
     const resolvedImageUrl = resolveShareImageUrl(
       typeof imageUrl === "string" && imageUrl.trim() ? imageUrl.trim() : post?.coverImage,
       resolvedDefaultShareImageUrl,

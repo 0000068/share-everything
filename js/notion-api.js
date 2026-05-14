@@ -28,58 +28,27 @@
     const POST_SUMMARY_SESSION_MAX_TAG_LENGTH = 48;
     const POST_SUMMARY_SESSION_MAX_COVER_IMAGE_LENGTH = 320;
     const POST_SUMMARY_SESSION_MAX_GRADIENT_LENGTH = 160;
-    const FALLBACK_REMOTE_BLOG_CATEGORIES = [
-      { name: "全部", emoji: "📋", color: "cyan" },
-      { name: "精选", emoji: "🌟", color: "pink" },
-    ];
-    const sharedContent = window.NotionContent || {};
-    const ALL_CATEGORY = sharedContent.ALL_CATEGORY || "全部";
-    const REMOTE_BLOG_CATEGORIES =
-      typeof sharedContent.getRemoteBlogCategories === "function"
-        ? sharedContent.getRemoteBlogCategories()
-        : FALLBACK_REMOTE_BLOG_CATEGORIES;
+    const sharedContent = window.NotionContent;
+    const ALL_CATEGORY = sharedContent.ALL_CATEGORY;
+    const REMOTE_BLOG_CATEGORIES = sharedContent.getRemoteBlogCategories();
+    const fallbackCategoryColor = sharedContent.DEFAULT_CATEGORY_COLOR;
+    const fallbackCoverGradient = sharedContent.DEFAULT_COVER_GRADIENT;
     let categoryNavigationCache = normalizeCategoryList(REMOTE_BLOG_CATEGORIES);
     const categoryPresentationCache = new Map();
     const pendingRequests = new Map();
     const postsResponseCache = new Map();
     const postSummaryMemoryCache = new Map();
     const postSummaryTimestampCache = new Map();
-    const fallbackCategoryColor = sharedContent.DEFAULT_CATEGORY_COLOR || Object.freeze({
-      bg: "rgba(0, 229, 255, 0.1)",
-      color: "#00e5ff",
-      border: "rgba(0, 229, 255, 0.2)",
-    });
-    const fallbackCoverGradient = sharedContent.DEFAULT_COVER_GRADIENT || "linear-gradient(135deg, #1a1a2e, #16213e)";
     let lastPostSummaryCacheSweepAt = 0;
     let lastPostSummaryQuotaSweepAt = 0;
-    // @canonical-source: notion-content.js → escapeHtml
-    const escapeHtml = sharedContent.escapeHtml || ((value) =>
-      String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;")
-    );
+    const escapeHtml = sharedContent.escapeHtml;
 
-    // @canonical-source: notion-content.js → normalizeSearchText
     function normalizeSearchText(value) {
-      if (typeof sharedContent.normalizeSearchText === "function") {
-        return sharedContent.normalizeSearchText(value);
-      }
-
-      return String(value ?? "")
-        .toLowerCase()
-        .trim()
-        .replace(/\s+/g, " ");
+      return sharedContent.normalizeSearchText(value);
     }
 
     function gradientForCategory(category) {
-      if (typeof sharedContent.gradientForCategory === "function") {
-        return sharedContent.gradientForCategory(category);
-      }
-
-      return fallbackCoverGradient;
+      return sharedContent.gradientForCategory(category);
     }
 
     function getCategoryColor(category) {
@@ -88,19 +57,11 @@
         return cached.categoryColor;
       }
 
-      if (typeof sharedContent.getCategoryColor === "function") {
-        return sharedContent.getCategoryColor(category);
-      }
-
-      return fallbackCategoryColor;
+      return sharedContent.getCategoryColor(category);
     }
 
     function renderBlocks(blocks) {
-      if (typeof sharedContent.renderBlocks === "function") {
-        return sharedContent.renderBlocks(blocks, { baseOrigin: window.location.origin });
-      }
-
-      return "";
+      return sharedContent.renderBlocks(blocks, { baseOrigin: window.location.origin });
     }
 
     function normalizeCategoryColor(value) {
@@ -169,11 +130,7 @@
     }
 
     function renderPostArticle(post) {
-      if (typeof sharedContent.renderPostArticle === "function") {
-        return sharedContent.renderPostArticle(post, { baseOrigin: window.location.origin });
-      }
-
-      return "";
+      return sharedContent.renderPostArticle(post, { baseOrigin: window.location.origin });
     }
 
     function createRequestError(message, { status, notionCode, code, detail } = {}) {
@@ -297,6 +254,7 @@
         sessionStorage.setItem(key, payload);
         return true;
       } catch (error) {
+        console.debug("Failed to persist Notion session cache:", error);
         return false;
       }
     }
@@ -332,21 +290,13 @@
     }
 
     function normalizeSessionCoverImage(coverImage) {
-      const safeImageUrl =
-        typeof sharedContent.resolveDisplayImageUrl === "function"
-          ? sharedContent.resolveDisplayImageUrl(coverImage, window.location.origin)
-          : typeof coverImage === "string" && coverImage.trim()
-            ? coverImage.trim()
-            : null;
+      const safeImageUrl = sharedContent.resolveDisplayImageUrl(coverImage, window.location.origin);
 
       if (!safeImageUrl || safeImageUrl.length > POST_SUMMARY_SESSION_MAX_COVER_IMAGE_LENGTH) {
         return null;
       }
 
-      if (
-        typeof sharedContent.isLikelyEphemeralAssetUrl === "function" &&
-        sharedContent.isLikelyEphemeralAssetUrl(safeImageUrl, window.location.origin)
-      ) {
+      if (sharedContent.isLikelyEphemeralAssetUrl(safeImageUrl, window.location.origin)) {
         return null;
       }
 

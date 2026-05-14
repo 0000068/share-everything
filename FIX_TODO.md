@@ -95,7 +95,7 @@ Day 4  ──  Task G (清理收尾)
 | ID | 优先级 | 文件 | 简述 |
 |---|---|---|---|
 | D-1 | 🟠 | [index.html:13-16](index.html#L13-L16)、[blog.html:13-16](blog.html#L13-L16)、[post.html](post.html) | `og:url`/`og:image`/`canonical` 硬编码 `0000068.xyz`。新增 `scripts/inject-site-meta.mjs`，build/check 时从 `site.config.json.siteUrl` 注入 |
-| D-2 | 🟠 | [favicon.png](favicon.png) + 三个 HTML | favicon.png 实测 **1.36 MB**，同时作 favicon 和 og:image。拆为 `favicon-32.png`、`apple-touch-icon.png`（180×180）、`og-image.jpg`（1200×630 ≤80KB） |
+| D-2 | 🟠 | [favicon.png](favicon.png) + 三个 HTML | favicon.png 实测 **1.36 MB**，同时作 favicon 和 og:image。D-2 部分回退：浏览器图标维持原状，仅保留 `og-image.jpg`（1200×630 ≤80KB）作为分享图拆分，避免后续重复审查再次要求拆分 favicon。 |
 | D-3 | 🟢 | [index.html:86,99](index.html#L86)、[js/blog-page.js:651](js/blog-page.js#L651) | `ctaStart` aria-label/tooltip 硬编码"精选"；filter 按钮缺 `aria-pressed`。从 `site.config.json` featured 注入 + 加 aria |
 
 **验收**：改 `site.config.json` 的 `siteUrl` 和 `featured.name` 后，重跑 inject 脚本，3 个 HTML 的 canonical/og:url 同步更新；favicon 总流量降至 100KB 以下。

@@ -20,12 +20,15 @@ const blogPaginationEl = new FakeElement();
 const blogStatusEl = new FakeElement();
 const blogTopActionsEl = new FakeElement();
 const blogPageTitleEl = new FakeElement();
+const allCategory = notionContentHelpers.ALL_CATEGORY || "All";
 const topActionOverview = {
   classList: createClassList(),
+  dataset: { nav: "overview" },
   querySelector: (selector) => (selector === "span" ? { textContent: "鎬昏" } : null),
 };
 const topActionBookmark = {
   classList: createClassList(),
+  dataset: { nav: "bookmarks" },
   querySelector: (selector) => (selector === "span" ? { textContent: "鏀惰棌" } : null),
 };
 const blogLocation = new URL("https://example.com/blog.html");
@@ -46,11 +49,12 @@ loadBrowserScript("js/blog-page.js", {
     location: blogLocation,
     history: blogHistory,
     scrollTo: () => {},
+    NotionContent: notionContentHelpers,
     NotionAPI: {
       escapeHtml: (value) => String(value ?? ""),
       getCategoryColor: () => ({ bg: "#000", color: "#fff", border: "#222" }),
       getCategories: () => [
-        { name: "All", emoji: "📚" },
+        { name: allCategory, emoji: "📚" },
         { name: "Tech", emoji: "🧠" },
         { name: "Bookmarks", emoji: "🔖" },
       ],
@@ -58,7 +62,7 @@ loadBrowserScript("js/blog-page.js", {
       queryPosts: async () => ({
         results: [],
         categories: [
-          { name: "All", label: "All", emoji: "📚" },
+          { name: allCategory, label: allCategory, emoji: "📚" },
           { name: "AI", label: "AI Lab", emoji: "🤖" },
         ],
         total: 0,
@@ -117,6 +121,16 @@ assert.equal(
   blogFiltersEl.children.some((child) => child.textContent === "🤖 AI Lab"),
   true,
   "blog page should refresh category filters from API-provided Notion categories",
+);
+assert.equal(
+  blogFiltersEl.children.find((child) => child.dataset.category === allCategory)?.getAttribute("aria-pressed"),
+  "true",
+  "blog page should mark the active filter with aria-pressed",
+);
+assert.equal(
+  blogFiltersEl.children.find((child) => child.dataset.category === "AI")?.getAttribute("aria-pressed"),
+  "false",
+  "blog page should mark inactive filters with aria-pressed=false",
 );
 const filterButton = {
     dataset: { category: "Tech" },
@@ -209,6 +223,7 @@ loadBrowserScript("js/blog-page.js", {
     location: paginationLocation,
     history: paginationHistory,
     scrollTo: (options) => paginationScrollCalls.push(options),
+    NotionContent: notionContentHelpers,
     NotionAPI: {
       escapeHtml: (value) => String(value ?? ""),
       getCategoryColor: () => ({ bg: "#000", color: "#fff", border: "#222" }),
@@ -377,10 +392,12 @@ const legacyBookmarkStatusEl = new FakeElement();
 const legacyBookmarkTitleEl = new FakeElement();
 const legacyBookmarkOverviewAction = {
   classList: createClassList(),
+  dataset: { nav: "overview" },
   querySelector: (selector) => (selector === "span" ? { textContent: "鎬昏" } : null),
 };
 const legacyBookmarkAction = {
   classList: createClassList(),
+  dataset: { nav: "bookmarks" },
   querySelector: (selector) => (selector === "span" ? { textContent: "鏀惰棌" } : null),
 };
 const legacyBookmarkLocation = new URL("https://example.com/blog.html?category=%E6%94%B6%E8%97%8F&search=Alpha&page=2");
@@ -401,6 +418,7 @@ loadBrowserScript("js/blog-page.js", {
     location: legacyBookmarkLocation,
     history: legacyBookmarkHistory,
     scrollTo: () => {},
+    NotionContent: notionContentHelpers,
     NotionAPI: {
       escapeHtml: (value) => String(value ?? ""),
       getCategoryColor: () => ({ bg: "#000", color: "#fff", border: "#222" }),
@@ -480,10 +498,12 @@ const bookmarkHashHandlers = new Set();
 const bookmarkHashUpdateHandlers = new Set();
 const bookmarkHashOverviewAction = {
   classList: createClassList(),
+  dataset: { nav: "overview" },
   querySelector: (selector) => (selector === "span" ? { textContent: "鎬昏" } : null),
 };
 const bookmarkHashAction = {
   classList: createClassList(),
+  dataset: { nav: "bookmarks" },
   querySelector: (selector) => (selector === "span" ? { textContent: "鏀惰棌" } : null),
 };
 const bookmarkHashLocation = new URL("https://example.com/blog.html#bookmarks?search=TypeScript%20%20Testing&page=3");
@@ -516,6 +536,7 @@ loadBrowserScript("js/blog-page.js", {
     location: bookmarkHashLocation,
     history: bookmarkHashHistory,
     scrollTo: () => {},
+    NotionContent: notionContentHelpers,
     BookmarkManager: {
       getAll: () => bookmarkHashEntries,
       isBookmarked: () => true,
@@ -534,6 +555,8 @@ loadBrowserScript("js/blog-page.js", {
       resolveDisplayImageUrl: (value) => value,
       sanitizeImageUrl: (value) => value,
       buildPostPath: (postId) => `/posts/${postId}`,
+      buildBookmarkListingUrl: buildBookmarkListingUrlMock,
+      parseBookmarkListingHash: parseBookmarkListingHashMock,
     },
     updateSeoMeta: () => {},
     initBlogCardReveal: () => null,

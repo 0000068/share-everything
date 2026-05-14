@@ -155,7 +155,7 @@ function rebuildParticleBuffers() {
   bucketArrays = {};
   bucketCounts = {};
   bucketKeys.forEach((color) => {
-    bucketArrays[color] = Array(particleCount);
+    bucketArrays[color] = [];
     bucketCounts[color] = 0;
   });
 }

@@ -17,7 +17,7 @@
   const focusSpaContent = typeof window.focusSpaContent === "function"
     ? window.focusSpaContent
     : () => null;
-  const DEFAULT_OG_IMAGE_URL = new URL("favicon.png?v=4", window.location.origin).href;
+  const DEFAULT_OG_IMAGE_URL = new URL("og-image.jpg?v=4", window.location.origin).href;
   const DEFAULT_OG_IMAGE_ALT = "Share Everything";
   const connectionInfo =
     navigator.connection ||
@@ -52,6 +52,7 @@
     const loadedScripts = new Set();
     const loadedStylesheets = new Set();
     const MAX_PAGE_CACHE_ENTRIES = 6;
+    const MAX_PENDING_PAGE_FETCHES = 4;
     const PAGE_CACHE_TTL_MS = 1000 * 60 * 5;
     const pageCache = new Map();
     const prefetched = new Map();
@@ -325,6 +326,7 @@
 
       const cacheKey = getPageCacheKey(routeKey);
       if (hasFreshPrefetch(cacheKey) || readPageHtmlFromCache(cacheKey)) return;
+      if (pendingPageFetches.size >= MAX_PENDING_PAGE_FETCHES) return;
 
       rememberPrefetchedPage(cacheKey);
       fetchPageHtml(routeKey).catch(() => {

@@ -1,61 +1,19 @@
 (() => {
-  const SHARED_CONTENT = window.NotionContent || {};
-  const ALL_CATEGORY = SHARED_CONTENT.ALL_CATEGORY || "全部";
-  const BOOKMARK_CATEGORY = SHARED_CONTENT.BOOKMARK_CATEGORY || "收藏";
+  const SHARED_CONTENT = window.NotionContent;
+  const ALL_CATEGORY = SHARED_CONTENT.ALL_CATEGORY;
+  const BOOKMARK_CATEGORY = SHARED_CONTENT.BOOKMARK_CATEGORY;
   const DEFAULT_PAGE_SIZE = 9;
   const EAGER_COVER_IMAGE_COUNT = 3;
   const MOBILE_EAGER_COVER_IMAGE_COUNT = 1;
   const PAGINATION_SIBLING_COUNT = 2;
   const PAGINATION_MAX_NUMBERED_BUTTONS = (PAGINATION_SIBLING_COUNT * 2) + 3;
-  const FALLBACK_BOOKMARK_ONLY_CATEGORIES = Object.freeze([
-    { name: BOOKMARK_CATEGORY, emoji: "📚" },
-  ]);
-  const DEFAULT_SUPPORTED_CATEGORIES = Object.freeze(
-    typeof SHARED_CONTENT.getSupportedBlogCategories === "function"
-      ? SHARED_CONTENT.getSupportedBlogCategories()
-      : [
-        ALL_CATEGORY,
-        "精选",
-        "技术",
-        "随想",
-        "教程",
-        "工具",
-        BOOKMARK_CATEGORY,
-      ],
-  );
-  const BOOKMARK_ONLY_CATEGORIES = Object.freeze(
-    typeof SHARED_CONTENT.getBookmarkOnlyCategories === "function"
-      ? SHARED_CONTENT.getBookmarkOnlyCategories()
-      : FALLBACK_BOOKMARK_ONLY_CATEGORIES,
-  );
-  const FALLBACK_CATEGORY_COLOR = SHARED_CONTENT.DEFAULT_CATEGORY_COLOR || Object.freeze({
-    bg: "rgba(0, 229, 255, 0.1)",
-    color: "#00e5ff",
-    border: "rgba(0, 229, 255, 0.2)",
-  });
-  const DEFAULT_COVER_GRADIENT = SHARED_CONTENT.DEFAULT_COVER_GRADIENT || "linear-gradient(135deg, #1a1a2e, #16213e)";
-  // @canonical-source: notion-content.js → sanitizeCssColorValue
-  const sanitizeCssColor = typeof SHARED_CONTENT.sanitizeCssColorValue === "function"
-    ? SHARED_CONTENT.sanitizeCssColorValue
-    : (value, fallback = "") => {
-      if (typeof value !== "string") return fallback;
-      const trimmed = value.trim();
-      if (/^#[0-9a-fA-F]{3,8}$/.test(trimmed)) return trimmed;
-      if (/^(rgba?|hsla?)\([0-9,.\s%]+\)$/i.test(trimmed)) return trimmed;
-      return fallback;
-    };
-  // @canonical-source: notion-content.js → normalizeSearchText
-  const normalizeBookmarkSearchQuery = typeof SHARED_CONTENT.normalizeSearchText === "function"
-    ? SHARED_CONTENT.normalizeSearchText
-    : (value) => String(value ?? "").toLowerCase().trim().replace(/\s+/g, " ");
-  // @canonical-source: notion-content.js → buildPostSearchText
-  const buildSharedPostSearchText = typeof SHARED_CONTENT.buildPostSearchText === "function"
-    ? SHARED_CONTENT.buildPostSearchText
-    : (post) => [
-      post?.title || "",
-      post?.excerpt || "",
-      ...(Array.isArray(post?.tags) ? post.tags : []),
-    ].join(" ").toLowerCase().trim().replace(/\s+/g, " ");
+  const DEFAULT_SUPPORTED_CATEGORIES = Object.freeze(SHARED_CONTENT.getSupportedBlogCategories());
+  const BOOKMARK_ONLY_CATEGORIES = Object.freeze(SHARED_CONTENT.getBookmarkOnlyCategories());
+  const FALLBACK_CATEGORY_COLOR = SHARED_CONTENT.DEFAULT_CATEGORY_COLOR;
+  const DEFAULT_COVER_GRADIENT = SHARED_CONTENT.DEFAULT_COVER_GRADIENT;
+  const sanitizeCssColor = SHARED_CONTENT.sanitizeCssColorValue;
+  const normalizeBookmarkSearchQuery = SHARED_CONTENT.normalizeSearchText;
+  const buildSharedPostSearchText = SHARED_CONTENT.buildPostSearchText;
   const HISTORY_MODE_REPLACE = "replace";
   const HISTORY_MODE_PUSH = "push";
   const PRELOAD_COVER_IMAGE_COUNT = 3;
@@ -93,32 +51,8 @@
     const notionApi = window.NotionAPI;
     const sharedContent = SHARED_CONTENT;
     const siteUtils = window.SiteUtils || {};
-    // @canonical-source: site-utils.js → parseBookmarkListingHash
-    const parseBookmarkListingHash = siteUtils.parseBookmarkListingHash
-      || ((hash) => {
-        const rawHash = typeof hash === "string" ? hash.trim() : "";
-        if (!rawHash.startsWith("#bookmarks")) return { active: false, search: "", page: 1, normalizedHash: "" };
-        const params = new URLSearchParams(rawHash.slice("#bookmarks".length).replace(/^\?/, ""));
-        const search = (params.get("search") || "").trim();
-        const p = Number.parseInt(params.get("page") || "", 10);
-        const page = Number.isFinite(p) && p > 0 ? p : 1;
-        const qs = new URLSearchParams();
-        if (search) qs.set("search", search);
-        if (page > 1) qs.set("page", String(page));
-        const normalizedHash = `#bookmarks${qs.toString() ? `?${qs}` : ""}`;
-        return { active: true, search, page, normalizedHash };
-      });
-    // @canonical-source: site-utils.js → buildBookmarkListingUrl
-    const buildBookmarkListingUrl = siteUtils.buildBookmarkListingUrl
-      || (({ pathname = "/blog.html", search = "", page = 1 } = {}) => {
-        const qs = new URLSearchParams();
-        const s = typeof search === "string" ? search.trim() : "";
-        const p = Number.isFinite(Number.parseInt(String(page), 10)) && Number.parseInt(String(page), 10) > 0 ? Number.parseInt(String(page), 10) : 1;
-        if (s) qs.set("search", s);
-        if (p > 1) qs.set("page", String(p));
-        const resolvedPath = typeof pathname === "string" && pathname.trim() ? pathname.trim() : "/blog.html";
-        return `${resolvedPath}#bookmarks${qs.toString() ? `?${qs}` : ""}`;
-      });
+    const parseBookmarkListingHash = siteUtils.parseBookmarkListingHash;
+    const buildBookmarkListingUrl = siteUtils.buildBookmarkListingUrl;
     const bookmarkManager = window.BookmarkManager || {
       getAll: () => [],
       isBookmarked: () => false,
@@ -146,16 +80,7 @@
     const paginationEl = document.getElementById("pagination");
     const statusEl = document.getElementById("blogStatus");
     const topActionsEl = document.getElementById("topActions");
-    // @canonical-source: notion-content.js → escapeHtml
-    const escapeText =
-      notionApi?.escapeHtml ||
-      sharedContent.escapeHtml ||
-      ((value) => String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;"));
+    const escapeText = notionApi?.escapeHtml || sharedContent.escapeHtml;
     const getCategoryColor =
       notionApi?.getCategoryColor ||
       sharedContent.getCategoryColor ||
@@ -582,10 +507,9 @@
       topActions.forEach((button) => button.classList.remove("active"));
 
       topActions.forEach((button) => {
-        const text = button.querySelector("span")?.textContent.trim();
-        if (isBookmarkView() && text === BOOKMARK_CATEGORY) {
+        if (isBookmarkView() && button.dataset.nav === "bookmarks") {
           button.classList.add("active");
-        } else if (!isBookmarkView() && text === "总览") {
+        } else if (!isBookmarkView() && button.dataset.nav === "overview") {
           button.classList.add("active");
         }
       });
@@ -650,6 +574,7 @@
         button.type = "button";
         button.className = `filter-btn${category.name === currentCategory ? " active" : ""}`;
         button.dataset.category = category.name;
+        button.setAttribute("aria-pressed", category.name === currentCategory ? "true" : "false");
         button.textContent = `${category.emoji ? `${category.emoji} ` : ""}${category.label || category.name}`;
         filtersEl.appendChild(button);
       });

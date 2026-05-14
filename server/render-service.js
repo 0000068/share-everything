@@ -23,7 +23,7 @@ function buildArticleStructuredData(post) {
 
   return buildSharedArticleStructuredData(post, {
     canonicalUrl: buildPostUrl(post.id),
-    defaultShareImageUrl: `${siteOrigin}/favicon.png?v=4`,
+    defaultShareImageUrl: `${siteOrigin}/og-image.jpg?v=4`,
     baseOrigin: siteOrigin,
   });
 }

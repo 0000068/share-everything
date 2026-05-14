@@ -126,6 +126,30 @@ export function runContentModuleChecks(context) {
     "http://localhost:3000/cover.png",
     "notion-content-url.js should still allow same-origin local image URLs",
   );
+  assert.equal(
+    notionContentUrlHelpers.resolveEmbeddableUrl("https://vimeo.com/123456789/abcdef123", "https://example.com"),
+    "https://player.vimeo.com/video/123456789?h=abcdef123",
+    "notion-content-url.js should preserve Vimeo unlisted hash tokens on embed URLs",
+  );
+  const malformedParagraphBlock = notionContentHelpers.mapNotionBlock({ type: "paragraph", paragraph: {} });
+  assert.equal(malformedParagraphBlock.type, "paragraph", "notion-content.js should preserve malformed paragraph block type");
+  assert.equal(malformedParagraphBlock.text, "", "notion-content.js should tolerate malformed paragraph blocks without throwing");
+  const malformedImageBlock = notionContentHelpers.mapNotionBlock({ type: "image", image: {} });
+  assert.equal(malformedImageBlock.type, "image", "notion-content.js should preserve malformed media block type");
+  assert.equal(malformedImageBlock.url, "", "notion-content.js should fall back missing media URLs to an empty string");
+  assert.equal(malformedImageBlock.captionHtml, "", "notion-content.js should tolerate malformed media captions without throwing");
+  const missingBlock = notionContentHelpers.mapNotionBlock(null);
+  assert.equal(missingBlock.type, "unsupported", "notion-content.js should degrade missing blocks to unsupported placeholders");
+  assert.equal(missingBlock.blockType, "unsupported", "notion-content.js should label missing blocks as unsupported");
+  assert.equal(
+    notionContentHelpers.richTextToHtml("not-an-array"),
+    "",
+    "notion-content.js should ignore malformed rich-text fields",
+  );
+  const deepLatex = `${"{".repeat(40)}x${"}".repeat(40)}`;
+  const deepLatexHtml = notionContentHelpers.renderMathExpression(deepLatex);
+  expectIncludes(deepLatexHtml, "post-math-fallback", "notion-content.js should degrade overly deep LaTeX instead of recursing indefinitely");
+  expectIncludes(deepLatexHtml, deepLatex, "notion-content.js should preserve the original LaTeX when it degrades rendering");
   const articleHtml = notionArticleRendererHelpers.createPostArticleRenderer({
     DEFAULT_CATEGORY_COLOR: notionContentSharedHelpers.DEFAULT_CATEGORY_COLOR,
     escapeHtml: notionContentUtilsHelpers.escapeHtml,

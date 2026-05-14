@@ -311,10 +311,10 @@
 
     function register(pageId, pageModule) {
       registry.set(pageId, pageModule);
+    }
 
-      if (pageId === getPageIdFromUrl(window.location.href)) {
-        initializePage(pageId);
-      }
+    function start(pageId = getPageIdFromUrl(window.location.href)) {
+      return initializePage(pageId);
     }
 
     return {
@@ -322,6 +322,7 @@
       initializePage,
       cleanupCurrentPage,
       register,
+      start,
     };
   })();
 

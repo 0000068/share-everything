@@ -137,9 +137,14 @@
       }
 
       if (hostname === "vimeo.com") {
-        const vimeoMatch = pathname.match(/^\/(\d+)(?:\/|$)/);
+        const vimeoMatch = pathname.match(/^\/(\d+)(?:\/([^/?#]+))?(?:\/|$)/);
         if (vimeoMatch?.[1]) {
-          return `https://player.vimeo.com/video/${encodeURIComponent(vimeoMatch[1])}`;
+          const embedUrl = new URL(`https://player.vimeo.com/video/${encodeURIComponent(vimeoMatch[1])}`);
+          const hashToken = parsed.searchParams.get("h") || vimeoMatch[2] || "";
+          if (hashToken) {
+            embedUrl.searchParams.set("h", hashToken);
+          }
+          return embedUrl.href;
         }
       }
 

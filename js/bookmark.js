@@ -12,6 +12,7 @@
     const sanitizeCoverBackground = siteUtils.sanitizeCoverBackground;
     let bookmarksCache = null;
     let metadataHydrationPromise = null;
+    let storageSyncTimer = null;
 
     function escapeSelectorValue(value) {
       if (window.CSS?.escape) {
@@ -106,17 +107,17 @@
         bookmarksCache = nextBookmarks;
         return true;
       } catch (error) {
+        console.debug("Failed to persist bookmarks:", error);
         return false;
       }
     }
 
     function dispatchBookmarksUpdated() {
       if (typeof window.dispatchEvent !== "function") return;
+      if (typeof window.CustomEvent !== "function") return;
 
       const detail = { bookmarks: getAll() };
-      const event = typeof window.CustomEvent === "function"
-        ? new window.CustomEvent("bookmarks:updated", { detail })
-        : { type: "bookmarks:updated", detail };
+      const event = new window.CustomEvent("bookmarks:updated", { detail });
       window.dispatchEvent(event);
     }
 
@@ -202,6 +203,7 @@
       }
 
       if (!save(bookmarks)) return null;
+      dispatchBookmarksUpdated();
       return !exists;
     }
 
@@ -233,6 +235,7 @@
 
       if (!didPersist) return null;
       if (!save(bookmarks)) return null;
+      dispatchBookmarksUpdated();
       return !exists;
     }
 
@@ -300,19 +303,30 @@
       return metadataHydrationPromise;
     }
 
-    window.addEventListener("storage", (event) => {
-      if (event.key !== BOOKMARK_KEY) return;
-
+    function refreshBookmarksFromSerializedValue(value) {
       try {
-        const parsed = JSON.parse(event.newValue || "[]");
+        const parsed = JSON.parse(value || "[]");
         bookmarksCache = Array.isArray(parsed)
           ? parsed.map(normalizeBookmark).filter(Boolean)
           : [];
       } catch (error) {
         bookmarksCache = [];
       }
+    }
 
-      dispatchBookmarksUpdated();
+    function scheduleStorageBookmarksUpdated() {
+      clearTimeout(storageSyncTimer);
+      storageSyncTimer = setTimeout(() => {
+        storageSyncTimer = null;
+        dispatchBookmarksUpdated();
+      }, 100);
+    }
+
+    window.addEventListener("storage", (event) => {
+      if (event.key !== BOOKMARK_KEY) return;
+
+      refreshBookmarksFromSerializedValue(event.newValue);
+      scheduleStorageBookmarksUpdated();
     });
 
     return {

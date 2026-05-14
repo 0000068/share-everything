@@ -1,6 +1,6 @@
 (() => {
   const siteUtils = window.SiteUtils || {};
-  const DEFAULT_OG_IMAGE_URL = new URL("favicon.png?v=4", window.location.origin).href;
+  const DEFAULT_OG_IMAGE_URL = new URL("og-image.jpg?v=4", window.location.origin).href;
   const DEFAULT_OG_IMAGE_ALT = "Share Everything";
 
   function ensureMetaTag(selector, attributes) {
