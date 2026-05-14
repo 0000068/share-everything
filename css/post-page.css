@@ -809,6 +809,9 @@
     height: 48px;
     padding: 0 14px;
     border-radius: 18px;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
   }
 
   .fab-bookmark:hover {
@@ -819,6 +822,10 @@
 
   .fab-bookmark-label {
     display: none;
+  }
+
+  .skeleton {
+    animation: none;
   }
 
 }
@@ -983,6 +990,9 @@ html.is-mobile-device-viewport .fab-bookmark {
   height: 48px;
   padding: 0 14px;
   border-radius: 18px;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
 html.is-mobile-device-viewport .fab-bookmark:hover {
@@ -993,4 +1003,8 @@ html.is-mobile-device-viewport .fab-bookmark:hover {
 
 html.is-mobile-device-viewport .fab-bookmark-label {
   display: none;
+}
+
+html.is-mobile-device-viewport .skeleton {
+  animation: none;
 }

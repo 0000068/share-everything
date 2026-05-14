@@ -682,11 +682,6 @@ body.has-cursor-glow .cursor-glow {
     background-repeat: no-repeat;
   }
 
-  .glow-orb {
-    filter: blur(72px);
-    opacity: 0.58;
-  }
-
   #particles-canvas {
     display: none;
   }
