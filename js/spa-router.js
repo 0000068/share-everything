@@ -376,7 +376,6 @@
       PageRuntime.cleanupCurrentPage();
 
       content.style.pointerEvents = "none";
-      content.style.willChange = "opacity, transform";
       content.style.transition = ROUTE_EXIT_TRANSITION;
       content.style.opacity = "0";
       content.style.transform = ROUTE_EXIT_TRANSFORM;
@@ -497,7 +496,6 @@
           content.style.opacity = "";
           content.style.transform = "";
           content.style.pointerEvents = "";
-          content.style.willChange = "";
         }, ROUTE_TRANSITION_RESET_MS);
       } catch (error) {
         if (error?.name === "AbortError" || currentToken !== navigationToken) {
