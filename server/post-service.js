@@ -60,7 +60,7 @@ const {
   buildPublicCategories,
   decoratePostSummary,
 } = CATEGORY_NAVIGATION;
-const POST_SEARCH_TEXT_SYMBOL = Symbol("postSearchText");
+const postSearchTextCache = new WeakMap();
 
 const databaseMetadataCache = createTtlSlot();
 const databaseMetadataSingleFlight = createSingleFlight({
@@ -207,19 +207,13 @@ function filterPostsBySearch(posts, search) {
       return buildPostSearchText(post).includes(normalizedSearch);
     }
 
-    if (typeof post[POST_SEARCH_TEXT_SYMBOL] !== "string") {
-      const searchText = buildPostSearchText(post);
-      try {
-        Object.defineProperty(post, POST_SEARCH_TEXT_SYMBOL, {
-          value: searchText,
-          configurable: true,
-        });
-      } catch {
-        return searchText.includes(normalizedSearch);
-      }
+    let searchText = postSearchTextCache.get(post);
+    if (typeof searchText !== "string") {
+      searchText = buildPostSearchText(post);
+      postSearchTextCache.set(post, searchText);
     }
 
-    return post[POST_SEARCH_TEXT_SYMBOL].includes(normalizedSearch);
+    return searchText.includes(normalizedSearch);
   });
 }
 
@@ -477,7 +471,6 @@ module.exports = {
   DATABASE_METADATA_TTL_MS,
   DEFAULT_POST_PAGE_SIZE,
   NOTION_SINGLE_FLIGHT_ERROR_COOLDOWN_MS,
-  POST_SEARCH_TEXT_SYMBOL,
   PUBLIC_PAGE_QUERY_CACHE_MAX_ENTRIES,
   PUBLIC_PAGE_SUMMARY_CACHE_TTL_MS,
   PUBLIC_POST_CACHE_MAX_ENTRIES,

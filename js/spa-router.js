@@ -175,7 +175,8 @@
         return null;
       }
 
-      rememberPageHtml(cacheKey, entry.html);
+      pageCache.delete(cacheKey);
+      pageCache.set(cacheKey, entry);
       return entry.html;
     }
 

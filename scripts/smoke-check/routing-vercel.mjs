@@ -31,7 +31,7 @@ expectIncludes(apiSitemapJs, "queryPublicPages", "dynamic sitemap should only in
 expectIncludes(apiSitemapJs, "getPublicContentErrorStatus", "dynamic sitemap should reuse public content error status mapping");
 expectIncludes(apiSitemapJs, "applyPublicErrorHeaders", "dynamic sitemap should preserve upstream retry guidance");
 expectIncludes(apiSitemapJs, "serializePublicError", "dynamic sitemap should serialize upstream errors consistently");
-expectIncludes(apiSitemapJs, '"Cache-Control", "no-store"', "dynamic sitemap should not outlive public access changes");
+expectIncludes(apiSitemapJs, "s-maxage=300", "dynamic sitemap should allow bounded CDN caching");
 expectIncludes(apiRobotsJs, "getSiteOrigin", "dynamic robots should use the configured site origin");
 expectIncludes(apiRobotsJs, "Sitemap:", "dynamic robots should emit a sitemap directive");
 expectIncludes(vercelJson, '"/posts/:id"', "Vercel should rewrite canonical article routes");
@@ -61,7 +61,11 @@ const robotsResponse = createApiResponseRecorder();
 await apiRobotsHandler({ method: "GET", headers: {} }, robotsResponse);
 assert.equal(robotsResponse.statusCode, 200, "dynamic robots should return HTTP 200");
 assert.equal(robotsResponse.getHeader("content-type"), "text/plain; charset=utf-8", "dynamic robots should send text/plain");
-assert.equal(robotsResponse.getHeader("cache-control"), "no-store", "dynamic robots should not cache sitemap policy");
+assert.equal(
+  robotsResponse.getHeader("cache-control"),
+  "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400",
+  "dynamic robots should allow CDN caching while forcing browser revalidation",
+);
 expectIncludes(robotsResponse.textBody, "User-agent: *", "dynamic robots should include a user-agent directive");
 expectIncludes(
   robotsResponse.textBody,
@@ -72,7 +76,7 @@ expectIncludes(
 const robotsPostResponse = createApiResponseRecorder();
 await apiRobotsHandler({ method: "POST", headers: {} }, robotsPostResponse);
 assert.equal(robotsPostResponse.statusCode, 405, "dynamic robots should reject unsupported methods with HTTP 405");
-assert.equal(robotsPostResponse.getHeader("allow"), "GET", "dynamic robots should advertise the supported method");
+assert.equal(robotsPostResponse.getHeader("allow"), "GET, HEAD", "dynamic robots should advertise the supported read methods");
 assert.equal(robotsPostResponse.getHeader("cache-control"), "no-store", "dynamic robots 405 responses should be non-cacheable");
 
 

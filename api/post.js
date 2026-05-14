@@ -30,6 +30,8 @@ const HEAD_CLOSE_PATTERN = /<\/head>/;
 const MAIN_CLOSE_PATTERN = /<\/main>/;
 const POST_ARTICLE_CLOSE_PATTERN = /<\/article>/;
 const POST_CONTENT_PATTERN = /<div\b(?=[^>]*\bid=["']postContent["'])[^>]*>\s*<\/div>/;
+const HEAD_META_BLOCK_START = "<!--SSR_HEAD_META_START-->";
+const HEAD_META_BLOCK_END = "<!--SSR_HEAD_META_END-->";
 const HEAD_META_INSERTION_ANCHOR = /<meta\s+property="og:image:alt"\s+content="[^"]*"\s*\/?>/;
 const META_TAG_PATTERN = /<meta\b[^>]*>/gi;
 const HTTP_EQUIV_ATTRIBUTE_PATTERN = /\bhttp-equiv\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/i;
@@ -39,7 +41,10 @@ function getTemplate() {
     return fs.readFile(path.join(process.cwd(), "post.html"), "utf8");
   }
   if (!templatePromise) {
-    templatePromise = fs.readFile(path.join(process.cwd(), "post.html"), "utf8");
+    templatePromise = fs.readFile(path.join(process.cwd(), "post.html"), "utf8").catch((error) => {
+      templatePromise = null;
+      throw error;
+    });
   }
   return templatePromise;
 }
@@ -183,6 +188,29 @@ function replacePostContent(html, post, { renderedContent, baseOrigin }) {
 }
 
 function replaceHeadMeta(html, { title, description, url, image, imageAlt, canonicalUrl, robots, ogType }) {
+  const headMetaBlock = [
+    `    ${HEAD_META_BLOCK_START}`,
+    `    <title>${escapeHtml(title)}</title>`,
+    `    <meta name="description" content="${escapeAttribute(description)}" />`,
+    `    <meta property="og:title" content="${escapeAttribute(title)}" />`,
+    `    <meta property="og:description" content="${escapeAttribute(description)}" />`,
+    `    <meta property="og:type" content="${escapeAttribute(ogType || "website")}" />`,
+    `    <meta property="og:url" content="${escapeAttribute(url)}" />`,
+    `    <meta property="og:image" content="${escapeAttribute(image)}" />`,
+    `    <meta property="og:image:alt" content="${escapeAttribute(imageAlt)}" />`,
+    ...(typeof robots === "string" && robots ? [`    <meta name="robots" content="${escapeAttribute(robots)}" />`] : []),
+    `    <link rel="canonical" href="${escapeAttribute(canonicalUrl)}" />`,
+    `    ${HEAD_META_BLOCK_END}`,
+  ].join("\n");
+  const headMetaBlockPattern = new RegExp(
+    `^[ \\t]*${escapeRegex(HEAD_META_BLOCK_START)}[\\s\\S]*?^[ \\t]*${escapeRegex(HEAD_META_BLOCK_END)}`,
+    "m",
+  );
+
+  if (headMetaBlockPattern.test(html)) {
+    return replaceMarkup(html, headMetaBlockPattern, headMetaBlock, "headMetaBlock");
+  }
+
   const replacements = [
     [/<title>[\s\S]*?<\/title>/, `<title>${escapeHtml(title)}</title>`, "title"],
     [/<meta\s+name="description"\s+content="[^"]*"\s*\/?>/, `<meta name="description" content="${escapeAttribute(description)}" />`, "meta:description"],

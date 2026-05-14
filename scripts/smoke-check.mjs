@@ -198,7 +198,7 @@ const {
   "renderPostContent",
 ]);
 
-const assetVersionValue = "20260514-v46";
+const assetVersionValue = "20260514-v47";
 const assetVersion = `v=${assetVersionValue}`;
 const productionDomainPattern = /0000068\.xyz/;
 const allowedProductionDomainFiles = new Set([
@@ -210,8 +210,6 @@ const allowedProductionDomainFiles = new Set([
   "post.html",
   "scripts/smoke-check.mjs",
   "site.config.json",
-  "同步.md",
-  "统计待修复清单.MD",
 ]);
 const skippedScanDirectories = new Set([".git", ".vercel", "node_modules"]);
 const skippedScanExtensions = new Set([".ico", ".jpeg", ".jpg", ".png", ".webp"]);
@@ -530,7 +528,7 @@ expectIncludes(packageJson, '"notion:live-check": "node scripts/notion-live-chec
 expectIncludes(packageJson, '"visual:check": "node scripts/visual-regression.mjs"', "package scripts should expose the browser visual regression check");
 expectIncludes(packageJson, '"verify:release": "node scripts/release-check.mjs"', "package scripts should expose the strict release check");
 expectIncludes(packageJson, '"license": "MIT"', "package metadata should match the published README license");
-expectIncludes(packageJson, '"version": "4.6.0"', "package version should match the next release commit");
+expectIncludes(packageJson, '"version": "4.7.0"', "package version should match the next release commit");
 expectIncludes(releaseCheckJs, "Promise.all([", "release check should run smoke and strict visual checks in parallel");
 expectIncludes(releaseCheckJs, 'runNpmScript("check", {}, stopSiblingsAfterFailure)', "release check should keep the smoke suite in the strict gate");
 expectIncludes(releaseCheckJs, 'runNpmScript("visual:check", { VISUAL_STRICT: "1" }, stopSiblingsAfterFailure)', "release check should run visual regression in strict mode");
@@ -555,7 +553,7 @@ expectIncludes(visualRegressionJs, "desktop particles should remain animated", "
 expectIncludes(visualRegressionJs, "mobile home particles should be disabled", "visual regression should guard mobile home particle removal");
 expectIncludes(visualRegressionJs, "mobile blog bookmark button should compute to 26px width", "visual regression should guard mobile card bookmark sizing");
 expectIncludes(visualRegressionJs, "mobile post top dock should stay hidden", "visual regression should guard mobile article dock visibility");
-expectIncludes(readmeMd, "badge/version-4.6.0", "README badge should match package version");
+expectIncludes(readmeMd, "badge/version-4.7.0", "README badge should match package version");
 expectIncludes(readmeMd, "npm.cmd run visual:check", "README should document the browser visual regression check");
 expectIncludes(readmeMd, "VISUAL_STRICT=1", "README should document strict visual regression mode");
 expectIncludes(readmeMd, "npm test` 与 `npm.cmd run check` 等价", "README should document that npm test stays a fast smoke check");
@@ -1515,6 +1513,8 @@ expectIncludes(apiPostJs, "renderPostArticle(post, { renderedContent, baseOrigin
 expectIncludes(apiPostJs, "POST_CONTENT_PATTERN", "article HTML route should tolerate harmless postContent template attribute changes");
 expectIncludes(apiPostJs, "postContent:fallback", "article HTML route should fall back to article insertion when the postContent anchor changes");
 expectIncludes(apiPostJs, '"Cache-Control", "no-store"', "article HTML route should not cache public post responses");
+expectIncludes(apiPostJs, "templatePromise = null;", "article HTML route should clear a failed production template read before retrying");
+expectIncludes(apiPostJs, "HEAD_META_BLOCK_START", "article HTML route should replace head metadata through explicit template anchors");
 expectIncludes(apiPostJs, "replaceMarkup(", "article HTML route should use literal-safe SSR replacements for dynamic content");
 expectIncludes(apiPostJs, "upsertHeadMarkup", "article HTML route should centralize head-tag insertion and replacement");
 expectNotIncludes(apiPostJs, "result !== html", "article HTML route should track replacement matches explicitly instead of comparing final strings");
@@ -1523,7 +1523,13 @@ expectIncludes(apiPostJs, "../server/security-policy", "article HTML route shoul
 expectIncludes(apiPostJs, "createCspNonce", "article HTML route should use per-request nonces for inline JSON data");
 expectIncludes(apiPostJs, "applyHtmlSecurityHeaders", "article HTML route should emit nonce-aware CSP headers from the SSR function");
 expectIncludes(apiPostJs, "replaceContentSecurityPolicyMeta", "article HTML route should keep template CSP meta in sync with the response nonce");
+expectIncludes(postHtml, "<!--SSR_HEAD_META_START-->", "post template should mark the SSR-owned head metadata block explicitly");
+expectIncludes(postHtml, "<!--SSR_HEAD_META_END-->", "post template should keep a closing marker for the SSR-owned head metadata block");
 expectNotIncludes(apiPostJs, "script-src-elem 'self' 'unsafe-inline'", "article HTML route should not allow arbitrary inline script elements");
+expectNotIncludes(spaRouterJs, "rememberPageHtml(cacheKey, entry.html)", "SPA route cache reads should not refresh cachedAt into a sliding TTL");
+expectIncludes(spaRouterJs, "pageCache.set(cacheKey, entry)", "SPA route cache reads should only refresh LRU order while preserving cachedAt");
+expectIncludes(serverPostServiceJs, "const postSearchTextCache = new WeakMap()", "server search filtering should cache derived search text without mutating post objects");
+expectNotIncludes(serverPostServiceJs, "Object.defineProperty(post, POST_SEARCH_TEXT_SYMBOL", "server search filtering should not attach derived search text to post inputs");
 
 const replacementSentinel = "$& :: $` :: $'";
 const escapedReplacementSentinel = "$&amp; :: $` :: $&#39;";
@@ -1642,6 +1648,7 @@ expectNotIncludes(dedupedCspMeta, "content=old", "article HTML route should remo
 expectNotIncludes(dedupedCspMeta, 'content="legacy"', "article HTML route should remove duplicate quoted CSP meta policies");
 
 const replacedHeadMeta = apiPostHelpers.replaceHeadMeta(`<!doctype html><html><head>
+<!--SSR_HEAD_META_START-->
 <title>Old</title>
 <meta name="description" content="old" />
 <meta property="og:title" content="old" />
@@ -1650,6 +1657,8 @@ const replacedHeadMeta = apiPostHelpers.replaceHeadMeta(`<!doctype html><html><h
 <meta property="og:url" content="https://example.com/old" />
 <meta property="og:image" content="https://example.com/old.png" />
 <meta property="og:image:alt" content="old" />
+<link rel="canonical" href="https://example.com/old" />
+<!--SSR_HEAD_META_END-->
 </head></html>`, {
   title: replacementSentinel,
   description: replacementSentinel,
@@ -1661,6 +1670,8 @@ const replacedHeadMeta = apiPostHelpers.replaceHeadMeta(`<!doctype html><html><h
   ogType: "article",
 });
 expectIncludes(replacedHeadMeta, `<title>${escapedReplacementSentinel}</title>`, "head metadata replacement should preserve replacement tokens in the page title");
+expectIncludes(replacedHeadMeta, "<!--SSR_HEAD_META_START-->", "head metadata replacement should preserve the start template anchor");
+expectIncludes(replacedHeadMeta, "<!--SSR_HEAD_META_END-->", "head metadata replacement should preserve the end template anchor");
 assert.ok(
   !replacedHeadMeta.includes("<title><title>Old</title></title>"),
   "head metadata replacement should not reinsert the original title through replacement tokens",
@@ -1715,14 +1726,17 @@ assert.equal(
 const postRouteMethodNotAllowedRes = createApiResponseRecorder();
 await apiPostHandler({ method: "POST", query: {} }, postRouteMethodNotAllowedRes);
 assert.equal(postRouteMethodNotAllowedRes.statusCode, 405, "article HTML route should reject unsupported methods with HTTP 405");
-assert.equal(postRouteMethodNotAllowedRes.getHeader("allow"), "GET", "article HTML route should advertise the supported methods on 405 responses");
+assert.equal(postRouteMethodNotAllowedRes.getHeader("allow"), "GET, HEAD", "article HTML route should advertise the supported read methods on 405 responses");
 assert.equal(postRouteMethodNotAllowedRes.getHeader("cache-control"), "no-store", "article HTML route should mark 405 responses as non-cacheable");
-const postRouteHeadRes = createApiResponseRecorder();
-await apiPostHandler({ method: "HEAD", query: { id: "post-1" } }, postRouteHeadRes);
-assert.equal(postRouteHeadRes.statusCode, 405, "article HTML route should reject HEAD without loading Notion content");
-assert.equal(postRouteHeadRes.getHeader("allow"), "GET", "article HTML route should avoid advertising HEAD when it is intentionally unsupported");
+const headReadGuardRes = createApiResponseRecorder();
+assert.equal(
+  publicContentHelpers.rejectUnsupportedReadMethod({ method: "HEAD" }, headReadGuardRes),
+  false,
+  "shared public read guard should accept HEAD alongside GET",
+);
+assert.equal(headReadGuardRes.ended, false, "shared public read guard should not end accepted HEAD requests");
 expectIncludes(apiPostsDataJs, "queryPublicPosts", "post list endpoint should serve the public blog set through a semantic API");
-expectIncludes(apiPostsDataJs, '"Cache-Control", "no-store"', "post list endpoint should not cache public responses");
+expectIncludes(apiPostsDataJs, "s-maxage=60", "post list endpoint should allow short-lived CDN caching");
 expectIncludes(apiPostDataJs, "fetchPublicPost", "post data endpoint should only serve posts from the public blog set");
 expectIncludes(apiPostDataJs, "getPublicPostErrorStatus", "post data endpoint should reuse shared public-post error mapping");
 expectIncludes(apiPostDataJs, '"Cache-Control", "no-store"', "post data endpoint should not cache public responses");
@@ -1740,19 +1754,13 @@ expectNotIncludes(apiSitemapJs, 'console.error("Failed to generate sitemap:", er
 const postsDataMethodNotAllowedRes = createApiResponseRecorder();
 await apiPostsDataHandler({ method: "POST", query: {} }, postsDataMethodNotAllowedRes);
 assert.equal(postsDataMethodNotAllowedRes.statusCode, 405, "post list endpoint should reject unsupported methods with HTTP 405");
-assert.equal(postsDataMethodNotAllowedRes.getHeader("allow"), "GET", "post list endpoint should advertise the supported methods on 405 responses");
+assert.equal(postsDataMethodNotAllowedRes.getHeader("allow"), "GET, HEAD", "post list endpoint should advertise the supported read methods on 405 responses");
 assert.equal(postsDataMethodNotAllowedRes.getHeader("cache-control"), "no-store", "post list endpoint should mark 405 responses as non-cacheable");
-const postsDataHeadRes = createApiResponseRecorder();
-await apiPostsDataHandler({ method: "HEAD", query: {} }, postsDataHeadRes);
-assert.equal(postsDataHeadRes.statusCode, 405, "post list endpoint should reject HEAD without querying Notion");
 const postDataMethodNotAllowedRes = createApiResponseRecorder();
 await apiPostDataHandler({ method: "POST", query: {} }, postDataMethodNotAllowedRes);
 assert.equal(postDataMethodNotAllowedRes.statusCode, 405, "post data endpoint should reject unsupported methods with HTTP 405");
-assert.equal(postDataMethodNotAllowedRes.getHeader("allow"), "GET", "post data endpoint should advertise the supported methods on 405 responses");
+assert.equal(postDataMethodNotAllowedRes.getHeader("allow"), "GET, HEAD", "post data endpoint should advertise the supported read methods on 405 responses");
 assert.equal(postDataMethodNotAllowedRes.getHeader("cache-control"), "no-store", "post data endpoint should mark 405 responses as non-cacheable");
-const postDataHeadRes = createApiResponseRecorder();
-await apiPostDataHandler({ method: "HEAD", query: { id: "post-1" } }, postDataHeadRes);
-assert.equal(postDataHeadRes.statusCode, 405, "post data endpoint should reject HEAD without loading the post detail tree");
 await runApiContractChecks({
   assert,
   createApiResponseRecorder,

@@ -82,7 +82,11 @@ export async function runApiContractChecks(context) {
   }, response);
 
   assert.equal(response.statusCode, 200, "posts-data contract should return HTTP 200 for successful public list requests");
-  assert.equal(response.getHeader("cache-control"), "no-store", "posts-data contract should keep public list responses uncached by the edge");
+  assert.equal(
+    response.getHeader("cache-control"),
+    "public, max-age=0, s-maxage=60, stale-while-revalidate=300",
+    "posts-data contract should allow short-lived CDN caching while forcing browser revalidation",
+  );
   assert.equal(
     JSON.stringify(queryCalls),
     JSON.stringify([{ category: "AI", search: "semantic", page: 2 }]),

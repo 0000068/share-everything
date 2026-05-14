@@ -11,6 +11,8 @@ const {
   serializePublicError,
 } = require("../server/public-content");
 
+const SITEMAP_CACHE_CONTROL = "public, max-age=0, s-maxage=300, stale-while-revalidate=600";
+
 function escapeXml(value) {
   return String(value)
     .replace(/&/g, "&amp;")
@@ -48,7 +50,7 @@ module.exports = async function handler(req, res) {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries.join("\n")}\n</urlset>\n`;
 
     res.setHeader("Content-Type", "application/xml; charset=utf-8");
-    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Cache-Control", SITEMAP_CACHE_CONTROL);
     return res.status(200).send(xml);
   } catch (error) {
     const status = getPublicContentErrorStatus(error);
