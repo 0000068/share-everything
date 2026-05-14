@@ -1,6 +1,6 @@
 (() => {
   function initIndexPage() {
-    const sharedContent = window.NotionContent || {};
+    const sharedContent = window.NotionContent || window.NotionContentShared || {};
     const siteUtils = window.SiteUtils || {};
     const featuredCategory =
       typeof sharedContent.getRemoteBlogCategories === "function"

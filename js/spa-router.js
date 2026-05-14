@@ -49,7 +49,6 @@
   const SPARouter = (() => {
     let navigationToken = 0;
     let activeNavigationController = null;
-    const loadedScripts = new Set();
     const loadedStylesheets = new Set();
     const MAX_PAGE_CACHE_ENTRIES = 6;
     const MAX_PENDING_PAGE_FETCHES = 4;
@@ -207,33 +206,6 @@
       }
 
       return true;
-    }
-
-    function ensureScript(src) {
-      const resolvedSrc = resolveUrl(src).href;
-      const hasLoadedScript =
-        loadedScripts.has(resolvedSrc) ||
-        Array.from(document.scripts || []).some((script) => script.src === resolvedSrc);
-
-      if (hasLoadedScript) {
-        loadedScripts.add(resolvedSrc);
-        return Promise.resolve();
-      }
-
-      return new Promise((resolve, reject) => {
-        const script = document.createElement("script");
-        script.src = resolvedSrc;
-        script.onload = () => {
-          loadedScripts.add(resolvedSrc);
-          resolve();
-        };
-        script.onerror = () => {
-          const error = new Error(`Failed to load SPA script: ${resolvedSrc}`);
-          error.url = resolvedSrc;
-          reject(error);
-        };
-        document.head.appendChild(script);
-      });
     }
 
     function ensureStylesheet(href) {
@@ -419,11 +391,15 @@
         }
         if (currentToken !== navigationToken) return;
 
-        const extScripts = doc.querySelectorAll('script[src]:not([data-spa-runtime])');
-        for (const scriptElement of extScripts) {
-          const scriptSrc = scriptElement.getAttribute("src");
-          if (scriptSrc) {
-            await ensureScript(scriptSrc);
+        const pageLoader = window.PageLoaders?.[targetPageId];
+        if (typeof pageLoader === "function") {
+          try {
+            await pageLoader();
+          } catch (error) {
+            if (currentToken !== navigationToken) return;
+            console.error(`Failed to load page module for ${targetPageId}:`, error);
+            window.location.href = getNavigationFallbackUrl(targetRouteKey);
+            return;
           }
         }
         if (currentToken !== navigationToken) return;

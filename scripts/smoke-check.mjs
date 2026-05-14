@@ -202,7 +202,7 @@ const {
   "renderPostContent",
 ]);
 
-const assetVersionValue = "20260514-v54";
+const assetVersionValue = "20260514-v55";
 const assetVersion = `v=${assetVersionValue}`;
 const defaultShareImagePath = "/og-image.jpg?v=4";
 const productionDomainPattern = /0000068\.xyz/;
@@ -423,43 +423,61 @@ pageHtmlByLabel.forEach(([label, htmlSource]) => {
     `${label} should avoid HTML script-order dependencies by using the module entry`,
   );
 });
-const expectedAppModuleImports = [
+const expectedAppStaticImports = [
   "./font-loader.js",
   "./notion-content-shared.js",
-  "./notion-content-utils.js",
-  "./notion-content-url.js",
-  "./notion-article-renderer.js",
-  "./notion-content.js",
   "./runtime-core.js",
   "./site-utils.js",
   "./common.js",
   "./ui-effects.js",
   "./seo-meta.js",
   "./spa-router.js",
+];
+const expectedAppDynamicImports = [
+  "./notion-content-utils.js",
+  "./notion-content-url.js",
+  "./notion-article-renderer.js",
+  "./notion-content.js",
   "./notion-api.js",
   "./bookmark.js",
   "./index-page.js",
   "./blog-page.js",
   "./post-page.js",
 ];
-const appModuleImports = Array.from(
+const appStaticImports = Array.from(
   appJs.matchAll(/^import\s+"(\.\/[^"]+\.js)\?v=([^"]+)";$/gm),
 );
 assert.equal(
-  appModuleImports.length,
-  expectedAppModuleImports.length,
-  "app.js should version every side-effect module import",
+  appStaticImports.length,
+  expectedAppStaticImports.length,
+  "app.js should version every static side-effect module import",
 );
-expectedAppModuleImports.reduce((previousIndex, src) => {
+expectedAppStaticImports.reduce((previousIndex, src) => {
   const importStatement = `import "${src}?${assetVersion}";`;
   const nextIndex = appJs.indexOf(importStatement);
-  assert.ok(nextIndex > previousIndex, `app.js should import ${src} after its dependencies with the shared asset version`);
+  assert.ok(nextIndex > previousIndex, `app.js should statically import ${src} in dependency order with the shared asset version`);
   return nextIndex;
 }, -1);
-appModuleImports.forEach(([, src, version]) => {
-  assert.ok(expectedAppModuleImports.includes(src), `app.js should not import unexpected module ${src}`);
-  assert.equal(version, assetVersionValue, `${src} should use the shared asset version`);
+appStaticImports.forEach(([, src, version]) => {
+  assert.ok(expectedAppStaticImports.includes(src), `app.js should not statically import unexpected module ${src}`);
+  assert.equal(version, assetVersionValue, `${src} static import should use the shared asset version`);
 });
+const appDynamicImports = Array.from(
+  appJs.matchAll(/import\(versioned\("(\.\/[^"]+\.js)"\)\)/g),
+);
+assert.equal(
+  appDynamicImports.length,
+  expectedAppDynamicImports.length + 6,
+  "app.js should lazy-import each page-specific module through versioned(), with blog/post sharing the shared post-rendering chain",
+);
+const dynamicImportSet = new Set(appDynamicImports.map(([, src]) => src));
+expectedAppDynamicImports.forEach((src) => {
+  assert.ok(dynamicImportSet.has(src), `app.js should lazy-load ${src} through a page loader`);
+});
+expectIncludes(appJs, 'window.PageLoaders = pageLoaders', "app.js should expose page loaders so spa-router can lazy-load on navigation");
+expectIncludes(appJs, "const ASSET_VERSION =", "app.js should declare a single asset version constant for dynamic imports");
+expectIncludes(spaRouterJs, "window.PageLoaders?.[targetPageId]", "spa-router should call the matching page loader on navigation");
+expectNotIncludes(spaRouterJs, "function ensureScript", "spa-router should drop the legacy ensureScript helper now that page modules are dynamic imports");
 expectNoMalformedClosingTags(indexHtml, "index.html should not contain malformed closing tags");
 expectNoMalformedClosingTags(blogHtml, "blog.html should not contain malformed closing tags");
 expectNoMalformedClosingTags(postHtml, "post.html should not contain malformed closing tags");
@@ -688,7 +706,7 @@ expectIncludes(localServerJs, "path.isAbsolute(relativePath)", "local dev server
 expectIncludes(localServerJs, "isMissingStaticFileError", "local dev server should distinguish missing static files from server errors");
 expectIncludes(localServerJs, "getErrorStatusCode", "local dev server should preserve API error status codes instead of converting everything to 404");
 expectIncludes(localServerJs, "statusCode >= 500", "local dev server should log unexpected local request failures");
-expectIncludes(spaRouterJs, 'script[src]:not([data-spa-runtime])', "SPA router should skip shared runtime scripts via HTML metadata");
+expectNotIncludes(spaRouterJs, "script[src]:not([data-spa-runtime])", "SPA router should not scan HTML script tags now that page modules go through PageLoaders");
 expectIncludes(spaRouterJs, "StructuredData?.syncFromDocument", "SPA router should carry SSR JSON-LD into the active document during navigation");
 expectIncludes(spaRouterJs, "waitForRouteExitCue", "SPA router should preserve the v1.6-style route exit cue");
 expectIncludes(spaRouterJs, "ROUTE_EXIT_CUE_MS = 150", "SPA router should keep the old quick route exit pause");
