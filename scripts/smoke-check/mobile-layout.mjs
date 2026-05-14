@@ -115,12 +115,12 @@ function expectGradientTitle(assert, source, selector, label) {
   );
 }
 
-function expectMobileAmbientBackground(assert, source, selector, label) {
+function expectMobileAmbientBackground(assert, source, selector, label, { backgroundColor = "#111528", allowStars = false } = {}) {
   const declarations = readRuleDeclarations(source, selector);
 
   assert.equal(
     declarations.get("background-color"),
-    "#111528",
+    backgroundColor,
     `${label} should paint the mobile safe-area background`,
   );
   assert.equal(
@@ -128,10 +128,12 @@ function expectMobileAmbientBackground(assert, source, selector, label) {
     "no-repeat",
     `${label} should keep the mobile background stable`,
   );
-  assert.ok(
-    !/radial-gradient\(1px/i.test(declarations.get("background-image") || ""),
-    `${label} should avoid static star speckles on mobile`,
-  );
+  if (!allowStars) {
+    assert.ok(
+      !/radial-gradient\(1px/i.test(declarations.get("background-image") || ""),
+      `${label} should avoid static star speckles on mobile`,
+    );
+  }
 }
 
 function expectBlogCardMobileContract(assert, source, label, bookmarkColumnWidth) {
@@ -212,19 +214,19 @@ export function runMobileLayoutChecks(context) {
   expectGradientTitle(assert, realMobileStyle, ".hero-title", "real-mobile home");
   expectGradientTitle(assert, mobileFallbackStyle, "html.is-mobile-device-viewport .hero-title", "mobile fallback home");
   expectDeclarations(assert, realMobileStyle, "html", {
-    "background-color": "#111528",
+    "background-color": "#0a0e1a",
   }, "real-mobile root");
   expectDeclarations(assert, realMobileStyle, "body", {
-    "background-color": "#111528",
+    "background-color": "#0a0e1a",
   }, "real-mobile body");
   expectDeclarations(assert, mobileFallbackStyle, "html.is-mobile-device-viewport", {
-    "background-color": "#111528",
+    "background-color": "#0a0e1a",
   }, "mobile fallback root");
   expectDeclarations(assert, mobileFallbackStyle, "html.is-mobile-device-viewport body", {
-    "background-color": "#111528",
+    "background-color": "#0a0e1a",
   }, "mobile fallback body");
-  expectMobileAmbientBackground(assert, realMobileStyle, ".ambient-background", "real-mobile home background");
-  expectMobileAmbientBackground(assert, mobileFallbackStyle, "html.is-mobile-device-viewport .ambient-background", "mobile fallback home background");
+  expectMobileAmbientBackground(assert, realMobileStyle, ".ambient-background", "real-mobile home background", { backgroundColor: "#0a0e1a", allowStars: true });
+  expectMobileAmbientBackground(assert, mobileFallbackStyle, "html.is-mobile-device-viewport .ambient-background", "mobile fallback home background", { backgroundColor: "#0a0e1a", allowStars: true });
   expectDeclarations(assert, realMobileStyle, "#particles-canvas", {
     "display": "none",
   }, "real-mobile home");

@@ -467,14 +467,15 @@ const appDynamicImports = Array.from(
 );
 assert.equal(
   appDynamicImports.length,
-  expectedAppDynamicImports.length + 6,
-  "app.js should lazy-import each page-specific module through versioned(), with blog/post sharing the shared post-rendering chain",
+  expectedAppDynamicImports.length,
+  "app.js should lazy-import each page-specific module exactly once through the shared loadPostRenderingChain helper",
 );
 const dynamicImportSet = new Set(appDynamicImports.map(([, src]) => src));
 expectedAppDynamicImports.forEach((src) => {
   assert.ok(dynamicImportSet.has(src), `app.js should lazy-load ${src} through a page loader`);
 });
 expectIncludes(appJs, 'window.PageLoaders = pageLoaders', "app.js should expose page loaders so spa-router can lazy-load on navigation");
+expectIncludes(appJs, "async function loadPostRenderingChain", "app.js should use a sequential loading helper to guarantee UMD dependency order");
 expectIncludes(appJs, "const ASSET_VERSION =", "app.js should declare a single asset version constant for dynamic imports");
 expectIncludes(spaRouterJs, "window.PageLoaders?.[targetPageId]", "spa-router should call the matching page loader on navigation");
 expectNotIncludes(spaRouterJs, "function ensureScript", "spa-router should drop the legacy ensureScript helper now that page modules are dynamic imports");
@@ -606,7 +607,7 @@ expectIncludes(packageJson, '"notion:live-check": "node scripts/notion-live-chec
 expectIncludes(packageJson, '"visual:check": "node scripts/visual-regression.mjs"', "package scripts should expose the browser visual regression check");
 expectIncludes(packageJson, '"verify:release": "node scripts/release-check.mjs"', "package scripts should expose the strict release check");
 expectIncludes(packageJson, '"license": "MIT"', "package metadata should match the published README license");
-expectIncludes(packageJson, '"version": "4.7.0"', "package version should match the next release commit");
+expectIncludes(packageJson, '"version": "5.5.0"', "package version should match the next release commit");
 expectIncludes(releaseCheckJs, "Promise.all([", "release check should run smoke and strict visual checks in parallel");
 expectIncludes(releaseCheckJs, 'runNpmScript("check", {}, stopSiblingsAfterFailure)', "release check should keep the smoke suite in the strict gate");
 expectIncludes(releaseCheckJs, 'runNpmScript("visual:check", { VISUAL_STRICT: "1" }, stopSiblingsAfterFailure)', "release check should run visual regression in strict mode");

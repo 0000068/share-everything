@@ -9,29 +9,29 @@ import "./spa-router.js?v=20260514-v55";
 
 const ASSET_VERSION = "20260514-v55";
 const versioned = (path) => `${path}?v=${ASSET_VERSION}`;
+window.AppAssetVersion = ASSET_VERSION;
+
+async function loadPostRenderingChain() {
+  await import(versioned("./notion-content-utils.js"));
+  await import(versioned("./notion-content-url.js"));
+  await import(versioned("./notion-article-renderer.js"));
+  await import(versioned("./notion-content.js"));
+  await Promise.all([
+    import(versioned("./notion-api.js")),
+    import(versioned("./bookmark.js")),
+  ]);
+}
 
 const pageLoaders = {
   index: () => import(versioned("./index-page.js")),
-  blog: () =>
-    Promise.all([
-      import(versioned("./notion-content-utils.js")),
-      import(versioned("./notion-content-url.js")),
-      import(versioned("./notion-article-renderer.js")),
-      import(versioned("./notion-content.js")),
-      import(versioned("./notion-api.js")),
-      import(versioned("./bookmark.js")),
-      import(versioned("./blog-page.js")),
-    ]),
-  post: () =>
-    Promise.all([
-      import(versioned("./notion-content-utils.js")),
-      import(versioned("./notion-content-url.js")),
-      import(versioned("./notion-article-renderer.js")),
-      import(versioned("./notion-content.js")),
-      import(versioned("./notion-api.js")),
-      import(versioned("./bookmark.js")),
-      import(versioned("./post-page.js")),
-    ]),
+  blog: async () => {
+    await loadPostRenderingChain();
+    await import(versioned("./blog-page.js"));
+  },
+  post: async () => {
+    await loadPostRenderingChain();
+    await import(versioned("./post-page.js"));
+  },
 };
 
 window.PageLoaders = pageLoaders;

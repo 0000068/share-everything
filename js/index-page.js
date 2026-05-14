@@ -54,30 +54,6 @@
 
     searchForm.addEventListener("submit", handleSearchSubmit);
 
-    function canWarmRemote() {
-      const conn =
-        navigator.connection ||
-        navigator.mozConnection ||
-        navigator.webkitConnection ||
-        null;
-      if (!conn) return true;
-      if (conn.saveData) return false;
-      return !/(^|-)2g$/.test(conn.effectiveType || "");
-    }
-
-    function warmBlogListing() {
-      if (!canWarmRemote()) return;
-      const notionApi = window.NotionAPI;
-      if (typeof notionApi?.queryPosts !== "function") return;
-      notionApi.queryPosts({}).catch(() => {});
-    }
-
-    if (typeof window.requestIdleCallback === "function") {
-      window.requestIdleCallback(warmBlogListing, { timeout: 2500 });
-    } else {
-      window.setTimeout(warmBlogListing, 1500);
-    }
-
     return () => {
       searchForm.removeEventListener("submit", handleSearchSubmit);
     };

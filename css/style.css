@@ -666,19 +666,35 @@ body.has-cursor-glow .cursor-glow {
 /* ===== Responsive ===== */
 @media (max-width: 768px) and (hover: none) and (pointer: coarse) {
   html {
-    background-color: #111528;
+    background-color: #0a0e1a;
   }
 
   body {
-    background-color: #111528;
+    background-color: #0a0e1a;
   }
 
   .ambient-background {
-    background-color: #111528;
+    background-color: #0a0e1a;
     background-image:
-      linear-gradient(115deg, rgba(0, 136, 168, 0.3) 0%, rgba(17, 21, 40, 0) 40%),
-      linear-gradient(185deg, rgba(255, 64, 129, 0.12) 0%, rgba(19, 21, 43, 0) 50%),
-      linear-gradient(180deg, #101527 0%, #15172d 52%, #111528 100%);
+      radial-gradient(1px 1px at 8% 12%, rgba(255, 255, 255, 0.3) 50%, transparent 50%),
+      radial-gradient(1px 1px at 22% 28%, rgba(255, 255, 255, 0.2) 50%, transparent 50%),
+      radial-gradient(0.8px 0.8px at 35% 8%, rgba(255, 255, 255, 0.18) 50%, transparent 50%),
+      radial-gradient(1.2px 1.2px at 48% 42%, rgba(200, 240, 255, 0.22) 50%, transparent 50%),
+      radial-gradient(0.8px 0.8px at 62% 18%, rgba(255, 255, 255, 0.15) 50%, transparent 50%),
+      radial-gradient(1px 1px at 75% 55%, rgba(255, 255, 255, 0.2) 50%, transparent 50%),
+      radial-gradient(0.6px 0.6px at 88% 32%, rgba(200, 220, 255, 0.18) 50%, transparent 50%),
+      radial-gradient(1px 1px at 15% 65%, rgba(255, 255, 255, 0.14) 50%, transparent 50%),
+      radial-gradient(0.8px 0.8px at 42% 78%, rgba(255, 255, 255, 0.16) 50%, transparent 50%),
+      radial-gradient(1.2px 1.2px at 68% 72%, rgba(200, 240, 255, 0.12) 50%, transparent 50%),
+      radial-gradient(0.6px 0.6px at 92% 68%, rgba(255, 255, 255, 0.14) 50%, transparent 50%),
+      radial-gradient(1px 1px at 5% 88%, rgba(255, 255, 255, 0.12) 50%, transparent 50%),
+      radial-gradient(0.8px 0.8px at 55% 92%, rgba(200, 220, 255, 0.1) 50%, transparent 50%),
+      radial-gradient(0.6px 0.6px at 80% 88%, rgba(255, 100, 200, 0.12) 50%, transparent 50%),
+      radial-gradient(1px 1px at 28% 48%, rgba(255, 255, 255, 0.1) 50%, transparent 50%),
+      radial-gradient(0.8px 0.8px at 95% 48%, rgba(255, 255, 255, 0.12) 50%, transparent 50%),
+      linear-gradient(115deg, rgba(0, 136, 168, 0.28) 0%, rgba(10, 14, 26, 0) 36%),
+      linear-gradient(185deg, rgba(180, 40, 120, 0.08) 0%, rgba(10, 14, 26, 0) 45%),
+      linear-gradient(180deg, #0a0e1a 0%, #0f1328 50%, #0a0e1a 100%);
     background-repeat: no-repeat;
   }
 
@@ -691,6 +707,7 @@ body.has-cursor-glow .cursor-glow {
   }
 
   .hero-section {
+    position: relative;
     width: 100%;
     min-height: 100svh;
     padding: clamp(190px, 27svh, 240px) 0 48px;
@@ -719,8 +736,28 @@ body.has-cursor-glow .cursor-glow {
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    filter: none;
+    filter: drop-shadow(0 0 30px rgba(0, 229, 255, 0.25))
+      drop-shadow(0 0 60px rgba(224, 64, 251, 0.15));
     animation: title-gradient 6s linear infinite, fadeInUp 0.9s var(--transition-smooth) 0.25s both;
+  }
+
+  .hero-section::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 58%;
+    transform: translate(-50%, -50%);
+    width: 320px;
+    height: 320px;
+    border-radius: 50%;
+    background: radial-gradient(
+      circle,
+      rgba(0, 180, 220, 0.08) 0%,
+      rgba(120, 40, 180, 0.05) 40%,
+      transparent 70%
+    );
+    pointer-events: none;
+    z-index: -1;
   }
 
   .hero-search {
@@ -1052,19 +1089,35 @@ html.is-mobile-device-viewport .glow-orb {
 }
 
 html.is-mobile-device-viewport {
-  background-color: #111528;
+  background-color: #0a0e1a;
 }
 
 html.is-mobile-device-viewport body {
-  background-color: #111528;
+  background-color: #0a0e1a;
 }
 
 html.is-mobile-device-viewport .ambient-background {
-  background-color: #111528;
+  background-color: #0a0e1a;
   background-image:
-    linear-gradient(115deg, rgba(0, 136, 168, 0.3) 0%, rgba(17, 21, 40, 0) 40%),
-    linear-gradient(185deg, rgba(255, 64, 129, 0.12) 0%, rgba(19, 21, 43, 0) 50%),
-    linear-gradient(180deg, #101527 0%, #15172d 52%, #111528 100%);
+    radial-gradient(1px 1px at 8% 12%, rgba(255, 255, 255, 0.3) 50%, transparent 50%),
+    radial-gradient(1px 1px at 22% 28%, rgba(255, 255, 255, 0.2) 50%, transparent 50%),
+    radial-gradient(0.8px 0.8px at 35% 8%, rgba(255, 255, 255, 0.18) 50%, transparent 50%),
+    radial-gradient(1.2px 1.2px at 48% 42%, rgba(200, 240, 255, 0.22) 50%, transparent 50%),
+    radial-gradient(0.8px 0.8px at 62% 18%, rgba(255, 255, 255, 0.15) 50%, transparent 50%),
+    radial-gradient(1px 1px at 75% 55%, rgba(255, 255, 255, 0.2) 50%, transparent 50%),
+    radial-gradient(0.6px 0.6px at 88% 32%, rgba(200, 220, 255, 0.18) 50%, transparent 50%),
+    radial-gradient(1px 1px at 15% 65%, rgba(255, 255, 255, 0.14) 50%, transparent 50%),
+    radial-gradient(0.8px 0.8px at 42% 78%, rgba(255, 255, 255, 0.16) 50%, transparent 50%),
+    radial-gradient(1.2px 1.2px at 68% 72%, rgba(200, 240, 255, 0.12) 50%, transparent 50%),
+    radial-gradient(0.6px 0.6px at 92% 68%, rgba(255, 255, 255, 0.14) 50%, transparent 50%),
+    radial-gradient(1px 1px at 5% 88%, rgba(255, 255, 255, 0.12) 50%, transparent 50%),
+    radial-gradient(0.8px 0.8px at 55% 92%, rgba(200, 220, 255, 0.1) 50%, transparent 50%),
+    radial-gradient(0.6px 0.6px at 80% 88%, rgba(255, 100, 200, 0.12) 50%, transparent 50%),
+    radial-gradient(1px 1px at 28% 48%, rgba(255, 255, 255, 0.1) 50%, transparent 50%),
+    radial-gradient(0.8px 0.8px at 95% 48%, rgba(255, 255, 255, 0.12) 50%, transparent 50%),
+    linear-gradient(115deg, rgba(0, 136, 168, 0.28) 0%, rgba(10, 14, 26, 0) 36%),
+    linear-gradient(185deg, rgba(180, 40, 120, 0.08) 0%, rgba(10, 14, 26, 0) 45%),
+    linear-gradient(180deg, #0a0e1a 0%, #0f1328 50%, #0a0e1a 100%);
   background-repeat: no-repeat;
 }
 
@@ -1077,6 +1130,7 @@ html.is-mobile-device-viewport .content-layer {
 }
 
 html.is-mobile-device-viewport .hero-section {
+  position: relative;
   width: 100%;
   min-height: 100svh;
   padding: clamp(190px, 27svh, 240px) 0 48px;
@@ -1105,8 +1159,28 @@ html.is-mobile-device-viewport .hero-title {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  filter: none;
+  filter: drop-shadow(0 0 30px rgba(0, 229, 255, 0.25))
+    drop-shadow(0 0 60px rgba(224, 64, 251, 0.15));
   animation: title-gradient 6s linear infinite, fadeInUp 0.9s var(--transition-smooth) 0.25s both;
+}
+
+html.is-mobile-device-viewport .hero-section::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  transform: translate(-50%, -50%);
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(0, 180, 220, 0.08) 0%,
+    rgba(120, 40, 180, 0.05) 40%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: -1;
 }
 
 html.is-mobile-device-viewport .hero-search {
