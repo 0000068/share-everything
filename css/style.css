@@ -42,6 +42,13 @@
   box-sizing: border-box;
 }
 
+html {
+  background-color: var(--bg-base);
+  min-height: 100%;
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
 body {
   font-family:
     "Inter",
@@ -656,6 +663,23 @@ body.has-cursor-glow .cursor-glow {
 
 /* ===== Responsive ===== */
 @media (max-width: 768px) and (hover: none) and (pointer: coarse) {
+  html {
+    background-color: #111528;
+  }
+
+  body {
+    background-color: #111528;
+  }
+
+  .ambient-background {
+    background-color: #111528;
+    background-image:
+      linear-gradient(115deg, rgba(0, 136, 168, 0.3) 0%, rgba(17, 21, 40, 0) 40%),
+      linear-gradient(185deg, rgba(255, 64, 129, 0.12) 0%, rgba(19, 21, 43, 0) 50%),
+      linear-gradient(180deg, #101527 0%, #15172d 52%, #111528 100%);
+    background-repeat: no-repeat;
+  }
+
   .glow-orb {
     filter: blur(72px);
     opacity: 0.58;
@@ -1010,9 +1034,6 @@ body.has-cursor-glow .cursor-glow {
     background-image:
       linear-gradient(115deg, rgba(0, 136, 168, 0.34) 0%, rgba(17, 21, 40, 0) 38%),
       linear-gradient(185deg, rgba(255, 64, 129, 0.1) 0%, rgba(19, 21, 43, 0) 48%),
-      radial-gradient(1px 1px at 18% 24%, rgba(124, 235, 255, 0.24) 50%, transparent 52%),
-      radial-gradient(1px 1px at 72% 18%, rgba(255, 255, 255, 0.2) 50%, transparent 52%),
-      radial-gradient(1px 1px at 82% 70%, rgba(255, 99, 217, 0.22) 50%, transparent 52%),
       linear-gradient(180deg, #101527 0%, #15172d 52%, #111528 100%);
     background-repeat: no-repeat;
   }
@@ -1035,6 +1056,23 @@ body.has-cursor-glow .cursor-glow {
 html.is-mobile-device-viewport .glow-orb {
   filter: blur(72px);
   opacity: 0.58;
+}
+
+html.is-mobile-device-viewport {
+  background-color: #111528;
+}
+
+html.is-mobile-device-viewport body {
+  background-color: #111528;
+}
+
+html.is-mobile-device-viewport .ambient-background {
+  background-color: #111528;
+  background-image:
+    linear-gradient(115deg, rgba(0, 136, 168, 0.3) 0%, rgba(17, 21, 40, 0) 40%),
+    linear-gradient(185deg, rgba(255, 64, 129, 0.12) 0%, rgba(19, 21, 43, 0) 50%),
+    linear-gradient(180deg, #101527 0%, #15172d 52%, #111528 100%);
+  background-repeat: no-repeat;
 }
 
 html.is-mobile-device-viewport #particles-canvas {
@@ -1209,9 +1247,6 @@ html.is-mobile-device-viewport body[data-page="post"] .ambient-background {
   background-image:
     linear-gradient(115deg, rgba(0, 136, 168, 0.34) 0%, rgba(17, 21, 40, 0) 38%),
     linear-gradient(185deg, rgba(255, 64, 129, 0.1) 0%, rgba(19, 21, 43, 0) 48%),
-    radial-gradient(1px 1px at 18% 24%, rgba(124, 235, 255, 0.24) 50%, transparent 52%),
-    radial-gradient(1px 1px at 72% 18%, rgba(255, 255, 255, 0.2) 50%, transparent 52%),
-    radial-gradient(1px 1px at 82% 70%, rgba(255, 99, 217, 0.22) 50%, transparent 52%),
     linear-gradient(180deg, #101527 0%, #15172d 52%, #111528 100%);
   background-repeat: no-repeat;
 }

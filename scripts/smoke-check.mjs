@@ -202,7 +202,7 @@ const {
   "renderPostContent",
 ]);
 
-const assetVersionValue = "20260514-v47";
+const assetVersionValue = "20260514-v48";
 const assetVersion = `v=${assetVersionValue}`;
 const defaultShareImagePath = "/og-image.jpg?v=4";
 const productionDomainPattern = /0000068\.xyz/;
@@ -537,13 +537,18 @@ expectIncludes(styleCss, "@media (max-width: 768px) and (hover: none) and (point
 expectIncludes(blogPageCss, "@media (max-width: 768px) and (hover: none) and (pointer: coarse)", "blog mobile CSS should not affect narrow desktop windows");
 expectIncludes(postPageCss, "@media (max-width: 768px) and (hover: none) and (pointer: coarse)", "post mobile CSS should not affect narrow desktop windows");
 expectIncludes(styleCss, "color-scheme: dark;", "shared CSS should tell browsers to render native chrome in dark mode");
+expectIncludes(styleCss, "html {\n  background-color: var(--bg-base);", "shared CSS should paint the root canvas behind mobile browser safe areas");
 expectIncludes(styleCss, "user-select: auto;", "body text should remain selectable by default");
 expectIncludes(styleCss, "min-height: 100dvh;", "shared CSS should include dynamic viewport fallbacks for mobile browser chrome");
 expectIncludes(blogPageCss, "min-height: 100dvh;", "blog page should include a dynamic viewport fallback");
 expectIncludes(postPageCss, "min-height: 100dvh;", "post page should include a dynamic viewport fallback");
-expectIncludes(indexHtml, '<meta name="theme-color" content="#1a1a2e" />', "home page should advertise the dark theme color to mobile browsers");
-expectIncludes(blogHtml, '<meta name="theme-color" content="#1a1a2e" />', "blog page should advertise the dark theme color to mobile browsers");
-expectIncludes(postHtml, '<meta name="theme-color" content="#1a1a2e" />', "post page should advertise the dark theme color to mobile browsers");
+expectIncludes(indexHtml, '<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />', "home page should opt into safe-area painting on mobile browsers");
+expectIncludes(blogHtml, '<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />', "blog page should opt into safe-area painting on mobile browsers");
+expectIncludes(postHtml, '<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />', "post page should opt into safe-area painting on mobile browsers");
+expectIncludes(indexHtml, '<meta name="theme-color" content="#111528" />', "home page should advertise the mobile background color to mobile browsers");
+expectIncludes(blogHtml, '<meta name="theme-color" content="#111528" />', "blog page should advertise the mobile background color to mobile browsers");
+expectIncludes(postHtml, '<meta name="theme-color" content="#111528" />', "post page should advertise the mobile background color to mobile browsers");
+expectNotIncludes(styleCss, "radial-gradient(1px 1px at 18% 24%", "mobile blog/post backgrounds should not reintroduce static star speckles");
 expectIncludes(blogHtml, '<nav class="pagination" id="pagination" aria-label="文章分页"></nav>', "blog pagination should expose navigation semantics");
 expectIncludes(blogPageJs, 'aria-current="page"', "blog pagination should expose the current page to assistive technology");
 expectIncludes(styleCss, 'body[data-page="post"] .top-actions', "post mobile CSS should explicitly target the article dock");

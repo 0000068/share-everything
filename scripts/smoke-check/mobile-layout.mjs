@@ -120,6 +120,25 @@ function expectGradientTitle(assert, source, selector, label) {
   );
 }
 
+function expectMobileAmbientBackground(assert, source, selector, label) {
+  const declarations = readRuleDeclarations(source, selector);
+
+  assert.equal(
+    declarations.get("background-color"),
+    "#111528",
+    `${label} should paint the mobile safe-area background`,
+  );
+  assert.equal(
+    declarations.get("background-repeat"),
+    "no-repeat",
+    `${label} should keep the mobile background stable`,
+  );
+  assert.ok(
+    !/radial-gradient\(1px/i.test(declarations.get("background-image") || ""),
+    `${label} should avoid static star speckles on mobile`,
+  );
+}
+
 function expectBlogCardMobileContract(assert, source, label, bookmarkColumnWidth) {
   expectDeclarations(assert, source, ".blog-card-body", {
     "display": "grid",
@@ -197,6 +216,20 @@ export function runMobileLayoutChecks(context) {
 
   expectGradientTitle(assert, realMobileStyle, ".hero-title", "real-mobile home");
   expectGradientTitle(assert, mobileFallbackStyle, "html.is-mobile-device-viewport .hero-title", "mobile fallback home");
+  expectDeclarations(assert, realMobileStyle, "html", {
+    "background-color": "#111528",
+  }, "real-mobile root");
+  expectDeclarations(assert, realMobileStyle, "body", {
+    "background-color": "#111528",
+  }, "real-mobile body");
+  expectDeclarations(assert, mobileFallbackStyle, "html.is-mobile-device-viewport", {
+    "background-color": "#111528",
+  }, "mobile fallback root");
+  expectDeclarations(assert, mobileFallbackStyle, "html.is-mobile-device-viewport body", {
+    "background-color": "#111528",
+  }, "mobile fallback body");
+  expectMobileAmbientBackground(assert, realMobileStyle, ".ambient-background", "real-mobile home background");
+  expectMobileAmbientBackground(assert, mobileFallbackStyle, "html.is-mobile-device-viewport .ambient-background", "mobile fallback home background");
   expectDeclarations(assert, realMobileStyle, "#particles-canvas", {
     "display": "none",
   }, "real-mobile home");
