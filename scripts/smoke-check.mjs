@@ -202,7 +202,7 @@ const {
   "renderPostContent",
 ]);
 
-const assetVersionValue = "20260514-v48";
+const assetVersionValue = "20260514-v50";
 const assetVersion = `v=${assetVersionValue}`;
 const defaultShareImagePath = "/og-image.jpg?v=4";
 const productionDomainPattern = /0000068\.xyz/;
@@ -513,6 +513,7 @@ expectIncludes(blogPageJs, "const buildBookmarkListingUrl = siteUtils.buildBookm
 expectIncludes(blogPageJs, "blog-card-cover-fallback", "blog cards should show a stable fallback while remote covers load");
 expectNotIncludes(blogPageJs, ">${safeCoverEmoji}</span>", "blog cover fallback should not render the notebook emoji as visible placeholder text");
 expectIncludes(blogPageCss, ".blog-card-cover-fallback", "blog card cover CSS should keep fallback art visible until the image paints");
+expectNotIncludes(blogPageCss, "border-bottom: 1px solid var(--glass-border);", "blog card covers should not draw a bottom hairline under cover images");
 expectIncludes(blogPageCss, "z-index: 2;\n  border-radius: inherit;", "blog card link layer should stay above cover media");
 expectIncludes(blogPageCss, "pointer-events: none;\n}", "blog card cover media should not swallow clicks meant for the card link");
 expectIncludes(blogPageCss, "z-index: 3;\n  display: inline-flex;", "blog card bookmark button should stay above the card link layer");
@@ -539,6 +540,8 @@ expectIncludes(postPageCss, "@media (max-width: 768px) and (hover: none) and (po
 expectIncludes(styleCss, "color-scheme: dark;", "shared CSS should tell browsers to render native chrome in dark mode");
 expectIncludes(styleCss, "html {\n  background-color: var(--bg-base);", "shared CSS should paint the root canvas behind mobile browser safe areas");
 expectIncludes(styleCss, "user-select: auto;", "body text should remain selectable by default");
+expectIncludes(styleCss, ".hero-title {\n  font-family:", "shared CSS should keep the home hero title rule explicit");
+expectIncludes(styleCss, "-webkit-user-select: none;\n  user-select: none;\n  background: linear-gradient", "home hero title should not create a text selection highlight while dragging");
 expectIncludes(styleCss, "min-height: 100dvh;", "shared CSS should include dynamic viewport fallbacks for mobile browser chrome");
 expectIncludes(blogPageCss, "min-height: 100dvh;", "blog page should include a dynamic viewport fallback");
 expectIncludes(postPageCss, "min-height: 100dvh;", "post page should include a dynamic viewport fallback");

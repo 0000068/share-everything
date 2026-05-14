@@ -190,7 +190,6 @@
   align-items: center;
   justify-content: center;
   font-size: 3rem;
-  border-bottom: 1px solid var(--glass-border);
   position: relative;
   overflow: hidden;
 }

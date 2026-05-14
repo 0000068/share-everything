@@ -382,6 +382,8 @@ body.has-cursor-glow .cursor-glow {
   font-weight: 700;
   letter-spacing: -0.04em;
   line-height: 1.05;
+  -webkit-user-select: none;
+  user-select: none;
   background: linear-gradient(
     to right,
     #fff 0%,
