@@ -202,7 +202,7 @@ const {
   "renderPostContent",
 ]);
 
-const assetVersionValue = "20260514-v53";
+const assetVersionValue = "20260514-v54";
 const assetVersion = `v=${assetVersionValue}`;
 const defaultShareImagePath = "/og-image.jpg?v=4";
 const productionDomainPattern = /0000068\.xyz/;
@@ -561,7 +561,7 @@ runMobileLayoutChecks({ assert, blogPageCss, styleCss });
 expectIncludes(postPageCss, 'html.is-mobile-device-viewport body[data-page="post"] .page-transition-wrapper', "post wrapper clamp should also apply through the JS mobile compatibility class");
 expectIncludes(styleCss, "display: none;", "post mobile dock should be hidden for clean reading");
 expectIncludes(postPageCss, 'body[data-page="post"] .page-transition-wrapper', "post mobile CSS should clamp article layout wrappers to the viewport");
-expectIncludes(postPageJs, "siteUtils.isMobileDeviceViewport", "post page should hide article bookmark controls through the shared mobile compatibility check");
+expectIncludes(postPageJs, "if (element === navBookmark)", "post page should keep the nav bookmark hidden so the floating fab is the sole entry point on every viewport");
 expectIncludes(styleCss, "@media (hover: none) and (pointer: coarse)", "cursor glow should be disabled only for touch-first pointers");
 expectNotIncludes(styleCss, "@media (hover: none), (pointer: coarse)", "cursor glow touch fallback should not use a broad OR media query");
 assert.ok(
@@ -1488,7 +1488,7 @@ expectNotIncludes(postPageJs, 'console.error("NotionAPI is unavailable on post p
 expectIncludes(postPageJs, "canBookmarkFromInitialData", "post page should recover bookmark controls from SSR initial data when the client API is unavailable");
 expectIncludes(postPageJs, "initBookmark(initialPostData);", "post page should still wire bookmark controls from SSR summary data in fallback mode");
 expectIncludes(postPageJs, "element === navBookmark", "post page should hide the nav bookmark control while keeping the fab visible on mobile");
-expectIncludes(postPageJs, "createMobileDeviceQueryList", "post page should use the shared real-mobile query for bookmark control placement");
+expectNotIncludes(postPageJs, "bindResponsiveBookmarkVisibility", "post page should not retain the legacy viewport listener now that bookmark visibility is viewport-independent");
 expectIncludes(postPageJs, 'window.addEventListener?.("bookmarks:updated", bookmarksUpdatedHandler)', "post page should listen for cross-tab bookmark updates");
 assert.ok(
   postPageJs.indexOf("const postId = getCurrentPostId();") < postPageJs.indexOf('if (!notionApi)'),
@@ -1566,11 +1566,6 @@ loadBrowserScript("js/post-page.js", {
     SiteUtils: {
       getPostIdFromUrl: () => "post-1",
       normalizePostId: (value) => String(value || "").trim() || null,
-      createMediaQueryList: () => ({
-        matches: false,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-      }),
       getPreferredBlogReturnUrl: () => "https://example.com/blog.html",
     },
   },

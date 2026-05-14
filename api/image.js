@@ -362,7 +362,7 @@ function createImageResponse(response, cleanup) {
   };
 }
 
-function requestImage(source, { signal } = {}) {
+function requestImage(source, { signal, method = "GET" } = {}) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
       reject(createAbortError());
@@ -395,7 +395,7 @@ function requestImage(source, { signal } = {}) {
 
     try {
       request = getHttpsRequest()(requestUrl, {
-        method: "GET",
+        method,
         headers: IMAGE_PROXY_REQUEST_HEADERS,
         lookup(hostname, options, callback) {
           if (options?.all) {
@@ -429,11 +429,11 @@ function requestImage(source, { signal } = {}) {
   });
 }
 
-async function fetchImageResponse(source, { signal } = {}) {
+async function fetchImageResponse(source, { signal, method } = {}) {
   let currentSource = source;
 
   for (let redirectCount = 0; redirectCount <= IMAGE_PROXY_MAX_REDIRECTS; redirectCount += 1) {
-    const response = await requestImage(currentSource, { signal });
+    const response = await requestImage(currentSource, { signal, method });
 
     if (!isRedirectResponse(response)) {
       return response;
@@ -502,6 +502,7 @@ module.exports = async function handler(req, res) {
   try {
     const response = await fetchImageResponse(source, {
       signal: controller.signal,
+      method: req.method === "HEAD" ? "HEAD" : "GET",
     });
 
     if (!response.ok) {

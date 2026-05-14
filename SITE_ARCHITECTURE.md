@@ -37,7 +37,7 @@ Notion Database
 
 v4.7 packages the completed Batch 1-8 repair work into a single release commit, including the public API search-text cleanup, server cache/resource hardening, stricter release verification, CI matrix coverage, and final fix-list documentation consolidation while preserving the desktop UI and desktop particle behavior.
 
-- `package.json`, README, changelog, and architecture release metadata now match the `v4.6` release commit convention.
+- `package.json`, README, changelog, and architecture release metadata now match the `v4.7` release commit convention.
 - Public client payloads no longer expose or regenerate `_searchText`; server-side search text stays non-enumerable and internal.
 - Server-side Notion block rendering now has a configurable total block budget, bounded recursive fan-out, and single-flight failure cooldowns.
 - Browser-side post summary caching and `sessionStorage` cleanup are bounded and throttled to reduce repeated tab-sync work.

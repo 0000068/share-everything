@@ -497,6 +497,8 @@
           content.style.transform = "";
           content.style.pointerEvents = "";
         }, ROUTE_TRANSITION_RESET_MS);
+
+        scheduleIdleNavWarm();
       } catch (error) {
         if (error?.name === "AbortError" || currentToken !== navigationToken) {
           return;
@@ -567,6 +569,25 @@
       },
     );
 
+    document.addEventListener(
+      "touchstart",
+      (event) => {
+        if (!canWarmResources()) return;
+
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+
+        const link = target.closest("a");
+        if (link && link.href && link.href.startsWith(window.location.origin)) {
+          warmPage(link.href);
+        }
+      },
+      {
+        passive: true,
+        capture: true,
+      },
+    );
+
     document.addEventListener("focusin", (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
@@ -577,8 +598,40 @@
       }
     });
 
+    const IDLE_WARM_SELECTOR = 'a[data-nav], a.btn-home, a.btn-primary, a.action-btn';
+    const IDLE_WARM_MAX_LINKS = 4;
+
+    function warmVisibleNavLinks() {
+      if (!canWarmResources()) return;
+      const origin = window.location.origin;
+      const candidates = document.querySelectorAll(IDLE_WARM_SELECTOR);
+      let warmed = 0;
+      for (const link of candidates) {
+        if (warmed >= IDLE_WARM_MAX_LINKS) break;
+        if (!(link instanceof HTMLAnchorElement)) continue;
+        if (!link.href || !link.href.startsWith(origin)) continue;
+        warmPage(link.href);
+        warmed += 1;
+      }
+    }
+
+    function scheduleIdleNavWarm() {
+      if (typeof window.requestIdleCallback === "function") {
+        window.requestIdleCallback(warmVisibleNavLinks, { timeout: 2000 });
+      } else {
+        window.setTimeout(warmVisibleNavLinks, 1500);
+      }
+    }
+
     history.replaceState(null, "", resolveUrl(window.location.href).href);
-    return { navigate };
+
+    if (document.readyState === "complete") {
+      scheduleIdleNavWarm();
+    } else {
+      window.addEventListener("load", scheduleIdleNavWarm, { once: true });
+    }
+
+    return { navigate, warmPage, scheduleIdleNavWarm };
   })();
 
   window.SPARouter = SPARouter;

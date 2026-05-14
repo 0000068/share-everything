@@ -23,21 +23,10 @@
 
     const postId = getCurrentPostId();
     const bookmarkElements = [fab, navBookmark].filter(Boolean);
-    const mobileNavQuery =
-      typeof siteUtils.createMobileDeviceQueryList === "function"
-        ? siteUtils.createMobileDeviceQueryList()
-        : typeof siteUtils.createMediaQueryList === "function"
-          ? siteUtils.createMediaQueryList("(max-width: 768px) and (hover: none) and (pointer: coarse)")
-          : window.matchMedia?.("(max-width: 768px) and (hover: none) and (pointer: coarse)") || {
-            matches: false,
-            addListener: () => {},
-            removeListener: () => {},
-          };
     let isDisposed = false;
     let bookmarkBindings = [];
     let backClickHandler = null;
     let bookmarkControlsVisible = false;
-    let mediaQueryCleanup = null;
     let statusAnnouncementHandle = null;
     let activeBookmarkPostId = null;
     let bookmarksUpdatedHandler = null;
@@ -127,10 +116,6 @@
 
     function setBookmarkControlsVisible(isVisible) {
       bookmarkControlsVisible = isVisible;
-      const isMobileViewport =
-        typeof siteUtils.isMobileDeviceViewport === "function"
-          ? siteUtils.isMobileDeviceViewport()
-          : mobileNavQuery.matches;
 
       bookmarkElements.forEach((element) => {
         if (!isVisible) {
@@ -178,35 +163,6 @@
         postBack.removeEventListener("click", backClickHandler);
         backClickHandler = null;
       }
-    }
-
-    function bindResponsiveBookmarkVisibility() {
-      const handleMediaChange = () => {
-        setBookmarkControlsVisible(bookmarkControlsVisible);
-      };
-
-      if (typeof mobileNavQuery.addEventListener === "function") {
-        mobileNavQuery.addEventListener("change", handleMediaChange);
-        window.addEventListener?.("resize", handleMediaChange, { passive: true });
-        window.addEventListener?.("orientationchange", handleMediaChange, { passive: true });
-        mediaQueryCleanup = () => {
-          mobileNavQuery.removeEventListener("change", handleMediaChange);
-          window.removeEventListener?.("resize", handleMediaChange);
-          window.removeEventListener?.("orientationchange", handleMediaChange);
-          mediaQueryCleanup = null;
-        };
-        return;
-      }
-
-      mobileNavQuery.addListener(handleMediaChange);
-      window.addEventListener?.("resize", handleMediaChange, { passive: true });
-      window.addEventListener?.("orientationchange", handleMediaChange, { passive: true });
-      mediaQueryCleanup = () => {
-        mobileNavQuery.removeListener(handleMediaChange);
-        window.removeEventListener?.("resize", handleMediaChange);
-        window.removeEventListener?.("orientationchange", handleMediaChange);
-        mediaQueryCleanup = null;
-      };
     }
 
     function initBackButton() {
@@ -344,7 +300,6 @@
           hasBookmarkControls: canBookmarkFromInitialData,
         });
         if (canBookmarkFromInitialData) {
-          bindResponsiveBookmarkVisibility();
           initBookmark(initialPostData);
         }
       } else {
@@ -357,7 +312,6 @@
         cleanupBackHandler();
         clearStatusAnnouncement();
         if (statusEl) statusEl.textContent = "";
-        mediaQueryCleanup?.();
       };
     }
 
@@ -451,7 +405,6 @@
     }
 
     initBackButton();
-    bindResponsiveBookmarkVisibility();
     loadPost();
 
     return () => {
@@ -461,7 +414,6 @@
       cleanupBackHandler();
       clearStatusAnnouncement();
       if (statusEl) statusEl.textContent = "";
-      mediaQueryCleanup?.();
       window.StructuredData?.clear?.("post-article");
     };
   }
