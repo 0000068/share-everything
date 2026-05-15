@@ -2,6 +2,13 @@
 
 All notable changes to this project are tracked here.
 
+## 6.1.0 - 2026-05-15
+
+- Refined the mobile home halo from the v6.0 vertical light column into the requested horizontal glow around the title/search area: CSS `.hero-section::after` now uses a 920px by 500px `ellipse at center` falloff, and the static SVG `centerGlow` uses a user-space horizontal transform instead of a viewport-stretched percentage radial.
+- Softened the halo edge while preserving the reference-like blue spread: opacity stops now taper through `0.08` / `0.045` / `0.014` to `transparent 100%`, preventing both the previous vertical beam and a visible oval boundary.
+- Updated `scripts/smoke-check/mobile-layout.mjs` so CI protects the horizontal-ellipse contract and fails if the mobile home glow regresses back into a cropped vertical circle.
+- Bumped the static CSS/JS/SVG cache key to `20260515-halo-v61` so deployed mobile browsers fetch the corrected halo immediately.
+
 ## 6.0.0 - 2026-05-15
 
 - Refined the mobile home scene to match the reference more closely: the CSS hero glow now uses an offscreen 1100px falloff at `57%` with lower opacity stops (`0.08` / `0.04` / `0.018`), and the SVG starfield center glow is dimmed and moved lower so the visible circular spotlight from v5.10 no longer appears.

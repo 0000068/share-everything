@@ -281,14 +281,15 @@ export function runMobileLayoutChecks(context) {
     "letter-spacing": "0",
   }, "narrow mobile fallback home");
 
-  // Hero glow is intentionally sized larger than any phone viewport so the
-  // disc's outer boundary falls offscreen — the visible glow is only the soft
-  // inner falloff with no detectable edge. Both blocks MUST match: prior
-  // releases (v5.8 / v5.9) regressed by updating only the @media block and
-  // leaving the is-mobile-device-viewport fallback at the dim v5.7 values.
+  // Hero glow is intentionally a wide, soft horizontal ellipse centered on the
+  // title/search area. It must not collapse back into the vertical light column
+  // that happens when a phone viewport crops the middle of an oversized circle,
+  // and the outer falloff must stay subtle enough to avoid a visible oval edge.
+  // Both blocks MUST match: prior releases regressed by updating only the
+  // @media block and leaving the is-mobile-device-viewport fallback stale.
   const heroGlowContract = {
-    "width": "1100px",
-    "height": "1100px",
+    "width": "920px",
+    "height": "500px",
     "top": "57%",
     "border-radius": "50%",
   };
@@ -303,8 +304,8 @@ export function runMobileLayoutChecks(context) {
   );
   assert.match(
     heroGlowBackgroundRealMobile,
-    /rgba\(73,\s*145,\s*255,\s*0\.08\)/,
-    "mobile hero glow inner stop should stay subtle enough to avoid a visible spotlight",
+    /radial-gradient\(\s*ellipse at center,\s*rgba\(73,\s*145,\s*255,\s*0\.08\)/,
+    "mobile hero glow should stay a horizontal ellipse instead of a cropped vertical circle",
   );
   assert.match(
     heroGlowBackgroundRealMobile,

@@ -675,7 +675,7 @@ body.has-cursor-glow .cursor-glow {
 
   .ambient-background {
     background-color: #0b1021;
-    background-image: url("/assets/mobile-home-starry-bg.svg?v=20260515-v60");
+    background-image: url("/assets/mobile-home-starry-bg.svg?v=20260515-halo-v61");
     background-position: center top;
     background-repeat: no-repeat;
     background-size: cover;
@@ -729,14 +729,14 @@ body.has-cursor-glow .cursor-glow {
     left: 50%;
     top: 57%;
     transform: translate(-50%, -50%);
-    width: 1100px;
-    height: 1100px;
+    width: 920px;
+    height: 500px;
     border-radius: 50%;
     background: radial-gradient(
-      circle,
+      ellipse at center,
       rgba(73, 145, 255, 0.08) 0%,
-      rgba(73, 145, 255, 0.04) 30%,
-      rgba(24, 238, 255, 0.018) 58%,
+      rgba(63, 123, 207, 0.045) 34%,
+      rgba(24, 238, 255, 0.014) 62%,
       transparent 100%
     );
     pointer-events: none;
@@ -1091,7 +1091,7 @@ html.is-mobile-device-viewport body {
 
 html.is-mobile-device-viewport .ambient-background {
   background-color: #0b1021;
-  background-image: url("/assets/mobile-home-starry-bg.svg?v=20260515-v60");
+  background-image: url("/assets/mobile-home-starry-bg.svg?v=20260515-halo-v61");
   background-position: center top;
   background-repeat: no-repeat;
   background-size: cover;
@@ -1145,14 +1145,14 @@ html.is-mobile-device-viewport .hero-section::after {
   left: 50%;
   top: 57%;
   transform: translate(-50%, -50%);
-  width: 1100px;
-  height: 1100px;
+  width: 920px;
+  height: 500px;
   border-radius: 50%;
   background: radial-gradient(
-    circle,
+    ellipse at center,
     rgba(73, 145, 255, 0.08) 0%,
-    rgba(73, 145, 255, 0.04) 30%,
-    rgba(24, 238, 255, 0.018) 58%,
+    rgba(63, 123, 207, 0.045) 34%,
+    rgba(24, 238, 255, 0.014) 62%,
     transparent 100%
   );
   pointer-events: none;

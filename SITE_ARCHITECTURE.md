@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v6.0
+> Version: v6.1
 > Updated: 2026-05-15
 
 ## 1. Overview
@@ -33,7 +33,16 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v6.0 Highlights
+## 2. Version v6.1 Highlights
+
+v6.1 refines the mobile home halo shape after the v6.0 release: the center glow now reads as a broad horizontal blue spread around the title/search controls instead of a vertical beam.
+
+- The mobile home `.hero-section::after` glow is now a 920px by 500px `ellipse at center` with subtle stops `0.08` -> `0.045` -> `0.014` -> `transparent 100%`, applied in both the real mobile media query and the `html.is-mobile-device-viewport` fallback block.
+- `assets/mobile-home-starry-bg.svg` now defines `centerGlow` in user-space coordinates with a horizontal `gradientTransform`, avoiding the percentage radial stretch that made the middle glow look too tall on 390px-wide phones.
+- `scripts/smoke-check/mobile-layout.mjs` names and enforces the horizontal-ellipse contract so later edits do not reintroduce the cropped vertical-circle look.
+- Static CSS/JS/SVG entry URLs use the `20260515-halo-v61` cache key so deployed browsers and CDNs fetch the corrected v6.1 halo promptly.
+
+## 2.1 Version v6.0 Highlights
 
 v6.0 finishes the mobile home visual pass by removing the visible blue spotlight disc, adds standalone mobile launch metadata for the no-address-bar composition, and hardens the release checks that caught the Node 22 failure.
 
@@ -44,7 +53,7 @@ v6.0 finishes the mobile home visual pass by removing the visible blue spotlight
 - Runtime polish fixes from the review are included: active-page nonce preservation for JSON-LD sync, validated session-cache timestamps, literal-safe metadata replacement callbacks, and `.claude/` ignored as local tooling state.
 - Static CSS/JS/SVG entry URLs use the `20260515-v60` cache key so deployed browsers and CDNs fetch the v6.0 visual assets promptly.
 
-## 2.1 Version v5.10 Highlights
+## 2.2 Version v5.10 Highlights
 
 v5.10 dissolves the visible disc edge in the mobile home hero glow and adds a smoke-check parity contract that prevents the v5.8 / v5.9 pattern of forgetting to update one of the two mobile CSS blocks.
 
@@ -52,7 +61,7 @@ v5.10 dissolves the visible disc edge in the mobile home hero glow and adds a sm
 - `scripts/smoke-check/mobile-layout.mjs` now requires (a) byte-exact `background` equality between the two mobile blocks and (b) the gradient must contain `transparent 100%` (the prior `transparent 70%` is rejected). Regressing the disc edge or splitting the two blocks again will fail CI.
 - Static CSS/JS/SVG entry URLs use the `20260515-v510` cache key so browsers and CDNs fetch the wider glow without serving v5.9's narrow disc through the `stale-while-revalidate` window.
 
-## 2.2 Version v5.9 Highlights
+## 2.3 Version v5.9 Highlights
 
 v5.9 completed the mobile home visual restoration that v5.8 only partially delivered and landed the full post-v5.8 cross-review backlog — 39 phased fixes plus 4 audit-stage corrections — in a single release.
 
