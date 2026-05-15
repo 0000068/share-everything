@@ -1,7 +1,8 @@
 (() => {
   const siteUtils = window.SiteUtils || {};
   const DEFAULT_OG_IMAGE_URL = new URL("og-image.jpg?v=4", window.location.origin).href;
-  const DEFAULT_OG_IMAGE_ALT = "Share Everything";
+  const DEFAULT_OG_IMAGE_ALT =
+    typeof siteUtils.getSiteName === "function" ? siteUtils.getSiteName() : "Site";
 
   function ensureMetaTag(selector, attributes) {
     let meta = document.head?.querySelector(selector);

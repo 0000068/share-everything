@@ -26,6 +26,9 @@ const {
   requestNotionJson,
 } = require("./notion-client");
 const {
+  getSiteName,
+} = require("./notion-config");
+const {
   buildCategoryFilter,
   buildContentSchema,
   buildDatabaseSorts,
@@ -92,6 +95,7 @@ module.exports = {
   fetchPublicPost,
   getDatabaseId,
   getCategoryColor,
+  getSiteName,
   getSiteOrigin,
   queryPublicPages,
   queryPublicPosts,

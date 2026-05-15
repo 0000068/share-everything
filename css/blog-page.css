@@ -19,6 +19,10 @@
   background: var(--accent-cyan-bg);
 }
 
+.empty-state-hint {
+  font-size: 0.85rem;
+}
+
 .page-container {
   position: relative;
   z-index: 10;
@@ -108,7 +112,7 @@
   color: var(--text-tertiary);
 }
 
-.blog-search input:focus {
+.blog-search input:focus-visible {
   border-color: var(--accent-cyan);
   box-shadow: 0 0 20px var(--accent-cyan-glow);
   background: rgba(255, 255, 255, 0.08);
@@ -478,6 +482,13 @@
     box-shadow: none;
   }
 
+  .filter-btn,
+  .page-btn,
+  .empty-state-action {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
   .blog-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 14px;
@@ -610,6 +621,12 @@
     height: 26px;
     border-radius: 8px;
     background: rgba(255, 255, 255, 0.055);
+  }
+
+  .card-bookmark-btn::after {
+    content: "";
+    position: absolute;
+    inset: -9px;
   }
 
   .pagination {
@@ -797,6 +814,13 @@ html.is-mobile-device-viewport .filter-btn {
   box-shadow: none;
 }
 
+html.is-mobile-device-viewport .filter-btn,
+html.is-mobile-device-viewport .page-btn,
+html.is-mobile-device-viewport .empty-state-action {
+  min-width: 44px;
+  min-height: 44px;
+}
+
 html.is-mobile-device-viewport .blog-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
@@ -929,6 +953,12 @@ html.is-mobile-device-viewport .card-bookmark-btn {
   height: 26px;
   border-radius: 7px;
   background: rgba(255, 255, 255, 0.055);
+}
+
+html.is-mobile-device-viewport .card-bookmark-btn::after {
+  content: "";
+  position: absolute;
+  inset: -9px;
 }
 
 html.is-mobile-device-viewport .pagination {

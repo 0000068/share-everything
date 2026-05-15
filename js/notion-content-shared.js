@@ -9,6 +9,7 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, () => {
   const ALL_CATEGORY = "\u5168\u90e8";
   const BOOKMARK_CATEGORY = "\u6536\u85cf";
+  const DEFAULT_SITE_NAME = "Share Everything";
   const FEATURED_CATEGORY_DEFINITIONS = Object.freeze([
     Object.freeze({
       name: "\u7cbe\u9009",
@@ -80,6 +81,7 @@
     CATEGORY_GRADIENTS,
     DEFAULT_CATEGORY_COLOR,
     DEFAULT_COVER_GRADIENT,
+    DEFAULT_SITE_NAME,
     FEATURED_CATEGORY_DEFINITIONS,
     REMOTE_BLOG_CATEGORIES,
     SUPPORTED_BLOG_CATEGORIES,

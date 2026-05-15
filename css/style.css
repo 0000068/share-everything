@@ -600,7 +600,7 @@ body.has-cursor-glow .cursor-glow {
   color: var(--text-tertiary);
 }
 
-.hero-search input:focus {
+.hero-search input:focus-visible {
   border-color: var(--accent-cyan);
   box-shadow: 0 0 20px rgba(0, 229, 255, 0.15);
   background: rgba(255, 255, 255, 0.08);
@@ -631,7 +631,7 @@ body.has-cursor-glow .cursor-glow {
   height: 100%;
 }
 
-.hero-search input:focus ~ .search-icon,
+.hero-search input:focus-visible ~ .search-icon,
 .hero-search .search-icon:hover {
   color: var(--accent-cyan);
 }
@@ -675,7 +675,7 @@ body.has-cursor-glow .cursor-glow {
 
   .ambient-background {
     background-color: #0b1021;
-    background-image: url("/assets/mobile-home-starry-bg.svg?v=20260515-v59");
+    background-image: url("/assets/mobile-home-starry-bg.svg?v=20260515-v510");
     background-position: center top;
     background-repeat: no-repeat;
     background-size: cover;
@@ -729,14 +729,15 @@ body.has-cursor-glow .cursor-glow {
     left: 50%;
     top: 54%;
     transform: translate(-50%, -50%);
-    width: 480px;
-    height: 480px;
+    width: 900px;
+    height: 900px;
     border-radius: 50%;
     background: radial-gradient(
       circle,
-      rgba(73, 145, 255, 0.24) 0%,
-      rgba(24, 238, 255, 0.11) 34%,
-      transparent 70%
+      rgba(73, 145, 255, 0.2) 0%,
+      rgba(73, 145, 255, 0.11) 28%,
+      rgba(24, 238, 255, 0.05) 55%,
+      transparent 100%
     );
     pointer-events: none;
     z-index: -1;
@@ -1090,7 +1091,7 @@ html.is-mobile-device-viewport body {
 
 html.is-mobile-device-viewport .ambient-background {
   background-color: #0b1021;
-  background-image: url("/assets/mobile-home-starry-bg.svg?v=20260515-v59");
+  background-image: url("/assets/mobile-home-starry-bg.svg?v=20260515-v510");
   background-position: center top;
   background-repeat: no-repeat;
   background-size: cover;
@@ -1144,14 +1145,15 @@ html.is-mobile-device-viewport .hero-section::after {
   left: 50%;
   top: 54%;
   transform: translate(-50%, -50%);
-  width: 480px;
-  height: 480px;
+  width: 900px;
+  height: 900px;
   border-radius: 50%;
   background: radial-gradient(
     circle,
-    rgba(73, 145, 255, 0.24) 0%,
-    rgba(24, 238, 255, 0.11) 34%,
-    transparent 70%
+    rgba(73, 145, 255, 0.2) 0%,
+    rgba(73, 145, 255, 0.11) 28%,
+    rgba(24, 238, 255, 0.05) 55%,
+    transparent 100%
   );
   pointer-events: none;
   z-index: -1;

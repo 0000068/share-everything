@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const SAFE_FALLBACK_SITE_ORIGIN = "https://example.com";
+const DEFAULT_SITE_NAME = "Share Everything";
 
 function readCsvEnv(names, defaults = []) {
   const keys = Array.isArray(names) ? names : [names];
@@ -61,6 +62,15 @@ function readConfiguredSiteOrigin(config = {}) {
   return typeof config.siteUrl === "string" ? config.siteUrl : "";
 }
 
+function normalizeSiteName(value, fallback = DEFAULT_SITE_NAME) {
+  const candidate = typeof value === "string" && value.trim() ? value.trim() : fallback;
+  return candidate || DEFAULT_SITE_NAME;
+}
+
+function getSiteName(config = readSiteConfig()) {
+  return normalizeSiteName(config?.siteName);
+}
+
 function normalizeSiteOrigin(value, fallback = SAFE_FALLBACK_SITE_ORIGIN) {
   const candidate = typeof value === "string" && value.trim() ? value.trim() : fallback;
 
@@ -115,13 +125,16 @@ function createAsyncLimiter(limit) {
 }
 
 module.exports = {
+  DEFAULT_SITE_NAME,
   SAFE_FALLBACK_SITE_ORIGIN,
   createAsyncLimiter,
   encodeNotionPathId,
+  getSiteName,
   normalizeName,
   normalizeNonNegativeNumber,
   normalizeNotionId,
   normalizePositiveNumber,
+  normalizeSiteName,
   normalizeSiteOrigin,
   readConfiguredSiteOrigin,
   readCsvEnv,

@@ -8,6 +8,8 @@
       ? sharedContent.buildArticleStructuredData
       : null;
     const defaultShareImageUrl = new URL("og-image.jpg?v=4", window.location.origin).href;
+    const siteName =
+      typeof siteUtils.getSiteName === "function" ? siteUtils.getSiteName() : "Site";
     const skeletonEl = document.getElementById("postSkeleton");
     const contentEl = document.getElementById("postContent");
     const emptyEl = document.getElementById("postEmpty");
@@ -187,14 +189,14 @@
     function getEmptySeoState(kind = "not-found") {
       if (kind === "unavailable") {
         return {
-          title: "文章暂时不可用 - Share Everything",
+          title: `文章暂时不可用 - ${siteName}`,
           description: "文章内容暂时无法加载，请稍后再试。",
           message: "文章暂时不可用",
         };
       }
 
       return {
-        title: "文章不存在 - Share Everything",
+        title: `文章不存在 - ${siteName}`,
         description: "未找到对应的文章内容。",
         message: "文章不存在",
       };
@@ -245,7 +247,7 @@
           canonicalUrl: fallbackCanonicalUrl,
           ogType: "website",
           ogImage: defaultShareImageUrl,
-          ogImageAlt: "Share Everything",
+          ogImageAlt: siteName,
           robots: "noindex, nofollow",
         });
       }
@@ -350,7 +352,7 @@
           typeof siteUtils.resolveShareImageUrl === "function"
             ? siteUtils.resolveShareImageUrl(post.coverImage, defaultShareImageUrl)
             : defaultShareImageUrl;
-        const title = `${post.title} — Share Everything`;
+        const title = `${post.title} — ${siteName}`;
         const description = post.excerpt || post.title;
         if (typeof window.updateSeoMeta === "function") {
           window.updateSeoMeta({
@@ -386,6 +388,7 @@
             canonicalUrl,
             defaultShareImageUrl,
             imageUrl: structuredDataImage,
+            siteName,
           }));
         } else {
           window.StructuredData?.clear?.("post-article");

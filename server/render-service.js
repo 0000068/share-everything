@@ -3,6 +3,7 @@ const {
   renderBlocks,
 } = require("../js/notion-content");
 const { getSiteOrigin } = require("./notion-client");
+const { getSiteName } = require("./notion-config");
 
 function renderPostContent(postOrBlocks, { baseOrigin = getSiteOrigin() } = {}) {
   const content = Array.isArray(postOrBlocks)
@@ -24,6 +25,7 @@ function buildArticleStructuredData(post) {
   return buildSharedArticleStructuredData(post, {
     canonicalUrl: buildPostUrl(post.id),
     defaultShareImageUrl: `${siteOrigin}/og-image.jpg?v=4`,
+    siteName: getSiteName(),
     baseOrigin: siteOrigin,
   });
 }

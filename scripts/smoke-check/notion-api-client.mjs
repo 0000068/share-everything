@@ -278,4 +278,31 @@ assert.ok(
   "notion client should allow another sessionStorage sweep once the throttle window elapses",
 );
 
+let rateLimitError = null;
+const rateLimitHarness = loadBrowserScript("js/notion-api.js", {
+  window: {
+    location: new URL("https://example.com/blog.html"),
+    NotionContent: notionContentHelpers,
+  },
+  fetch: async () => createJsonResponse({
+    error: "Rate limited",
+    notionCode: "rate_limited",
+  }, {
+    status: 429,
+    headers: {
+      "Retry-After": "30",
+    },
+  }),
+});
+try {
+  await rateLimitHarness.window.NotionAPI.queryPosts({});
+} catch (error) {
+  rateLimitError = error;
+}
+assert.equal(
+  rateLimitError?.retryAfter,
+  "30",
+  "notion client should expose Retry-After seconds on rate-limit errors",
+);
+
 }

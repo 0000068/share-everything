@@ -18,6 +18,10 @@ const mobileUserAgent = [
   "AppleWebKit/537.36 (KHTML, like Gecko)",
   "Chrome/125.0.0.0 Mobile Safari/537.36",
 ].join(" ");
+const siteConfig = JSON.parse(fs.readFileSync(path.join(rootDir, "site.config.json"), "utf8"));
+const siteName = typeof siteConfig.siteName === "string" && siteConfig.siteName.trim()
+  ? siteConfig.siteName.trim()
+  : "Share Everything";
 
 const scenarios = [
   {
@@ -807,7 +811,7 @@ async function checkMobileHome(client, viewport) {
 
   assert.equal(metrics.bodyPage, "index", "mobile home should identify the index page");
   assert.ok(metrics.htmlClass.includes("is-mobile-device-viewport"), "mobile home should use the mobile compatibility class");
-  assert.equal(metrics.titleText, "Share Everything", "mobile home should keep the product title");
+  assert.equal(metrics.titleText, siteName, "mobile home should keep the product title");
   assertRectInsideViewport(metrics.titleRect, viewport, "mobile title");
   assert.ok(metrics.titleRect.height <= metrics.titleLineHeight * 1.35, "mobile title should stay on one line");
   assert.ok(!metrics.titleAnimation.includes("title-gradient"), "mobile title should not run the expensive title gradient animation");
@@ -967,7 +971,7 @@ async function checkDesktopHome(client, viewport) {
   })()`);
 
   assert.ok(!metrics.htmlClass.includes("is-mobile-device-viewport"), "desktop home should not use the mobile compatibility class");
-  assert.equal(metrics.titleText, "Share Everything", "desktop home should keep the product title");
+  assert.equal(metrics.titleText, siteName, "desktop home should keep the product title");
   assertRectInsideViewport(metrics.titleRect, viewport, "desktop title");
   assert.ok(metrics.titleAnimation.includes("title-gradient"), "desktop title should keep the title gradient animation");
   assert.notEqual(metrics.titleBackground, "none", "desktop title should keep a gradient background");

@@ -6,6 +6,7 @@ const {
   buildPostUrl,
   escapeHtml,
   fetchPublicPost,
+  getSiteName,
   getSiteOrigin,
   renderPostArticle,
   renderPostContent,
@@ -35,6 +36,14 @@ const HEAD_META_BLOCK_END = "<!--SSR_HEAD_META_END-->";
 const HEAD_META_INSERTION_ANCHOR = /<meta\s+property="og:image:alt"\s+content="[^"]*"\s*\/?>/;
 const META_TAG_PATTERN = /<meta\b[^>]*>/gi;
 const HTTP_EQUIV_ATTRIBUTE_PATTERN = /\bhttp-equiv\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/i;
+
+function formatFallbackTitle(title, siteName) {
+  return `${title} - ${siteName}`;
+}
+
+function formatPostTitle(title, siteName) {
+  return `${title} — ${siteName}`;
+}
 
 function getTemplate() {
   if (IS_DEVELOPMENT) {
@@ -279,9 +288,9 @@ function buildInitialPostPayload(post) {
   };
 }
 
-function buildNotFoundContent() {
+function buildNotFoundContent(siteName = getSiteName()) {
   return {
-    title: "文章不存在 - Share Everything",
+    title: formatFallbackTitle("文章不存在", siteName),
     description: "未找到对应的文章内容。",
     message: "文章不存在",
     linkText: "返回博客列表",
@@ -290,9 +299,9 @@ function buildNotFoundContent() {
   };
 }
 
-function buildUnavailableContent() {
+function buildUnavailableContent(siteName = getSiteName()) {
   return {
-    title: "文章暂时不可用 - Share Everything",
+    title: formatFallbackTitle("文章暂时不可用", siteName),
     description: "文章内容暂时无法加载，请稍后再试。",
     message: "文章暂时不可用",
     linkText: "返回博客列表",
@@ -328,17 +337,18 @@ module.exports = async function handler(req, res) {
 
   const routeId = readQueryString(req.query.id);
   const siteOrigin = getSiteOrigin();
+  const siteName = getSiteName();
   const defaultShareImageUrl = `${siteOrigin}/og-image.jpg?v=4`;
 
   let html = await getTemplate();
 
   if (!routeId) {
-    const fallback = buildNotFoundContent();
+    const fallback = buildNotFoundContent(siteName);
     html = renderFallbackPage(html, fallback, {
       url: `${siteOrigin}/post.html`,
       canonicalUrl: `${siteOrigin}/post.html`,
       image: defaultShareImageUrl,
-      imageAlt: "Share Everything",
+      imageAlt: siteName,
     });
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");
@@ -350,7 +360,7 @@ module.exports = async function handler(req, res) {
     const scriptNonce = createCspNonce();
     const post = await fetchPublicPost(routeId);
     const postUrl = buildPostUrl(post.id);
-    const pageTitle = `${post.title} — Share Everything`;
+    const pageTitle = formatPostTitle(post.title, siteName);
     const pageDescription = post.excerpt || post.title;
     const pageImage = resolveShareImageUrl(post.coverImage, defaultShareImageUrl, siteOrigin);
     const articleStructuredData = buildArticleStructuredData(post);
@@ -382,7 +392,7 @@ module.exports = async function handler(req, res) {
     return res.status(200).send(html);
   } catch (error) {
     const status = getPublicPostErrorStatus(error);
-    const fallback = status === 404 ? buildNotFoundContent() : buildUnavailableContent();
+    const fallback = status === 404 ? buildNotFoundContent(siteName) : buildUnavailableContent(siteName);
     if (status !== 404) {
       logServerError("Failed to render post route", error);
     }
@@ -392,7 +402,7 @@ module.exports = async function handler(req, res) {
       url: buildPostUrl(routeId),
       canonicalUrl: buildPostUrl(routeId),
       image: defaultShareImageUrl,
-      imageAlt: "Share Everything",
+      imageAlt: siteName,
     });
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     applyHtmlSecurityHeaders(res);

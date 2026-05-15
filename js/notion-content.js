@@ -1194,7 +1194,7 @@
     canonicalUrl,
     defaultShareImageUrl,
     imageUrl,
-    siteName = "Share Everything",
+    siteName = sharedContent.DEFAULT_SITE_NAME || "Site",
     baseOrigin,
   } = {}) {
     const resolvedBaseOrigin = getBaseOrigin(baseOrigin);

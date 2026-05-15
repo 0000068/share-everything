@@ -18,7 +18,8 @@
     ? window.focusSpaContent
     : () => null;
   const DEFAULT_OG_IMAGE_URL = new URL("og-image.jpg?v=4", window.location.origin).href;
-  const DEFAULT_OG_IMAGE_ALT = "Share Everything";
+  const DEFAULT_OG_IMAGE_ALT =
+    typeof siteUtils.getSiteName === "function" ? siteUtils.getSiteName() : "Site";
   const connectionInfo = navigator.connection || null;
   const getPostIdFromUrl =
     typeof siteUtils.getPostIdFromUrl === "function"
@@ -435,7 +436,7 @@
           history.pushState(null, "", targetUrl.href);
         }
 
-        const nextTitle = doc.title || "Share Everything";
+        const nextTitle = doc.title || DEFAULT_OG_IMAGE_ALT;
         const nextDescription = doc.querySelector('meta[name="description"]')?.content || "";
         const nextOgTitle = doc.querySelector('meta[property="og:title"]')?.content || nextTitle;
         const nextOgDescription =

@@ -90,6 +90,7 @@ const readmeMd = read("README.md");
 const siteArchitectureMd = read("SITE_ARCHITECTURE.md");
 const siteConfigJson = read("site.config.json");
 const siteConfig = JSON.parse(siteConfigJson);
+const configuredSiteName = typeof siteConfig.siteName === "string" ? siteConfig.siteName.trim() : "";
 const packageMetadata = JSON.parse(packageJson);
 const packageVersionMatch = /^(\d+)\.(\d+)\.(\d+)$/.exec(packageMetadata.version || "");
 assert.ok(packageVersionMatch, "package.json version should be a full semver version");
@@ -113,6 +114,7 @@ const blogPageCss = read("css/blog-page.css");
 const postPageCss = read("css/post-page.css");
 const commonJs = read("js/common.js");
 const blogPageJs = read("js/blog-page.js");
+const injectSiteMetaJs = read("scripts/inject-site-meta.mjs");
 const runtimeCoreJs = read("js/runtime-core.js");
 const spaRouterJs = read("js/spa-router.js");
 const bookmarkJs = read("js/bookmark.js");
@@ -299,7 +301,14 @@ assert.deepEqual(
 );
 assert.ok(!existsSync("robots.txt"), "robots.txt should be served dynamically through /api/robots");
 assert.equal(siteConfig.siteUrl, configuredSiteOrigin, "site.config.json siteUrl should be a normalized origin without a trailing slash");
+assert.ok(configuredSiteName, "site.config.json siteName should declare the public brand name");
+assert.equal(
+  serverNotionConfigHelpers.getSiteName(siteConfig),
+  configuredSiteName,
+  "server site-name helper should read site.config.json",
+);
 expectIncludes(serverNotionClientJs, "readConfiguredSiteOrigin(SITE_CONFIG)", "server site origin fallback should read site.config.json");
+expectIncludes(serverNotionConfigJs, "function getSiteName", "server configuration should expose the configured site name");
 expectNotIncludes(serverNotionJs, "0000068.xyz", "server site origin fallback should not duplicate the production domain literal");
 runServerModuleChecks({
   assert,
@@ -329,7 +338,17 @@ runServerModuleChecks({
   expectIncludes(htmlSource, `content="${expectedUrl}"`, `${label} should keep fallback og:url in sync with site.config.json`);
   expectIncludes(htmlSource, `href="${expectedUrl}"`, `${label} should keep fallback canonical in sync with site.config.json`);
   expectIncludes(htmlSource, `content="${configuredSiteOrigin}${defaultShareImagePath}"`, `${label} should keep fallback og:image in sync with site.config.json`);
+  expectIncludes(htmlSource, `name="application-name" content="${configuredSiteName}"`, `${label} should expose the configured site name`);
+  expectIncludes(htmlSource, `property="og:image:alt" content="${configuredSiteName}"`, `${label} should keep og:image:alt in sync with site.config.json`);
 });
+expectIncludes(indexHtml, `<title>${configuredSiteName}</title>`, "index.html title should follow site.config.json siteName");
+expectIncludes(indexHtml, `content="${configuredSiteName} — 探索、记录、分享"`, "index.html description should follow site.config.json siteName");
+expectIncludes(indexHtml, `<h1 class="hero-title" data-page-focus>${configuredSiteName}</h1>`, "index hero title should follow site.config.json siteName");
+expectIncludes(blogHtml, `<title>总览 — ${configuredSiteName}</title>`, "blog.html title should follow site.config.json siteName");
+expectIncludes(blogHtml, `property="og:title" content="总览 — ${configuredSiteName}"`, "blog.html og:title should follow site.config.json siteName");
+expectIncludes(postHtml, `<title>文章 — ${configuredSiteName}</title>`, "post.html title should follow site.config.json siteName");
+expectIncludes(postHtml, `property="og:title" content="${configuredSiteName}"`, "post.html fallback og:title should follow site.config.json siteName");
+expectIncludes(injectSiteMetaJs, "readSiteName", "metadata injection should own static site-name hydration");
 
 expectIncludes(indexHtml, 'property="og:image"', "index.html should declare og:image");
 expectIncludes(blogHtml, 'property="og:image"', "blog.html should declare og:image");
@@ -478,6 +497,18 @@ appStaticImports.forEach(([, src, version]) => {
   assert.ok(expectedAppStaticImports.includes(src), `app.js should not statically import unexpected module ${src}`);
   assert.equal(version, assetVersionValue, `${src} static import should use the shared asset version`);
 });
+const expectedModulePreloadHrefs = expectedAppStaticImports.map((src) => `/js/${src.slice(2)}?${assetVersion}`);
+pageHtmlByLabel.forEach(([label, htmlSource]) => {
+  const modulePreloadHrefs = Array.from(
+    htmlSource.matchAll(/<link\s+rel="modulepreload"\s+href="([^"]+)"\s*\/?>/g),
+    (match) => match[1],
+  );
+  assert.deepEqual(
+    modulePreloadHrefs,
+    expectedModulePreloadHrefs,
+    `${label} should modulepreload the app.js static import chain in dependency order`,
+  );
+});
 const appDynamicImports = Array.from(
   appJs.matchAll(/import\(versioned\("(\.\/[^"]+\.js)"\)\)/g),
 );
@@ -530,6 +561,15 @@ expectIncludes(postPageCss, "overflow-wrap: anywhere;", "post content should bre
 expectIncludes(postPageCss, "word-break: break-word;", "post content should include legacy long-word wrapping fallback");
 expectIncludes(postPageCss, ".empty-state-link", "post page CSS should own empty-state link styling");
 expectIncludes(postPageCss, ".fab-bookmark {", "post-page.css should own the floating bookmark styles");
+expectIncludes(styleCss, ".hero-search input:focus-visible", "home search should use focus-visible styling");
+expectNotIncludes(styleCss, ".hero-search input:focus {", "home search should not show the focus ring for every pointer focus");
+expectIncludes(blogPageCss, ".blog-search input:focus-visible", "blog search should use focus-visible styling");
+expectNotIncludes(blogPageCss, ".blog-search input:focus {", "blog search should not show the focus ring for every pointer focus");
+expectIncludes(blogPageCss, ".empty-state-hint", "blog page CSS should own empty-state hint typography");
+expectIncludes(blogHtml, '<p class="empty-state-hint">', "blog.html should use the shared empty-state hint class");
+expectIncludes(blogPageJs, 'class="empty-state-hint"', "blog page renderer should use the shared empty-state hint class");
+expectNotIncludes(blogHtml, 'style="font-size: 0.85rem;"', "blog.html should not duplicate empty-state hint typography inline");
+expectNotIncludes(blogPageJs, 'style="font-size: 0.85rem;"', "blog page renderer should not duplicate empty-state hint typography inline");
 expectNotIncludes(postPageCss, "body[data-page=\"post\"] .fab-bookmark", "post-page CSS should not override bookmark visibility that JavaScript owns");
 expectNotIncludes(postPageCss, "display: none !important", "post-page CSS should avoid forcing bookmark controls against JavaScript state");
 expectIncludes(blogPageJs, "EAGER_COVER_IMAGE_COUNT = 3", "blog cards should prioritize the first visible cover images");
@@ -548,6 +588,9 @@ expectIncludes(blogPageJs, "const normalizeBookmarkSearchQuery = SHARED_CONTENT.
 expectIncludes(blogPageJs, "const buildSharedPostSearchText = SHARED_CONTENT.buildPostSearchText;", "blog page should call the shared search text builder directly");
 expectIncludes(blogPageJs, "const parseBookmarkListingHash = siteUtils.parseBookmarkListingHash;", "blog page should rely on the shared bookmark hash parser");
 expectIncludes(blogPageJs, "const buildBookmarkListingUrl = siteUtils.buildBookmarkListingUrl;", "blog page should rely on the shared bookmark route builder");
+expectIncludes(blogPageJs, "siteUtils.getSiteName", "blog page metadata should read the configured site name");
+expectIncludes(blogPageJs, "error?.retryAfter", "blog page load failures should surface Retry-After seconds when available");
+expectIncludes(notionApiJs, 'response.headers?.get?.("retry-after")', "Notion API client should propagate Retry-After response headers to UI errors");
 expectIncludes(blogPageJs, "blog-card-cover-fallback", "blog cards should show a stable fallback while remote covers load");
 expectNotIncludes(blogPageJs, ">${safeCoverEmoji}</span>", "blog cover fallback should not render the notebook emoji as visible placeholder text");
 expectIncludes(blogPageCss, ".blog-card-cover-fallback", "blog card cover CSS should keep fallback art visible until the image paints");
@@ -788,12 +831,22 @@ const siteUtilsHarness = loadBrowserScript("js/site-utils.js", {
   },
   document: {
     referrer: "https://example.com/blog.html?page=2",
+    querySelector(selector) {
+      return selector === 'meta[name="application-name"]'
+        ? { content: configuredSiteName }
+        : null;
+    },
   },
 });
 assert.equal(
   siteUtilsHarness.window.SiteUtils.buildPostPath("post 1"),
   "/posts/post%201",
   "SiteUtils should centralize canonical post-path generation",
+);
+assert.equal(
+  siteUtilsHarness.window.SiteUtils.getSiteName(),
+  configuredSiteName,
+  "SiteUtils should expose the injected site name to page modules",
 );
 const parsedBookmarkHash = siteUtilsHarness.window.SiteUtils.parseBookmarkListingHash(
   "#bookmarks?search=Alpha&page=2",
@@ -1513,6 +1566,7 @@ expectNotIncludes(indexPageJs, "ctaWiki.addEventListener", "index page should le
 expectIncludes(indexPageJs, 'navigateTo(`/blog.html?search=${encodeURIComponent(query)}`);', "index page search navigation should use root-relative paths");
 expectIncludes(postPageJs, 'window.StructuredData?.set?.("post-article"', "post page should publish article structured data");
 expectIncludes(postPageJs, "sharedContent.buildArticleStructuredData", "post page should reuse the shared article structured-data helper");
+expectIncludes(postPageJs, "siteUtils.getSiteName", "post page metadata should read the configured site name");
 expectIncludes(postPageJs, "initialPostData", "post page should reuse server-rendered post payloads");
 expectIncludes(postPageJs, "notionApi.renderPostArticle(post)", "post page should reuse the shared article-shell renderer for client-side redraws");
 expectIncludes(postPageJs, "siteUtils.getPreferredBlogReturnUrl", "post page back navigation should restore the preferred blog listing route");
@@ -1676,6 +1730,9 @@ assert.equal(
 expectIncludes(apiPostJs, 'upsertStructuredDataScript(html, "post-article"', "article HTML route should emit structured data");
 expectIncludes(apiPostJs, 'id="initialPostData"', "article HTML route should emit initial post data");
 expectIncludes(apiPostJs, "buildUnavailableContent", "article HTML route should distinguish upstream failures from not-found routes");
+expectIncludes(apiPostJs, "getSiteName", "article HTML route should read the configured site name");
+expectIncludes(apiPostJs, "formatPostTitle", "article HTML route should compose post titles with the configured site name");
+expectNotIncludes(apiPostJs, "Share Everything", "article HTML route should not hardcode the public site name");
 expectIncludes(apiPostJs, "rejectUnsupportedReadMethod", "article HTML route should reuse the shared read-method guard");
 expectIncludes(apiPostJs, "getPublicPostErrorStatus", "article HTML route should reuse shared public-post error mapping");
 expectIncludes(apiPostJs, "fetchPublicPost", "article HTML route should only render posts from the public blog set");

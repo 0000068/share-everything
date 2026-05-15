@@ -51,6 +51,8 @@
     const notionApi = window.NotionAPI;
     const sharedContent = SHARED_CONTENT;
     const siteUtils = window.SiteUtils || {};
+    const siteName =
+      typeof siteUtils.getSiteName === "function" ? siteUtils.getSiteName() : "Site";
     const parseBookmarkListingHash = siteUtils.parseBookmarkListingHash;
     const buildBookmarkListingUrl = siteUtils.buildBookmarkListingUrl;
     const bookmarkManager = window.BookmarkManager || {
@@ -251,7 +253,10 @@
       }
 
       if (status === 429 || notionCode === "rate_limited") {
-        return "Notion API 当前限流，请稍后重试。";
+        const retryAfter = Number(error?.retryAfter);
+        return Number.isFinite(retryAfter) && retryAfter > 0
+          ? `Notion API 限流，约 ${retryAfter} 秒后重试。`
+          : "Notion API 当前限流，请稍后重试。";
       }
 
       if (status === 504 || code === "notion_timeout_error") {
@@ -388,7 +393,7 @@
           <line x1="21" y1="21" x2="16.65" y2="16.65" />
         </svg>
         <p>${escapeText(title)}</p>
-        <p style="font-size: 0.85rem;">${escapeText(hint)}</p>
+        <p class="empty-state-hint">${escapeText(hint)}</p>
         ${actionHtml}
       `;
     }
@@ -478,7 +483,7 @@
       }
 
       const isLocalBookmarkView = isBookmarkView();
-      const title = `${currentCategory === ALL_CATEGORY ? "总览" : currentCategory} — Share Everything`;
+      const title = `${currentCategory === ALL_CATEGORY ? "总览" : currentCategory} — ${siteName}`;
       const description = isLocalBookmarkView
         ? "浏览当前浏览器中保存的本地收藏文章。"
         : currentSearch

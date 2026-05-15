@@ -1,13 +1,41 @@
 import { readFile, writeFile } from "node:fs/promises";
 
 const pages = [
-  { file: "index.html", pathname: "/" },
-  { file: "blog.html", pathname: "/blog.html" },
-  { file: "post.html", pathname: "/post.html" },
+  {
+    file: "index.html",
+    pathname: "/",
+    title: ({ siteName }) => siteName,
+    ogTitle: ({ siteName }) => siteName,
+    description: ({ siteName }) => `${siteName} — \u63a2\u7d22\u3001\u8bb0\u5f55\u3001\u5206\u4eab`,
+    heroTitle: true,
+  },
+  {
+    file: "blog.html",
+    pathname: "/blog.html",
+    title: ({ siteName }) => `\u603b\u89c8 — ${siteName}`,
+    ogTitle: ({ siteName }) => `\u603b\u89c8 — ${siteName}`,
+  },
+  {
+    file: "post.html",
+    pathname: "/post.html",
+    title: ({ siteName }) => `\u6587\u7ae0 — ${siteName}`,
+    ogTitle: ({ siteName }) => siteName,
+  },
+];
+const modulePreloadPaths = [
+  "font-loader.js",
+  "notion-content-shared.js",
+  "runtime-core.js",
+  "site-utils.js",
+  "common.js",
+  "ui-effects.js",
+  "seo-meta.js",
+  "spa-router.js",
 ];
 const checkOnly = process.argv.includes("--check");
 const ogImagePath = "/og-image.jpg?v=4";
 const faviconPath = "/favicon.png?v=4";
+const defaultSiteName = "Share Everything";
 
 function escapeAttribute(value) {
   return String(value ?? "")
@@ -28,6 +56,21 @@ function normalizeSiteOrigin(value) {
   return url.href.replace(/\/+$/, "");
 }
 
+function readSiteName(config) {
+  const siteName = config?.siteName;
+  return typeof siteName === "string" && siteName.trim()
+    ? siteName.trim()
+    : defaultSiteName;
+}
+
+function readAssetVersion(appSource) {
+  const match = String(appSource || "").match(/const\s+ASSET_VERSION\s*=\s*"([^"]+)";/);
+  if (!match) {
+    throw new Error("Unable to read app.js ASSET_VERSION");
+  }
+  return match[1];
+}
+
 function readFeaturedName(config) {
   const featuredName = config?.categoryNavigation?.featured?.name;
   return typeof featuredName === "string" && featuredName.trim()
@@ -44,8 +87,60 @@ function replaceRequired(source, pattern, replacement, label) {
   return source.replace(pattern, replacement);
 }
 
-function updatePageMeta(source, { canonicalUrl, ogImageUrl }) {
+function resolveTemplate(value, context) {
+  return typeof value === "function" ? value(context) : value;
+}
+
+function upsertApplicationName(source, siteName) {
+  const markup = `<meta name="application-name" content="${escapeAttribute(siteName)}" />`;
+  const existingPattern = /<meta\s+name="application-name"\s+content="[^"]*"\s*\/?>/;
+  if (existingPattern.test(source)) {
+    return source.replace(existingPattern, markup);
+  }
+
+  return replaceRequired(
+    source,
+    /(<meta\s+name="theme-color"\s+content="[^"]*"\s*\/?>)/,
+    `$1\n    ${markup}`,
+    "application-name",
+  );
+}
+
+function updateHeroTitle(source, siteName) {
+  return replaceRequired(
+    source,
+    /(<h1\b[^>]*\bclass="hero-title"[^>]*>)[\s\S]*?(<\/h1>)/,
+    `$1${escapeAttribute(siteName)}$2`,
+    "hero title",
+  );
+}
+
+function updatePageMeta(source, { canonicalUrl, ogImageUrl, page, siteName }) {
+  const title = resolveTemplate(page.title, { siteName });
+  const ogTitle = resolveTemplate(page.ogTitle, { siteName });
+  const description = resolveTemplate(page.description, { siteName });
   let nextSource = source;
+  nextSource = upsertApplicationName(nextSource, siteName);
+  nextSource = replaceRequired(
+    nextSource,
+    /<title>[\s\S]*?<\/title>/,
+    `<title>${escapeAttribute(title)}</title>`,
+    "title",
+  );
+  if (typeof description === "string" && description) {
+    nextSource = replaceRequired(
+      nextSource,
+      /<meta\s+name="description"\s+content="[^"]*"\s*\/?>/,
+      `<meta name="description" content="${escapeAttribute(description)}" />`,
+      "description",
+    );
+  }
+  nextSource = replaceRequired(
+    nextSource,
+    /<meta\s+property="og:title"\s+content="[^"]*"\s*\/?>/,
+    `<meta property="og:title" content="${escapeAttribute(ogTitle)}" />`,
+    "og:title",
+  );
   nextSource = replaceRequired(
     nextSource,
     /<meta\s+property="og:url"\s+content="[^"]*"\s*\/?>/,
@@ -60,6 +155,12 @@ function updatePageMeta(source, { canonicalUrl, ogImageUrl }) {
   );
   nextSource = replaceRequired(
     nextSource,
+    /<meta\s+property="og:image:alt"\s+content="[^"]*"\s*\/?>/,
+    `<meta property="og:image:alt" content="${escapeAttribute(siteName)}" />`,
+    "og:image:alt",
+  );
+  nextSource = replaceRequired(
+    nextSource,
     /<link\s+rel="canonical"\s+href="[^"]*"\s*\/?>/,
     `<link rel="canonical" href="${escapeAttribute(canonicalUrl)}" />`,
     "canonical",
@@ -70,7 +171,29 @@ function updatePageMeta(source, { canonicalUrl, ogImageUrl }) {
     `<link rel="icon" type="image/png" href="${faviconPath}" />`,
     "favicon",
   );
+  if (page.heroTitle) {
+    nextSource = updateHeroTitle(nextSource, siteName);
+  }
   return nextSource;
+}
+
+function buildModulePreloadMarkup(assetVersion) {
+  return modulePreloadPaths
+    .map((filename) => `    <link rel="modulepreload" href="/js/${filename}?v=${escapeAttribute(assetVersion)}" />`)
+    .join("\n");
+}
+
+function updateModulePreloads(source, assetVersion) {
+  const withoutPreloads = source.replace(
+    /^[ \t]*<link\s+rel="modulepreload"\s+href="\/js\/[^"]+"\s*\/?>\r?\n?/gm,
+    "",
+  );
+  return replaceRequired(
+    withoutPreloads,
+    /\n\s*<\/head>/,
+    `\n${buildModulePreloadMarkup(assetVersion)}\n  </head>`,
+    "modulepreload hints",
+  );
 }
 
 function updateFeaturedCta(source, featuredName) {
@@ -96,15 +219,19 @@ function updateFeaturedCta(source, featuredName) {
 }
 
 const config = JSON.parse(await readFile("site.config.json", "utf8"));
+const appSource = await readFile("js/app.js", "utf8");
 const siteOrigin = normalizeSiteOrigin(config.siteUrl);
+const siteName = readSiteName(config);
 const featuredName = readFeaturedName(config);
+const assetVersion = readAssetVersion(appSource);
 const changedFiles = [];
 
 for (const page of pages) {
   const source = await readFile(page.file, "utf8");
   const canonicalUrl = `${siteOrigin}${page.pathname}`;
   const ogImageUrl = `${siteOrigin}${ogImagePath}`;
-  let nextSource = updatePageMeta(source, { canonicalUrl, ogImageUrl });
+  let nextSource = updatePageMeta(source, { canonicalUrl, ogImageUrl, page, siteName });
+  nextSource = updateModulePreloads(nextSource, assetVersion);
 
   if (page.file === "index.html") {
     nextSource = updateFeaturedCta(nextSource, featuredName);

@@ -198,6 +198,21 @@ function expectBlogCardMobileContract(assert, source, label, bookmarkColumnWidth
   }, label);
 }
 
+function expectTouchTargetContract(assert, source, selector, label) {
+  expectDeclarations(assert, source, selector, {
+    "min-width": "44px",
+    "min-height": "44px",
+  }, label);
+}
+
+function expectBookmarkHitAreaContract(assert, source, label) {
+  expectDeclarations(assert, source, ".card-bookmark-btn::after", {
+    "content": "\"\"",
+    "position": "absolute",
+    "inset": "-9px",
+  }, label);
+}
+
 export function runMobileLayoutChecks(context) {
   const { assert, blogPageCss, styleCss } = context;
   const realMobileStyle = extractCssBlock(
@@ -266,9 +281,14 @@ export function runMobileLayoutChecks(context) {
     "letter-spacing": "0",
   }, "narrow mobile fallback home");
 
+  // Hero glow is intentionally sized larger than any phone viewport so the
+  // disc's outer boundary falls offscreen — the visible glow is only the soft
+  // inner falloff with no detectable edge. Both blocks MUST match: prior
+  // releases (v5.8 / v5.9) regressed by updating only the @media block and
+  // leaving the is-mobile-device-viewport fallback at the dim v5.7 values.
   const heroGlowContract = {
-    "width": "480px",
-    "height": "480px",
+    "width": "900px",
+    "height": "900px",
     "top": "54%",
     "border-radius": "50%",
   };
@@ -279,16 +299,30 @@ export function runMobileLayoutChecks(context) {
   assert.equal(
     heroGlowBackgroundRealMobile,
     heroGlowBackgroundMobileFallback,
-    "mobile hero glow background must match between the media query and the is-mobile-device-viewport fallback",
+    "mobile hero glow background must match between the media query and the is-mobile-device-viewport fallback (the v5.8 / v5.9 release each missed the fallback block — do not regress)",
   );
   assert.match(
     heroGlowBackgroundRealMobile,
-    /rgba\(73,\s*145,\s*255,\s*0\.24\)/,
-    "mobile hero glow inner stop should keep the v5.8 brightened opacity",
+    /rgba\(73,\s*145,\s*255,\s*0\.2\)/,
+    "mobile hero glow inner stop should keep the v5.10 wide-soft opacity",
+  );
+  assert.match(
+    heroGlowBackgroundRealMobile,
+    /transparent\s+100%/,
+    "mobile hero glow gradient must fade to transparent at 100% so no disc edge is visible inside the viewport",
   );
 
   expectBlogCardMobileContract(assert, realMobileBlog, "real-mobile blog cards", "30px");
   expectBlogCardMobileContract(assert, mobileFallbackBlog, "mobile fallback blog cards", "28px");
+  expectTouchTargetContract(assert, realMobileBlog, ".filter-btn,\n  .page-btn,\n  .empty-state-action", "real-mobile touch targets");
+  expectTouchTargetContract(
+    assert,
+    mobileFallbackBlog,
+    "html.is-mobile-device-viewport .filter-btn,\nhtml.is-mobile-device-viewport .page-btn,\nhtml.is-mobile-device-viewport .empty-state-action",
+    "mobile fallback touch targets",
+  );
+  expectBookmarkHitAreaContract(assert, realMobileBlog, "real-mobile bookmark hit area");
+  expectBookmarkHitAreaContract(assert, mobileFallbackBlog, "mobile fallback bookmark hit area");
   expectDeclarations(assert, narrowMobileBlog, ".blog-card-body", {
     "grid-template-columns": "minmax(0, 1fr) 28px",
   }, "narrow real-mobile blog cards");

@@ -36,7 +36,9 @@ export function runServerModuleChecks(context) {
   expectIncludes(serverCacheStoreJs, "errorCooldownMs", "cache-store.js should support optional single-flight error cooldowns");
   expectIncludes(serverPostServiceJs, "shouldStartCacheSweepTimer", "post-service.js should gate cache sweep timers by runtime");
   expectIncludes(serverRenderServiceJs, "function buildArticleStructuredData", "render-service.js should own SSR structured data helpers");
+  expectIncludes(serverRenderServiceJs, "siteName: getSiteName()", "render-service.js should pass the configured site name into JSON-LD");
   expectIncludes(serverNotionConfigJs, "function normalizeSiteOrigin", "notion-config.js should own site-origin normalization");
+  expectIncludes(serverNotionConfigJs, "function getSiteName", "notion-config.js should own site-name normalization");
   expectIncludes(serverNotionConfigJs, "function createAsyncLimiter", "notion-config.js should own the async concurrency limiter");
   expectIncludes(serverCategoryNavigationJs, 'require("../js/notion-content-shared")', "category-navigation.js should import lightweight shared content constants");
   expectIncludes(serverCategoryNavigationJs, 'require("../js/notion-content-utils")', "category-navigation.js should import lightweight content utility helpers");

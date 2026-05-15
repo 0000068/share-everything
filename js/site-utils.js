@@ -1,10 +1,33 @@
 (() => {
-  const sharedContent = window.NotionContent || {};
+  const sharedContent = window.NotionContent || window.NotionContentShared || {};
   const BLOG_RETURN_URL_STORAGE_KEY = "spa:last-blog-url";
   const BOOKMARK_HASH_PREFIX = "#bookmarks";
   const MOBILE_DEVICE_QUERY = "(max-width: 768px) and (hover: none) and (pointer: coarse)";
   const MOBILE_DEVICE_CLASS = "is-mobile-device-viewport";
   const MOBILE_DEVICE_WIDTH = 768;
+  const DEFAULT_SITE_NAME = sharedContent.DEFAULT_SITE_NAME || "Site";
+
+  function readMetaContent(selector) {
+    if (typeof document !== "object" || !document || typeof document.querySelector !== "function") {
+      return "";
+    }
+
+    return document.querySelector(selector)?.content?.trim() || "";
+  }
+
+  function readSiteName() {
+    return (
+      readMetaContent('meta[name="application-name"]') ||
+      readMetaContent('meta[property="og:image:alt"]') ||
+      DEFAULT_SITE_NAME
+    );
+  }
+
+  const SITE_NAME = readSiteName();
+
+  function getSiteName() {
+    return SITE_NAME;
+  }
 
   function createMediaQueryList(query) {
     if (typeof window.matchMedia === "function") {
@@ -295,6 +318,7 @@
     buildPostUrl,
     createMobileDeviceQueryList,
     createMediaQueryList,
+    getSiteName,
     getPreferredBlogReturnUrl,
     getPostIdFromUrl,
     isBlogPageUrl,

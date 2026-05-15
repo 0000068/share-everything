@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v5.9
+> Version: v5.10
 > Updated: 2026-05-15
 
 ## 1. Overview
@@ -33,9 +33,17 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v5.9 Highlights
+## 2. Version v5.10 Highlights
 
-v5.9 completes the mobile home visual restoration that v5.8 only partially delivered and lands the full post-v5.8 cross-review backlog — 39 phased fixes plus 4 audit-stage corrections — in a single release.
+v5.10 dissolves the visible disc edge in the mobile home hero glow and adds a smoke-check parity contract that prevents the v5.8 / v5.9 pattern of forgetting to update one of the two mobile CSS blocks.
+
+- The mobile home `.hero-section::after` spotlight is widened past every supported phone viewport so the disc boundary falls offscreen: 480px → 900px square, opacity stops reorganized into a 4-stop smooth falloff (`rgba(73, 145, 255, 0.2)` → `0.11` → `0.05` → `transparent 100%`), removing the hard transparent-at-70% edge that v5.9 left visible. Applied identically in the `@media` block AND the `html.is-mobile-device-viewport` fallback block (this fallback block was the one v5.8 and v5.9 each forgot — fixed for real this time).
+- `scripts/smoke-check/mobile-layout.mjs` now requires (a) byte-exact `background` equality between the two mobile blocks and (b) the gradient must contain `transparent 100%` (the prior `transparent 70%` is rejected). Regressing the disc edge or splitting the two blocks again will fail CI.
+- Static CSS/JS/SVG entry URLs use the `20260515-v510` cache key so browsers and CDNs fetch the wider glow without serving v5.9's narrow disc through the `stale-while-revalidate` window.
+
+## 2.1 Version v5.9 Highlights
+
+v5.9 completed the mobile home visual restoration that v5.8 only partially delivered and landed the full post-v5.8 cross-review backlog — 39 phased fixes plus 4 audit-stage corrections — in a single release.
 
 - The mobile home centered glow now matches the intended bright cyan-blue spotlight in both rendering paths: `assets/mobile-home-starry-bg.svg` `centerGlow` opacities `0.32/0.20` → `0.55/0.32` with the inner stop recolored toward `#3e7bcf`, radius 54% → 60%, focal point cy 59% → 56%; CSS `.hero-section::after` size 360px → 480px, opacities `0.10/0.045` → `0.24/0.11`, top 56% → 54%, fixed in both the `@media` block and the `html.is-mobile-device-viewport` fallback block (v5.8 only updated the media-query block, leaving the fallback class users on the dim v5.7 visual).
 - Static CSS/JS/SVG entry URLs now use the `20260515-v59` cache key so browsers and CDNs fetch the synchronized glow without serving the half-fixed v5.8 visual through the `stale-while-revalidate` window.

@@ -133,7 +133,7 @@
       return sharedContent.renderPostArticle(post, { baseOrigin: window.location.origin });
     }
 
-    function createRequestError(message, { status, notionCode, code, detail } = {}) {
+    function createRequestError(message, { status, notionCode, code, detail, retryAfter } = {}) {
       const error = new Error(message);
       if (Number.isFinite(Number(status))) {
         error.status = Number(status);
@@ -146,6 +146,9 @@
       }
       if (typeof detail === "string" && detail) {
         error.detail = detail;
+      }
+      if (typeof retryAfter === "string" && retryAfter) {
+        error.retryAfter = retryAfter;
       }
       return error;
     }
@@ -518,11 +521,14 @@
             }
           }
 
+          const retryAfter = response.headers?.get?.("retry-after") || "";
+
           throw createRequestError(`Notion API error: ${response.status}${detail ? ` ${detail}` : ""}`, {
             status: response.status,
             notionCode,
             code,
             detail,
+            retryAfter,
           });
         }
 
