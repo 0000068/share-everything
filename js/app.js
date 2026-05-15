@@ -1,13 +1,13 @@
-import "./font-loader.js?v=20260514-v55";
-import "./notion-content-shared.js?v=20260514-v55";
-import "./runtime-core.js?v=20260514-v55";
-import "./site-utils.js?v=20260514-v55";
-import "./common.js?v=20260514-v55";
-import "./ui-effects.js?v=20260514-v55";
-import "./seo-meta.js?v=20260514-v55";
-import "./spa-router.js?v=20260514-v55";
+import "./font-loader.js?v=20260515-v57";
+import "./notion-content-shared.js?v=20260515-v57";
+import "./runtime-core.js?v=20260515-v57";
+import "./site-utils.js?v=20260515-v57";
+import "./common.js?v=20260515-v57";
+import "./ui-effects.js?v=20260515-v57";
+import "./seo-meta.js?v=20260515-v57";
+import "./spa-router.js?v=20260515-v57";
 
-const ASSET_VERSION = "20260514-v55";
+const ASSET_VERSION = "20260515-v57";
 const versioned = (path) => `${path}?v=${ASSET_VERSION}`;
 window.AppAssetVersion = ASSET_VERSION;
 
@@ -39,14 +39,27 @@ window.PageLoaders = pageLoaders;
 const initialPageId = window.PageRuntime?.getPageIdFromUrl?.() || null;
 const loader = initialPageId ? pageLoaders[initialPageId] : null;
 
-if (loader) {
-  loader()
-    .catch((error) => {
-      console.error("Failed to load page module:", error);
-    })
-    .finally(() => {
-      window.PageRuntime?.start?.();
-    });
-} else {
+function markInitialPageLoadFailure(error) {
+  console.error("Failed to load page module:", error);
+  if (document.body) {
+    document.body.dataset.pageModuleError = initialPageId || "unknown";
+  }
+}
+
+async function bootInitialPage() {
+  if (!loader) {
+    window.PageRuntime?.start?.();
+    return;
+  }
+
+  try {
+    await loader();
+  } catch (error) {
+    markInitialPageLoadFailure(error);
+    return;
+  }
+
   window.PageRuntime?.start?.();
 }
+
+bootInitialPage();

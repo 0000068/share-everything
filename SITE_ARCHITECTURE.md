@@ -1,7 +1,7 @@
 # Share Everything Site Architecture
 
-> Version: v4.7
-> Updated: 2026-05-14
+> Version: v5.7
+> Updated: 2026-05-15
 
 ## 1. Overview
 
@@ -33,11 +33,17 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v4.7 Highlights
+## 2. Version v5.7 Highlights
 
-v4.7 packages the completed Batch 1-8 repair work into a single release commit, including the public API search-text cleanup, server cache/resource hardening, stricter release verification, CI matrix coverage, and final fix-list documentation consolidation while preserving the desktop UI and desktop particle behavior.
+v5.7 restores the richer mobile home visual treatment with a static starfield asset and a low-cost static title gradient, while keeping mobile particles disabled and shrinking the browser favicon for the mobile critical path.
 
-- `package.json`, README, changelog, and architecture release metadata now match the `v4.7` release commit convention.
+- `package.json`, README, changelog, and architecture release metadata now match the `v5.7` release commit convention.
+- Static CSS/JS entry URLs now use the `20260515-v57` cache key so browsers and CDNs fetch the repaired runtime.
+- The mobile home background uses `/assets/mobile-home-starry-bg.svg` for a static particle-era starfield, avoiding mobile canvas animation work.
+- The mobile home title keeps the cyan-blue-purple brand gradient but drops continuous `title-gradient` animation and filter-based glow on mobile.
+- `favicon.png` is now an approved compact 256px PNG, reducing the browser icon payload from 1.42 MB to roughly 29 KB.
+- `scripts/smoke-check.mjs` derives package, README, architecture, and asset-version expectations from `package.json` and `js/app.js` instead of pinning stale release numbers.
+- `PageLoaders` load the shared blog/post rendering chain sequentially before page modules, avoiding the race introduced by the v5.5 parallel dynamic imports.
 - Public client payloads no longer expose or regenerate `_searchText`; server-side search text stays non-enumerable and internal.
 - Server-side Notion block rendering now has a configurable total block budget, bounded recursive fan-out, and single-flight failure cooldowns.
 - Browser-side post summary caching and `sessionStorage` cleanup are bounded and throttled to reduce repeated tab-sync work.

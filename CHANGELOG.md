@@ -2,6 +2,27 @@
 
 All notable changes to this project are tracked here.
 
+## 5.7.0 - 2026-05-15
+
+- Rebuilt the mobile home background as a static starfield SVG so it visually restores the richer particle-era look without running the mobile canvas animation.
+- Switched the mobile home title to a static cyan-blue-purple gradient with only a one-time entrance animation, avoiding continuous repaint work.
+- Compressed `favicon.png` from the 1024px source to the approved 256px browser icon, reducing the mobile critical-path asset from 1.42 MB to 29 KB.
+- Added `/assets` cache headers and updated visual/smoke coverage to guard the static mobile starfield, compact favicon, and low-cost mobile title rendering.
+
+## 5.6.0 - 2026-05-15
+
+- Fixed the page-module lazy-loading race by loading the shared Notion rendering chain in dependency order before the blog and post page modules.
+- Bumped the static CSS/JS cache key to `20260515-v56` so deployed clients fetch the repaired runtime instead of cached v5.5 assets.
+- Synchronized package, README, changelog, and architecture release metadata with the v5.6 release.
+- Hardened the smoke check so release version, README badge, architecture version, and asset-version suffix are derived from `package.json` and `js/app.js`.
+- Avoided starting page runtime initialization after an initial page module load failure, preserving a clear failure state instead of booting a partially registered page.
+
+## 5.5.0 - 2026-05-14
+
+- Replaced the long HTML script chain with page-specific dynamic imports exposed through `window.PageLoaders`.
+- Moved SPA route transitions to load page modules through the shared app entry instead of scanning fetched HTML for script tags.
+- Added smoke coverage for the page-loader contract and the single static runtime script per HTML entrypoint.
+
 ## 4.7.0 - 2026-05-14
 
 - Hardened the SSR post template pipeline by clearing the cached `templatePromise` on failure and replacing head metadata through explicit `SSR_HEAD_META_*` anchors, with the legacy per-tag regex retained as a fallback.

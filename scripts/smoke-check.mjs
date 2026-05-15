@@ -90,6 +90,12 @@ const readmeMd = read("README.md");
 const siteArchitectureMd = read("SITE_ARCHITECTURE.md");
 const siteConfigJson = read("site.config.json");
 const siteConfig = JSON.parse(siteConfigJson);
+const packageMetadata = JSON.parse(packageJson);
+const packageVersionMatch = /^(\d+)\.(\d+)\.(\d+)$/.exec(packageMetadata.version || "");
+assert.ok(packageVersionMatch, "package.json version should be a full semver version");
+const [, releaseMajor, releaseMinor] = packageVersionMatch;
+const releaseVersion = `v${releaseMajor}.${releaseMinor}`;
+const assetReleaseSuffix = `v${releaseMajor}${releaseMinor}`;
 const configuredSiteOrigin = normalizeConfiguredSiteOrigin(siteConfig.siteUrl);
 const featuredCategoryName = siteConfig.categoryNavigation.featured.name;
 const featuredCategoryHref = `/blog.html?category=${encodeURIComponent(featuredCategoryName)}`;
@@ -202,7 +208,13 @@ const {
   "renderPostContent",
 ]);
 
-const assetVersionValue = "20260514-v55";
+const appAssetVersionMatch = appJs.match(/const ASSET_VERSION = "([^"]+)";/);
+assert.ok(appAssetVersionMatch, "app.js should declare a literal ASSET_VERSION");
+const assetVersionValue = appAssetVersionMatch[1];
+assert.ok(
+  assetVersionValue.endsWith(`-${assetReleaseSuffix}`),
+  `asset version should end with -${assetReleaseSuffix} for package ${packageMetadata.version}`,
+);
 const assetVersion = `v=${assetVersionValue}`;
 const defaultShareImagePath = "/og-image.jpg?v=4";
 const productionDomainPattern = /0000068\.xyz/;
@@ -334,12 +346,13 @@ assert.equal(
   "89504e470d0a1a0a",
   "favicon.png should be a valid PNG asset",
 );
-assert.equal(faviconPng.readUInt32BE(16), 1024, "favicon.png should keep the approved 1024px source width");
-assert.equal(faviconPng.readUInt32BE(20), 1024, "favicon.png should keep the approved 1024px source height");
+assert.equal(faviconPng.readUInt32BE(16), 256, "favicon.png should keep the approved compact 256px width");
+assert.equal(faviconPng.readUInt32BE(20), 256, "favicon.png should keep the approved compact 256px height");
+assert.ok(faviconPng.length <= 40 * 1024, "favicon.png should stay small enough for the mobile critical path");
 assert.equal(
   createHash("sha256").update(faviconPng).digest("hex"),
-  "048586722371a596ef02f4846dcaa2fc30d3f21853b8355e9de7fe10c40a15ba",
-  "favicon.png should match the approved brand artwork",
+  "756d619b1e1f100d79ca20b18b91cfc356d1c650d99eac3b7c1f98f4e9534830",
+  "favicon.png should match the approved compact brand artwork",
 );
 assert.deepEqual(readJpegDimensions(ogImageJpg, "og-image.jpg"), { width: 1200, height: 630 }, "og-image.jpg should use the standard Open Graph image size");
 assert.ok(ogImageJpg.length <= 80 * 1024, "og-image.jpg should stay at or below the 80KB Task D budget");
@@ -477,6 +490,9 @@ expectedAppDynamicImports.forEach((src) => {
 expectIncludes(appJs, 'window.PageLoaders = pageLoaders', "app.js should expose page loaders so spa-router can lazy-load on navigation");
 expectIncludes(appJs, "async function loadPostRenderingChain", "app.js should use a sequential loading helper to guarantee UMD dependency order");
 expectIncludes(appJs, "const ASSET_VERSION =", "app.js should declare a single asset version constant for dynamic imports");
+expectIncludes(appJs, "async function bootInitialPage", "app.js should keep initial page boot sequencing explicit");
+expectIncludes(appJs, "markInitialPageLoadFailure", "app.js should record initial page module load failures");
+expectNotIncludes(appJs, ".finally(() =>", "app.js should not start page runtime after a failed initial page module import");
 expectIncludes(spaRouterJs, "window.PageLoaders?.[targetPageId]", "spa-router should call the matching page loader on navigation");
 expectNotIncludes(spaRouterJs, "function ensureScript", "spa-router should drop the legacy ensureScript helper now that page modules are dynamic imports");
 expectNoMalformedClosingTags(indexHtml, "index.html should not contain malformed closing tags");
@@ -607,7 +623,6 @@ expectIncludes(packageJson, '"notion:live-check": "node scripts/notion-live-chec
 expectIncludes(packageJson, '"visual:check": "node scripts/visual-regression.mjs"', "package scripts should expose the browser visual regression check");
 expectIncludes(packageJson, '"verify:release": "node scripts/release-check.mjs"', "package scripts should expose the strict release check");
 expectIncludes(packageJson, '"license": "MIT"', "package metadata should match the published README license");
-expectIncludes(packageJson, '"version": "5.5.0"', "package version should match the next release commit");
 expectIncludes(releaseCheckJs, "Promise.all([", "release check should run smoke and strict visual checks in parallel");
 expectIncludes(releaseCheckJs, 'runNpmScript("check", {}, stopSiblingsAfterFailure)', "release check should keep the smoke suite in the strict gate");
 expectIncludes(releaseCheckJs, 'runNpmScript("visual:check", { VISUAL_STRICT: "1" }, stopSiblingsAfterFailure)', "release check should run visual regression in strict mode");
@@ -644,13 +659,15 @@ expectIncludes(visualRegressionJs, "desktop particles should remain animated", "
 expectIncludes(visualRegressionJs, "mobile home particles should be disabled", "visual regression should guard mobile home particle removal");
 expectIncludes(visualRegressionJs, "mobile blog bookmark button should compute to 26px width", "visual regression should guard mobile card bookmark sizing");
 expectIncludes(visualRegressionJs, "mobile post top dock should stay hidden", "visual regression should guard mobile article dock visibility");
-expectIncludes(readmeMd, "badge/version-4.7.0", "README badge should match package version");
+expectIncludes(readmeMd, `badge/version-${packageMetadata.version}`, "README badge should match package version");
+expectNotIncludes(readmeMd, "badge/version-4.7.0", "README badge should not keep stale release metadata");
 expectIncludes(readmeMd, "npm.cmd run visual:check", "README should document the browser visual regression check");
 expectIncludes(readmeMd, "VISUAL_STRICT=1", "README should document strict visual regression mode");
 expectIncludes(readmeMd, "npm test` 与 `npm.cmd run check` 等价", "README should document that npm test stays a fast smoke check");
 expectIncludes(readmeMd, "并行运行 smoke suite 和 `VISUAL_STRICT=1`", "README should document parallel strict release checks");
-expectIncludes(siteArchitectureMd, "> Version: v4.7", "architecture docs should match the next release commit");
-expectIncludes(siteArchitectureMd, "Version v4.7 Highlights", "architecture docs should describe the current release");
+expectIncludes(siteArchitectureMd, `> Version: ${releaseVersion}`, "architecture docs should match the next release commit");
+expectIncludes(siteArchitectureMd, `Version ${releaseVersion} Highlights`, "architecture docs should describe the current release");
+expectNotIncludes(siteArchitectureMd, "> Version: v4.7", "architecture docs should not keep stale release metadata");
 expectIncludes(readmeMd, "SITE_URL=https://your-domain.example", "README should use the same SITE_URL placeholder as .env.example");
 expectIncludes(readmeMd, "IMAGE_PROXY_TIMEOUT_MS=10000", "README should document image proxy timeout tuning");
 expectIncludes(readmeMd, "IMAGE_PROXY_MAX_BYTES=8388608", "README should document image proxy size tuning");

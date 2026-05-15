@@ -87,7 +87,7 @@ function expectDeclarations(assert, source, selector, expectedDeclarations, labe
   });
 }
 
-function expectGradientTitle(assert, source, selector, label) {
+function expectStaticGradientTitle(assert, source, selector, label) {
   const declarations = readRuleDeclarations(source, selector);
 
   expectDeclarations(assert, source, selector, {
@@ -97,21 +97,26 @@ function expectGradientTitle(assert, source, selector, label) {
     "font-size": "2.5rem",
     "line-height": "1",
     "letter-spacing": "0",
-    "background-size": "200% auto",
+    "background-size": "100% auto",
     "-webkit-background-clip": "text",
     "-webkit-text-fill-color": "transparent",
     "background-clip": "text",
+    "filter": "none",
   }, label);
 
   assert.match(
     declarations.get("background") || "",
-    /#fff.+#00ffff.+#e040fb.+#ff4081.+#fff/,
-    `${label} should keep the desktop title gradient colors`,
+    /#7dfff3.+#28eaff.+#5da8ff.+#a36cff.+#f044e9/,
+    `${label} should keep the static mobile title gradient colors`,
+  );
+  assert.ok(
+    !(declarations.get("animation") || "").includes("title-gradient"),
+    `${label} should not run the expensive title-gradient animation`,
   );
   assert.match(
     declarations.get("animation") || "",
-    /title-gradient 6s linear infinite.+fadeInUp/,
-    `${label} should keep the desktop title-gradient animation`,
+    /fadeInUp/,
+    `${label} should keep the one-time entrance animation`,
   );
 }
 
@@ -128,6 +133,17 @@ function expectMobileAmbientBackground(assert, source, selector, label, { backgr
     "no-repeat",
     `${label} should keep the mobile background stable`,
   );
+  if (allowStars) {
+    assert.ok(
+      (declarations.get("background-image") || "").includes("mobile-home-starry-bg.svg"),
+      `${label} should use the static mobile starfield asset`,
+    );
+    assert.equal(
+      declarations.get("background-size"),
+      "cover",
+      `${label} should cover the mobile viewport with the static starfield`,
+    );
+  }
   if (!allowStars) {
     assert.ok(
       !/radial-gradient\(1px/i.test(declarations.get("background-image") || ""),
@@ -211,8 +227,8 @@ export function runMobileLayoutChecks(context) {
     "@media (max-width: 540px)",
   );
 
-  expectGradientTitle(assert, realMobileStyle, ".hero-title", "real-mobile home");
-  expectGradientTitle(assert, mobileFallbackStyle, "html.is-mobile-device-viewport .hero-title", "mobile fallback home");
+  expectStaticGradientTitle(assert, realMobileStyle, ".hero-title", "real-mobile home");
+  expectStaticGradientTitle(assert, mobileFallbackStyle, "html.is-mobile-device-viewport .hero-title", "mobile fallback home");
   expectDeclarations(assert, realMobileStyle, "html", {
     "background-color": "#0a0e1a",
   }, "real-mobile root");
@@ -225,8 +241,8 @@ export function runMobileLayoutChecks(context) {
   expectDeclarations(assert, mobileFallbackStyle, "html.is-mobile-device-viewport body", {
     "background-color": "#0a0e1a",
   }, "mobile fallback body");
-  expectMobileAmbientBackground(assert, realMobileStyle, ".ambient-background", "real-mobile home background", { backgroundColor: "#0a0e1a", allowStars: true });
-  expectMobileAmbientBackground(assert, mobileFallbackStyle, "html.is-mobile-device-viewport .ambient-background", "mobile fallback home background", { backgroundColor: "#0a0e1a", allowStars: true });
+  expectMobileAmbientBackground(assert, realMobileStyle, ".ambient-background", "real-mobile home background", { backgroundColor: "#0b1021", allowStars: true });
+  expectMobileAmbientBackground(assert, mobileFallbackStyle, "html.is-mobile-device-viewport .ambient-background", "mobile fallback home background", { backgroundColor: "#0b1021", allowStars: true });
   expectDeclarations(assert, realMobileStyle, "#particles-canvas", {
     "display": "none",
   }, "real-mobile home");
@@ -234,11 +250,11 @@ export function runMobileLayoutChecks(context) {
     "display": "none",
   }, "mobile fallback home");
   expectDeclarations(assert, realMobileStyle, ".hero-section", {
-    "padding": "clamp(190px, 27svh, 240px) 0 48px",
+    "padding": "clamp(148px, 21svh, 190px) 0 48px",
     "gap": "12px",
   }, "real-mobile home");
   expectDeclarations(assert, mobileFallbackStyle, "html.is-mobile-device-viewport .hero-section", {
-    "padding": "clamp(190px, 27svh, 240px) 0 48px",
+    "padding": "clamp(148px, 21svh, 190px) 0 48px",
     "gap": "12px",
   }, "mobile fallback home");
   expectDeclarations(assert, narrowMobileStyle, ".hero-title", {

@@ -773,6 +773,7 @@ async function checkMobileHome(client, viewport) {
     const searchRect = search.getBoundingClientRect();
     const ctaRect = ctas.getBoundingClientRect();
     const titleStyle = getComputedStyle(title);
+    const ambientStyle = getComputedStyle(document.querySelector(".ambient-background"));
     const canvasStyle = getComputedStyle(canvas);
 
     return new Promise((resolve) => setTimeout(() => {
@@ -795,7 +796,9 @@ async function checkMobileHome(client, viewport) {
         ctaRect: { top: ctaRect.top, bottom: ctaRect.bottom, width: ctaRect.width },
         titleAnimation: titleStyle.animationName,
         titleBackground: titleStyle.backgroundImage,
+        titleFilter: titleStyle.filter,
         titleLineHeight: lineHeight,
+        ambientBackground: ambientStyle.backgroundImage,
         canvasDisplay: canvasStyle.display,
         canvasDisabled: canvas.dataset.particlesDisabled || "",
       });
@@ -807,8 +810,11 @@ async function checkMobileHome(client, viewport) {
   assert.equal(metrics.titleText, "Share Everything", "mobile home should keep the product title");
   assertRectInsideViewport(metrics.titleRect, viewport, "mobile title");
   assert.ok(metrics.titleRect.height <= metrics.titleLineHeight * 1.35, "mobile title should stay on one line");
-  assert.ok(metrics.titleAnimation.includes("title-gradient"), "mobile title should use the desktop title gradient animation");
+  assert.ok(!metrics.titleAnimation.includes("title-gradient"), "mobile title should not run the expensive title gradient animation");
+  assert.ok(metrics.titleAnimation.includes("fadeInUp"), "mobile title should keep the one-time entrance animation");
+  assert.equal(metrics.titleFilter, "none", "mobile title should avoid filter-based glow work");
   assert.notEqual(metrics.titleBackground, "none", "mobile title should keep a gradient background");
+  assert.ok(metrics.ambientBackground.includes("mobile-home-starry-bg.svg"), "mobile home should use the static starfield background");
   assert.ok(metrics.searchRect.top > metrics.titleRect.bottom, "mobile search should sit below the title");
   assert.ok(metrics.ctaRect.top > metrics.searchRect.bottom, "mobile icon actions should sit below search");
   assert.ok(metrics.scrollWidth <= viewport.width + 1, "mobile home should not create horizontal overflow");

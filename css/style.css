@@ -674,28 +674,11 @@ body.has-cursor-glow .cursor-glow {
   }
 
   .ambient-background {
-    background-color: #0a0e1a;
-    background-image:
-      radial-gradient(1px 1px at 8% 12%, rgba(255, 255, 255, 0.3) 50%, transparent 50%),
-      radial-gradient(1px 1px at 22% 28%, rgba(255, 255, 255, 0.2) 50%, transparent 50%),
-      radial-gradient(0.8px 0.8px at 35% 8%, rgba(255, 255, 255, 0.18) 50%, transparent 50%),
-      radial-gradient(1.2px 1.2px at 48% 42%, rgba(200, 240, 255, 0.22) 50%, transparent 50%),
-      radial-gradient(0.8px 0.8px at 62% 18%, rgba(255, 255, 255, 0.15) 50%, transparent 50%),
-      radial-gradient(1px 1px at 75% 55%, rgba(255, 255, 255, 0.2) 50%, transparent 50%),
-      radial-gradient(0.6px 0.6px at 88% 32%, rgba(200, 220, 255, 0.18) 50%, transparent 50%),
-      radial-gradient(1px 1px at 15% 65%, rgba(255, 255, 255, 0.14) 50%, transparent 50%),
-      radial-gradient(0.8px 0.8px at 42% 78%, rgba(255, 255, 255, 0.16) 50%, transparent 50%),
-      radial-gradient(1.2px 1.2px at 68% 72%, rgba(200, 240, 255, 0.12) 50%, transparent 50%),
-      radial-gradient(0.6px 0.6px at 92% 68%, rgba(255, 255, 255, 0.14) 50%, transparent 50%),
-      radial-gradient(1px 1px at 5% 88%, rgba(255, 255, 255, 0.12) 50%, transparent 50%),
-      radial-gradient(0.8px 0.8px at 55% 92%, rgba(200, 220, 255, 0.1) 50%, transparent 50%),
-      radial-gradient(0.6px 0.6px at 80% 88%, rgba(255, 100, 200, 0.12) 50%, transparent 50%),
-      radial-gradient(1px 1px at 28% 48%, rgba(255, 255, 255, 0.1) 50%, transparent 50%),
-      radial-gradient(0.8px 0.8px at 95% 48%, rgba(255, 255, 255, 0.12) 50%, transparent 50%),
-      linear-gradient(115deg, rgba(0, 136, 168, 0.28) 0%, rgba(10, 14, 26, 0) 36%),
-      linear-gradient(185deg, rgba(180, 40, 120, 0.08) 0%, rgba(10, 14, 26, 0) 45%),
-      linear-gradient(180deg, #0a0e1a 0%, #0f1328 50%, #0a0e1a 100%);
+    background-color: #0b1021;
+    background-image: url("/assets/mobile-home-starry-bg.svg?v=20260515-v57");
+    background-position: center top;
     background-repeat: no-repeat;
+    background-size: cover;
   }
 
   #particles-canvas {
@@ -710,7 +693,7 @@ body.has-cursor-glow .cursor-glow {
     position: relative;
     width: 100%;
     min-height: 100svh;
-    padding: clamp(190px, 27svh, 240px) 0 48px;
+    padding: clamp(148px, 21svh, 190px) 0 48px;
     gap: 12px;
   }
 
@@ -725,35 +708,34 @@ body.has-cursor-glow .cursor-glow {
     line-height: 1;
     letter-spacing: 0;
     background: linear-gradient(
-      to right,
-      #fff 0%,
-      #00ffff 20%,
-      #e040fb 50%,
-      #ff4081 80%,
-      #fff 100%
+      90deg,
+      #7dfff3 0%,
+      #28eaff 25%,
+      #5da8ff 52%,
+      #a36cff 72%,
+      #f044e9 100%
     );
-    background-size: 200% auto;
+    background-size: 100% auto;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    filter: drop-shadow(0 0 30px rgba(0, 229, 255, 0.25))
-      drop-shadow(0 0 60px rgba(224, 64, 251, 0.15));
-    animation: title-gradient 6s linear infinite, fadeInUp 0.9s var(--transition-smooth) 0.25s both;
+    filter: none;
+    animation: fadeInUp 0.9s var(--transition-smooth) 0.25s both;
   }
 
   .hero-section::after {
     content: "";
     position: absolute;
     left: 50%;
-    top: 58%;
+    top: 55%;
     transform: translate(-50%, -50%);
-    width: 320px;
-    height: 320px;
+    width: 360px;
+    height: 360px;
     border-radius: 50%;
     background: radial-gradient(
       circle,
-      rgba(0, 180, 220, 0.08) 0%,
-      rgba(120, 40, 180, 0.05) 40%,
+      rgba(73, 145, 255, 0.12) 0%,
+      rgba(24, 238, 255, 0.06) 34%,
       transparent 70%
     );
     pointer-events: none;
@@ -955,7 +937,7 @@ body.has-cursor-glow .cursor-glow {
 
   .hero-section {
     width: 100%;
-    padding-top: clamp(198px, 27svh, 234px);
+    padding-top: clamp(150px, 21svh, 184px);
     gap: 12px;
   }
 
@@ -1097,28 +1079,11 @@ html.is-mobile-device-viewport body {
 }
 
 html.is-mobile-device-viewport .ambient-background {
-  background-color: #0a0e1a;
-  background-image:
-    radial-gradient(1px 1px at 8% 12%, rgba(255, 255, 255, 0.3) 50%, transparent 50%),
-    radial-gradient(1px 1px at 22% 28%, rgba(255, 255, 255, 0.2) 50%, transparent 50%),
-    radial-gradient(0.8px 0.8px at 35% 8%, rgba(255, 255, 255, 0.18) 50%, transparent 50%),
-    radial-gradient(1.2px 1.2px at 48% 42%, rgba(200, 240, 255, 0.22) 50%, transparent 50%),
-    radial-gradient(0.8px 0.8px at 62% 18%, rgba(255, 255, 255, 0.15) 50%, transparent 50%),
-    radial-gradient(1px 1px at 75% 55%, rgba(255, 255, 255, 0.2) 50%, transparent 50%),
-    radial-gradient(0.6px 0.6px at 88% 32%, rgba(200, 220, 255, 0.18) 50%, transparent 50%),
-    radial-gradient(1px 1px at 15% 65%, rgba(255, 255, 255, 0.14) 50%, transparent 50%),
-    radial-gradient(0.8px 0.8px at 42% 78%, rgba(255, 255, 255, 0.16) 50%, transparent 50%),
-    radial-gradient(1.2px 1.2px at 68% 72%, rgba(200, 240, 255, 0.12) 50%, transparent 50%),
-    radial-gradient(0.6px 0.6px at 92% 68%, rgba(255, 255, 255, 0.14) 50%, transparent 50%),
-    radial-gradient(1px 1px at 5% 88%, rgba(255, 255, 255, 0.12) 50%, transparent 50%),
-    radial-gradient(0.8px 0.8px at 55% 92%, rgba(200, 220, 255, 0.1) 50%, transparent 50%),
-    radial-gradient(0.6px 0.6px at 80% 88%, rgba(255, 100, 200, 0.12) 50%, transparent 50%),
-    radial-gradient(1px 1px at 28% 48%, rgba(255, 255, 255, 0.1) 50%, transparent 50%),
-    radial-gradient(0.8px 0.8px at 95% 48%, rgba(255, 255, 255, 0.12) 50%, transparent 50%),
-    linear-gradient(115deg, rgba(0, 136, 168, 0.28) 0%, rgba(10, 14, 26, 0) 36%),
-    linear-gradient(185deg, rgba(180, 40, 120, 0.08) 0%, rgba(10, 14, 26, 0) 45%),
-    linear-gradient(180deg, #0a0e1a 0%, #0f1328 50%, #0a0e1a 100%);
+  background-color: #0b1021;
+  background-image: url("/assets/mobile-home-starry-bg.svg?v=20260515-v57");
+  background-position: center top;
   background-repeat: no-repeat;
+  background-size: cover;
 }
 
 html.is-mobile-device-viewport #particles-canvas {
@@ -1133,7 +1098,7 @@ html.is-mobile-device-viewport .hero-section {
   position: relative;
   width: 100%;
   min-height: 100svh;
-  padding: clamp(190px, 27svh, 240px) 0 48px;
+  padding: clamp(148px, 21svh, 190px) 0 48px;
   gap: 12px;
 }
 
@@ -1148,35 +1113,34 @@ html.is-mobile-device-viewport .hero-title {
   line-height: 1;
   letter-spacing: 0;
   background: linear-gradient(
-    to right,
-    #fff 0%,
-    #00ffff 20%,
-    #e040fb 50%,
-    #ff4081 80%,
-    #fff 100%
+    90deg,
+    #7dfff3 0%,
+    #28eaff 25%,
+    #5da8ff 52%,
+    #a36cff 72%,
+    #f044e9 100%
   );
-  background-size: 200% auto;
+  background-size: 100% auto;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  filter: drop-shadow(0 0 30px rgba(0, 229, 255, 0.25))
-    drop-shadow(0 0 60px rgba(224, 64, 251, 0.15));
-  animation: title-gradient 6s linear infinite, fadeInUp 0.9s var(--transition-smooth) 0.25s both;
+  filter: none;
+  animation: fadeInUp 0.9s var(--transition-smooth) 0.25s both;
 }
 
 html.is-mobile-device-viewport .hero-section::after {
   content: "";
   position: absolute;
   left: 50%;
-  top: 58%;
+  top: 55%;
   transform: translate(-50%, -50%);
-  width: 320px;
-  height: 320px;
+  width: 360px;
+  height: 360px;
   border-radius: 50%;
   background: radial-gradient(
     circle,
-    rgba(0, 180, 220, 0.08) 0%,
-    rgba(120, 40, 180, 0.05) 40%,
+    rgba(73, 145, 255, 0.12) 0%,
+    rgba(24, 238, 255, 0.06) 34%,
     transparent 70%
   );
   pointer-events: none;
@@ -1244,7 +1208,7 @@ html.is-mobile-device-viewport .btn-tooltip {
 
 @media (max-width: 540px) {
   html.is-mobile-device-viewport .hero-section {
-    padding-top: clamp(198px, 27svh, 234px);
+    padding-top: clamp(150px, 21svh, 184px);
     gap: 12px;
   }
 
