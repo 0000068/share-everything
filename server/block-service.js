@@ -8,6 +8,13 @@ const { requestNotionJson } = require("./notion-client");
 const MAX_BLOCK_RECURSION_DEPTH = 10;
 const MAX_PAGINATION_ROUNDS = 50;
 const NOTION_BLOCK_CHILD_CONCURRENCY = normalizePositiveNumber(process.env.NOTION_BLOCK_CHILD_CONCURRENCY, 4);
+// Two-layer concurrency control intentionally shares the same configured value:
+// (1) at each recursion depth we fan out up to `BLOCK_CHILD_WORKER_COUNT`
+// parallel child fetches, and (2) the `runWithBlockChildConcurrency` limiter
+// caps total in-flight Notion requests across all depths to the same number.
+// The limiter is what enforces the upstream API rate ceiling; the worker count
+// just shapes the recursion tree so siblings can interleave instead of
+// strictly sequencing.
 const BLOCK_CHILD_WORKER_COUNT = Math.max(1, Math.trunc(NOTION_BLOCK_CHILD_CONCURRENCY));
 const NOTION_BLOCK_TOTAL_LIMIT = Math.max(
   1,

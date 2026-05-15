@@ -119,5 +119,7 @@
     }
   });
 
-  window.initBlogCardReveal = initBlogCardReveal;
+  window.UIEffects = Object.freeze({
+    initBlogCardReveal,
+  });
 })();

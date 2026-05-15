@@ -1,11 +1,22 @@
 (() => {
+  const DEFAULT_FEATURED_CATEGORY = "精选";
+
+  function resolveFeaturedCategoryName(sharedContent) {
+    if (typeof sharedContent.getRemoteBlogCategories !== "function") {
+      return DEFAULT_FEATURED_CATEGORY;
+    }
+
+    const allCategoryName = sharedContent.ALL_CATEGORY || "全部";
+    const featured = sharedContent
+      .getRemoteBlogCategories()
+      .find((category) => category.name !== allCategoryName);
+    return featured?.name || DEFAULT_FEATURED_CATEGORY;
+  }
+
   function initIndexPage() {
     const sharedContent = window.NotionContent || window.NotionContentShared || {};
     const siteUtils = window.SiteUtils || {};
-    const featuredCategory =
-      typeof sharedContent.getRemoteBlogCategories === "function"
-        ? sharedContent.getRemoteBlogCategories().find((category) => category.name !== (sharedContent.ALL_CATEGORY || "全部"))?.name || "精选"
-        : "精选";
+    const featuredCategory = resolveFeaturedCategoryName(sharedContent);
     const searchForm = document.getElementById("heroSearchForm");
     const searchInput = document.getElementById("heroSearch");
     const ctaHome = document.getElementById("ctaHome");

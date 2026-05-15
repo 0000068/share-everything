@@ -26,11 +26,7 @@
 
   function hasTouchInput() {
     const nav = window.navigator || {};
-    return Boolean(
-      nav.maxTouchPoints > 0 ||
-        nav.msMaxTouchPoints > 0 ||
-        "ontouchstart" in window,
-    );
+    return Boolean(nav.maxTouchPoints > 0 || "ontouchstart" in window);
   }
 
   function isNarrowViewport() {
@@ -81,9 +77,8 @@
     }
   }
 
-  function resolveDisplayImageUrl(candidate) {
-    return sanitizeImageUrl(candidate);
-  }
+  // Public alias matching the shared NotionContent module's naming.
+  const resolveDisplayImageUrl = sanitizeImageUrl;
 
   function resolveProxiedDisplayImageUrl(candidate) {
     if (typeof sharedContent.resolveProxiedDisplayImageUrl === "function") {

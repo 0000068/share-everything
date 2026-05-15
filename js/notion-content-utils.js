@@ -25,6 +25,13 @@
     date: Object.freeze(["date"]),
   });
 
+  // Intentionally accepts only legacy CSS color syntax (#hex, rgb/rgba/hsl/hsla
+  // with comma-separated components). Modern CSS Color Level 4 syntax
+  // (space-separated `rgb(0 0 0 / 50%)`, `oklch(...)`, color-mix, etc.) is
+  // rejected because this helper is used to sanitize values that flow into
+  // inline `style="..."` attributes from Notion select option colors and
+  // checked-in site config — both of which only ever produce legacy syntax,
+  // and a permissive regex would widen the inline-style attack surface.
   function sanitizeCssColorValue(value, fallback) {
     if (typeof value !== "string") return fallback;
     const trimmed = value.trim();

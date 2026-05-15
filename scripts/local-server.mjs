@@ -3,73 +3,12 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadDotEnvFile } from "./lib/dotenv.mjs";
 
 const require = createRequire(import.meta.url);
 const rootDir = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
 
-function parseDotEnvValue(rawValue) {
-  const trimmed = String(rawValue || "").trim();
-  if (!trimmed) return "";
-
-  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    return trimmed
-      .slice(1, -1)
-      .replace(/\\n/g, "\n")
-      .replace(/\\r/g, "\r")
-      .replace(/\\t/g, "\t")
-      .replace(/\\"/g, '"')
-      .replace(/\\\\/g, "\\");
-  }
-
-  if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
-    return trimmed.slice(1, -1);
-  }
-
-  return trimmed.replace(/\s+#.*$/, "").trim();
-}
-
-function parseDotEnvLine(rawLine) {
-  const line = String(rawLine || "").trim();
-  if (!line || line.startsWith("#")) return null;
-
-  const normalizedLine = line.startsWith("export ")
-    ? line.slice("export ".length).trim()
-    : line;
-  const separatorIndex = normalizedLine.indexOf("=");
-  if (separatorIndex <= 0) return null;
-
-  const key = normalizedLine.slice(0, separatorIndex).trim();
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) return null;
-
-  return {
-    key,
-    value: parseDotEnvValue(normalizedLine.slice(separatorIndex + 1)),
-  };
-}
-
-async function loadDotEnvFile() {
-  let source = "";
-  try {
-    source = await readFile(path.join(rootDir, ".env"), "utf8");
-  } catch (error) {
-    if (isMissingStaticFileError(error)) return;
-    throw error;
-  }
-
-  source
-    .replace(/^\uFEFF/, "")
-    .split(/\r?\n/)
-    .forEach((line) => {
-      const parsed = parseDotEnvLine(line);
-      if (!parsed || Object.prototype.hasOwnProperty.call(process.env, parsed.key)) {
-        return;
-      }
-
-      process.env[parsed.key] = parsed.value;
-    });
-}
-
-await loadDotEnvFile();
+await loadDotEnvFile(path.join(rootDir, ".env"));
 
 // Enable development-mode behavior (e.g. template hot-reload) before loading
 // API handlers that inspect NODE_ENV at require time.

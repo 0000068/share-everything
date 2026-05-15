@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v5.7
+> Version: v5.9
 > Updated: 2026-05-15
 
 ## 1. Overview
@@ -33,16 +33,21 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v5.7 Highlights
+## 2. Version v5.9 Highlights
 
-v5.7 restores the richer mobile home visual treatment with a static starfield asset and a low-cost static title gradient, while keeping mobile particles disabled and shrinking the browser favicon for the mobile critical path.
+v5.9 completes the mobile home visual restoration that v5.8 only partially delivered and lands the full post-v5.8 cross-review backlog — 39 phased fixes plus 4 audit-stage corrections — in a single release.
 
-- `package.json`, README, changelog, and architecture release metadata now match the `v5.7` release commit convention.
-- Static CSS/JS entry URLs now use the `20260515-v57` cache key so browsers and CDNs fetch the repaired runtime.
-- The mobile home background uses `/assets/mobile-home-starry-bg.svg` for a static particle-era starfield, avoiding mobile canvas animation work.
-- The mobile home title keeps the cyan-blue-purple brand gradient but drops continuous `title-gradient` animation and filter-based glow on mobile.
-- `favicon.png` is now an approved compact 256px PNG, reducing the browser icon payload from 1.42 MB to roughly 29 KB.
-- `scripts/smoke-check.mjs` derives package, README, architecture, and asset-version expectations from `package.json` and `js/app.js` instead of pinning stale release numbers.
+- The mobile home centered glow now matches the intended bright cyan-blue spotlight in both rendering paths: `assets/mobile-home-starry-bg.svg` `centerGlow` opacities `0.32/0.20` → `0.55/0.32` with the inner stop recolored toward `#3e7bcf`, radius 54% → 60%, focal point cy 59% → 56%; CSS `.hero-section::after` size 360px → 480px, opacities `0.10/0.045` → `0.24/0.11`, top 56% → 54%, fixed in both the `@media` block and the `html.is-mobile-device-viewport` fallback block (v5.8 only updated the media-query block, leaving the fallback class users on the dim v5.7 visual).
+- Static CSS/JS/SVG entry URLs now use the `20260515-v59` cache key so browsers and CDNs fetch the synchronized glow without serving the half-fixed v5.8 visual through the `stale-while-revalidate` window.
+- Dead browser-API code paths removed: `navigator.mozConnection` / `webkitConnection` (deprecated prefixes), `nav.msMaxTouchPoints` (IE/old-Edge only), `shouldDisableMobileParticles` wrapper, `particleProfile.disabled` (always equal to `isMobile`), the `window.initBlogCardReveal` legacy alias, and the `ParticleCtor` synonym.
+- Module API surface tightened: `js/site-utils.js` `resolveDisplayImageUrl` and `js/notion-content-url.js` `resolveProxiedDisplayImageUrl` collapse from wrapper functions to `const` aliases; `js/blog-page.js` `resolveSafeCoverImage` triple-ternary rewritten to 2-tier; `js/ui-effects.js` exposes `window.UIEffects.initBlogCardReveal` instead of a naked global.
+- SSR template contract hardened: `post.html` carries explicit `<!--SSR_HEAD_META_START-->`/`<!--SSR_HEAD_META_END-->` markers (already in v5.7) plus a new `data-empty-link` anchor; `api/post.js` empty-state replacement is now attribute-order tolerant; `scripts/smoke-check.mjs` asserts the postContent placeholder, postEmpty container, and data-empty-link anchor must exist.
+- LaTeX block coverage extended to `\mathbb`, `\mathcal`, `\mathfrak`, `\mathbf`, `\mathsf`, `\mathtt`, `\overline`, `\underline`, `\boxed`.
+- Service-layer consistency fixed: `server/category-navigation.js` `normalizeCategoryGradient` accepts `radial-gradient` (matching the client side) and rejects `;`/`url()`; `server/post-service.js` paginates before decorating; `server/category-navigation.js` `buildPublicCategories` splits sort and presentation phases instead of building the presentation twice; `server/notion-config.js` `createAsyncLimiter` documents that queue depth is bounded by the upstream block-budget.
+- `scripts/lib/dotenv.mjs` shared `.env` parser replaces the duplicated implementations in `scripts/local-server.mjs` and `scripts/notion-live-check.mjs`.
+- `js/spa-router.js` `pageCache` adds `MAX_PAGE_CACHE_BYTES=2MB` total + `MAX_PER_ENTRY_CACHE_BYTES=1MB` per-entry size caps with `dropCacheEntry` / `evictOldestCacheEntry` accounting helpers; stylesheet loading is now `Promise.all` parallel.
+- CSS `html.is-mobile-device-viewport` block carries an explicit comment documenting the parity contract with the `@media` block; `scripts/smoke-check/mobile-layout.mjs` enforces `.hero-section::after` parity (width/height/top/background) between the two blocks and locks the v5.9 brightened opacity.
+- [FIX_TODO.md](FIX_TODO.md) rewritten to reflect that all 39+4 items are landed, with 4 architectural items (CSS double-write integration, SSR template jsdom migration, CSS Color L4 support, i18n-safe nav active key) carried forward as "需评估再启动" backlog.
 - `PageLoaders` load the shared blog/post rendering chain sequentially before page modules, avoiding the race introduced by the v5.5 parallel dynamic imports.
 - Public client payloads no longer expose or regenerate `_searchText`; server-side search text stays non-enumerable and internal.
 - Server-side Notion block rendering now has a configurable total block budget, bounded recursive fan-out, and single-flight failure cooldowns.
@@ -247,11 +252,16 @@ Read-only public APIs reject non-`GET` methods with `405` and `Cache-Control: no
 | CSS and JS | `public, max-age=3600, stale-while-revalidate=86400` |
 | `favicon.png`, `og-image.jpg` | `public, max-age=86400` |
 | Successful `/api/image` responses | `public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400` |
-| Public JSON and SSR post HTML | `no-store` |
+| `/api/posts-data` list JSON | `public, max-age=0, s-maxage=60, stale-while-revalidate=300` |
+| `/api/sitemap` | `public, max-age=0, s-maxage=300, stale-while-revalidate=600` |
+| `/api/robots` | `public, max-age=0, s-maxage=3600, stale-while-revalidate=86400` |
+| `/api/post-data` and SSR post HTML | `no-store` |
 | Public API errors | `no-store` |
 | Disabled `/api/notion` | `no-store` |
 
 `vercel.json` does not set an API-wide `Cache-Control`; individual handlers own their cache policy so `/api/image` can stay edge-cacheable while data and SSR routes stay non-cacheable. Do not add a catch-all `/api/*` `Cache-Control` header in `vercel.json`.
+
+The global `/(.*)` headers block in `vercel.json` (CSP frame-ancestors, X-Frame-Options, HSTS, Referrer-Policy, Permissions-Policy) applies to API routes as well — Vercel header rules are additive across matching `source` patterns, so the `/api/(.*)` `X-Content-Type-Options: nosniff` rule layers on top of the catch-all rather than replacing it. Do not move these headers under `/api/(.*)`; HTML/static responses also need them.
 
 Static HTML must keep adding a cache-busting query string to changed CSS/JS paths when a mobile layout fix ships, because some Android browsers continue to use stale assets during the `stale-while-revalidate` window.
 

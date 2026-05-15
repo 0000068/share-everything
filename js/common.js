@@ -36,26 +36,17 @@ function isMobileParticleViewport() {
     && window.matchMedia?.("(hover: none) and (pointer: coarse)")?.matches;
 }
 
-function shouldDisableMobileParticles() {
-  return isMobileParticleViewport();
-}
-
 function getParticleProfileForViewport() {
   const isMobile = isMobileParticleViewport();
-  const disabled = shouldDisableMobileParticles();
   return {
     isMobile,
-    disabled,
     count: isMobile ? 0 : DESKTOP_PARTICLE_COUNT,
   };
 }
 
 function refreshParticleProfile() {
   const nextProfile = getParticleProfileForViewport();
-  const didChange =
-    nextProfile.isMobile !== particleProfile.isMobile ||
-    nextProfile.disabled !== particleProfile.disabled ||
-    nextProfile.count !== particleProfile.count;
+  const didChange = nextProfile.isMobile !== particleProfile.isMobile;
   particleProfile = nextProfile;
   particleCount = nextProfile.count;
   return didChange;
@@ -132,9 +123,8 @@ class Particle {
 
 function initParticles() {
   particles = [];
-  const ParticleCtor = Particle;
   for (let i = 0; i < particleCount; i += 1) {
-    particles.push(new ParticleCtor());
+    particles.push(new Particle());
   }
 }
 
@@ -167,7 +157,7 @@ let targetSpeedMultiplier = 1;
 let particlesBootstrapped = false;
 
 function drawParticlesFrame(advance = true) {
-  if (!ctx || !width || !height || particleProfile.disabled) return;
+  if (!ctx || !width || !height || particleProfile.isMobile) return;
   ctx.clearRect(0, 0, width, height);
 
   if (advance) {
@@ -220,7 +210,7 @@ function clearParticleCanvas() {
 function syncParticleCanvasState() {
   if (!canvas) return;
 
-  if (particleProfile.disabled) {
+  if (particleProfile.isMobile) {
     canvas.dataset.particlesDisabled = "true";
     canvas.style.display = "none";
     return;
@@ -238,7 +228,7 @@ function clearParticleBootstrapTimer() {
 }
 
 function animateParticles() {
-  if (!ctx || particleProfile.disabled) return;
+  if (!ctx || particleProfile.isMobile) return;
   drawParticlesFrame(true);
   rafId = requestAnimationFrame(animateParticles);
 }
@@ -256,7 +246,7 @@ function bootstrapParticles(force = false) {
   const hasViewport = resize();
   if (!hasViewport) return false;
 
-  if (particleProfile.disabled) {
+  if (particleProfile.isMobile) {
     particles = [];
     particlesBootstrapped = false;
     clearParticleCanvas();

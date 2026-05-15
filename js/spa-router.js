@@ -19,11 +19,7 @@
     : () => null;
   const DEFAULT_OG_IMAGE_URL = new URL("og-image.jpg?v=4", window.location.origin).href;
   const DEFAULT_OG_IMAGE_ALT = "Share Everything";
-  const connectionInfo =
-    navigator.connection ||
-    navigator.mozConnection ||
-    navigator.webkitConnection ||
-    null;
+  const connectionInfo = navigator.connection || null;
   const getPostIdFromUrl =
     typeof siteUtils.getPostIdFromUrl === "function"
       ? siteUtils.getPostIdFromUrl
@@ -51,11 +47,36 @@
     let activeNavigationController = null;
     const loadedStylesheets = new Set();
     const MAX_PAGE_CACHE_ENTRIES = 6;
+    const MAX_PAGE_CACHE_BYTES = 2 * 1024 * 1024;
+    const MAX_PER_ENTRY_CACHE_BYTES = 1 * 1024 * 1024;
     const MAX_PENDING_PAGE_FETCHES = 4;
     const PAGE_CACHE_TTL_MS = 1000 * 60 * 5;
     const pageCache = new Map();
+    let pageCacheTotalBytes = 0;
     const prefetched = new Map();
     const pendingPageFetches = new Map();
+
+    function estimateHtmlByteSize(html) {
+      // JS strings are UTF-16 in memory; the byte estimate is conservative for
+      // UTF-8 wire size but close enough for cache budgeting.
+      return typeof html === "string" ? html.length * 2 : 0;
+    }
+
+    function dropCacheEntry(cacheKey) {
+      const entry = pageCache.get(cacheKey);
+      if (!entry) return;
+      pageCache.delete(cacheKey);
+      prefetched.delete(cacheKey);
+      pageCacheTotalBytes -= entry.byteSize || 0;
+      if (pageCacheTotalBytes < 0) pageCacheTotalBytes = 0;
+    }
+
+    function evictOldestCacheEntry() {
+      const oldestCacheKey = pageCache.keys().next().value;
+      if (!oldestCacheKey) return false;
+      dropCacheEntry(oldestCacheKey);
+      return true;
+    }
 
     function canWarmResources() {
       return !(connectionInfo?.saveData || /(^|-)2g$/.test(connectionInfo?.effectiveType || ""));
@@ -145,19 +166,27 @@
     }
 
     function rememberPageHtml(cacheKey, html) {
-      if (pageCache.has(cacheKey)) {
-        pageCache.delete(cacheKey);
+      const byteSize = estimateHtmlByteSize(html);
+      if (byteSize > MAX_PER_ENTRY_CACHE_BYTES) {
+        // Outsized payloads bypass the cache entirely; storing one would push
+        // every smaller entry out and we would replay this fetch anyway.
+        dropCacheEntry(cacheKey);
+        return;
       }
+
+      dropCacheEntry(cacheKey);
       pageCache.set(cacheKey, {
         html,
         cachedAt: Date.now(),
+        byteSize,
       });
+      pageCacheTotalBytes += byteSize;
 
-      while (pageCache.size > MAX_PAGE_CACHE_ENTRIES) {
-        const oldestCacheKey = pageCache.keys().next().value;
-        if (!oldestCacheKey) break;
-        pageCache.delete(oldestCacheKey);
-        prefetched.delete(oldestCacheKey);
+      while (
+        pageCache.size > MAX_PAGE_CACHE_ENTRIES
+        || pageCacheTotalBytes > MAX_PAGE_CACHE_BYTES
+      ) {
+        if (!evictOldestCacheEntry()) break;
       }
     }
 
@@ -170,8 +199,7 @@
         !Number.isFinite(entry.cachedAt) ||
         Date.now() - entry.cachedAt >= PAGE_CACHE_TTL_MS
       ) {
-        pageCache.delete(cacheKey);
-        prefetched.delete(cacheKey);
+        dropCacheEntry(cacheKey);
         return null;
       }
 
@@ -249,8 +277,7 @@
       const cacheKey = getPageCacheKey(routeKey);
       const canCacheHtml = isRouteHtmlCacheable(routeKey);
       if (!canCacheHtml) {
-        pageCache.delete(cacheKey);
-        prefetched.delete(cacheKey);
+        dropCacheEntry(cacheKey);
       }
 
       const cachedHtml = canCacheHtml ? readPageHtmlFromCache(cacheKey) : null;
@@ -383,12 +410,12 @@
         const extStylesheets = doc.querySelectorAll(
           'link[rel="stylesheet"][href]:not([href*="style.css"])',
         );
-        for (const link of extStylesheets) {
-          const styleHref = link.getAttribute("href");
-          if (styleHref) {
-            await ensureStylesheet(styleHref);
-          }
-        }
+        await Promise.all(
+          Array.from(extStylesheets, (link) => {
+            const styleHref = link.getAttribute("href");
+            return styleHref ? ensureStylesheet(styleHref) : null;
+          }),
+        );
         if (currentToken !== navigationToken) return;
 
         const pageLoader = window.PageLoaders?.[targetPageId];

@@ -557,7 +557,7 @@ expectIncludes(blogPageCss, "pointer-events: none;\n}", "blog card cover media s
 expectIncludes(blogPageCss, "z-index: 3;\n  display: inline-flex;", "blog card bookmark button should stay above the card link layer");
 expectIncludes(commonJs, "DESKTOP_PARTICLE_COUNT = 350", "particle runtime should preserve the desktop particle density");
 expectNotIncludes(commonJs, "MOBILE_PARTICLE_COUNT", "particle runtime should not keep a mobile particle profile after disabling mobile particles");
-expectIncludes(commonJs, "return isMobileParticleViewport();", "particle runtime should disable particles on all real mobile pages");
+expectIncludes(commonJs, "const isMobile = isMobileParticleViewport();", "particle runtime should gate the mobile particle count from the shared real-mobile detector");
 expectIncludes(commonJs, "count: isMobile ? 0 : DESKTOP_PARTICLE_COUNT", "particle runtime should keep particles desktop-only");
 expectIncludes(commonJs, "siteUtils.isMobileDeviceViewport", "particle runtime should use the shared real-mobile gate before changing density");
 expectIncludes(commonJs, '(hover: none) and (pointer: coarse)', "particle fallback should avoid treating narrow desktop windows as mobile");
@@ -645,8 +645,10 @@ expectNotIncludes(releaseCheckWorkflowYml, "node-version: [18, 20, 22]", "releas
 expectIncludes(releaseCheckWorkflowYml, "node-version: ${{ matrix.node-version }}", "release workflow should use the Node matrix value");
 expectNotIncludes(releaseCheckWorkflowYml, 'node-version: "20"', "release workflow should not pin checks to Node 20 only");
 expectNotIncludes(releaseCheckWorkflowYml, "master", "release workflow should not keep a dead master branch trigger");
-expectIncludes(localServerJs, "await loadDotEnvFile();", "local server should load .env before reading runtime configuration");
-expectIncludes(localServerJs, "Object.prototype.hasOwnProperty.call(process.env, parsed.key)", "local server should not override shell-provided environment variables with .env values");
+expectIncludes(localServerJs, 'await loadDotEnvFile(path.join(rootDir, ".env"));', "local server should load .env before reading runtime configuration");
+expectIncludes(localServerJs, 'import { loadDotEnvFile } from "./lib/dotenv.mjs";', "local server should delegate .env parsing to the shared helper");
+const dotenvHelperJs = read("scripts/lib/dotenv.mjs");
+expectIncludes(dotenvHelperJs, "Object.prototype.hasOwnProperty.call(env, key)", "shared dotenv helper should not override shell-provided environment variables with .env values");
 expectIncludes(localServerJs, '["/api/robots", "../api/robots.js"]', "local server should expose the dynamic robots handler");
 expectIncludes(localServerJs, "function getApiHandler", "local server should lazy-load API handlers by route");
 expectNotIncludes(localServerJs, '["/api/post", require("../api/post.js")]', "local server should not eager-load every API handler at startup");
@@ -1693,6 +1695,9 @@ expectIncludes(apiPostJs, "applyHtmlSecurityHeaders", "article HTML route should
 expectIncludes(apiPostJs, "replaceContentSecurityPolicyMeta", "article HTML route should keep template CSP meta in sync with the response nonce");
 expectIncludes(postHtml, "<!--SSR_HEAD_META_START-->", "post template should mark the SSR-owned head metadata block explicitly");
 expectIncludes(postHtml, "<!--SSR_HEAD_META_END-->", "post template should keep a closing marker for the SSR-owned head metadata block");
+expectIncludes(postHtml, '<div id="postContent"', "post template should keep the postContent placeholder div for SSR replacement and client hydration");
+expectIncludes(postHtml, 'id="postEmpty"', "post template should keep the postEmpty container for SSR fallback rendering");
+expectIncludes(postHtml, "data-empty-link", "post empty-state should carry the data-empty-link anchor used by both SSR and client renderers");
 expectNotIncludes(apiPostJs, "script-src-elem 'self' 'unsafe-inline'", "article HTML route should not allow arbitrary inline script elements");
 expectNotIncludes(spaRouterJs, "rememberPageHtml(cacheKey, entry.html)", "SPA route cache reads should not refresh cachedAt into a sliding TTL");
 expectIncludes(spaRouterJs, "pageCache.set(cacheKey, entry)", "SPA route cache reads should only refresh LRU order while preserving cachedAt");
@@ -1880,11 +1885,24 @@ assert.equal(
 );
 
 const replacedEmptyState = apiPostHelpers.replaceEmptyStateContent(
-  '<div class="empty-state" id="postEmpty"><svg></svg><p>old</p><p class="empty-state-helper"><a class="empty-state-link" href="/old">old</a></p></div>',
+  '<div class="empty-state" id="postEmpty"><svg></svg><p>old</p><p class="empty-state-helper"><a class="empty-state-link" data-empty-link href="/old">old</a></p></div>',
   {
     message: replacementSentinel,
     linkText: replacementSentinel,
   },
+);
+const replacedEmptyStateReversedOrder = apiPostHelpers.replaceEmptyStateContent(
+  '<div class="empty-state" id="postEmpty"><svg></svg><p>old</p><p class="empty-state-helper"><a class="empty-state-link" href="/old" data-empty-link>old</a></p></div>',
+  { message: "ignored", linkText: replacementSentinel },
+);
+assert.ok(
+  replacedEmptyStateReversedOrder.includes(escapedReplacementSentinel)
+    && replacedEmptyStateReversedOrder.includes('href="/blog.html"'),
+  "empty-state replacement must tolerate href/data-empty-link in either attribute order",
+);
+assert.ok(
+  !replacedEmptyStateReversedOrder.includes('href="/old"'),
+  "empty-state replacement must rewrite the original href even when it precedes data-empty-link",
 );
 assert.equal(
   replacedEmptyState.match(new RegExp(escapeRegex(escapedReplacementSentinel), "g"))?.length,

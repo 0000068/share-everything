@@ -129,7 +129,9 @@ function normalizeStringMap(value) {
 function normalizeCategoryGradient(value, fallback = DEFAULT_COVER_GRADIENT) {
   if (typeof value !== "string") return fallback;
   const trimmed = value.trim();
-  if (/^linear-gradient\([#0-9a-zA-Z,.\s%()-]+\)$/.test(trimmed)) {
+  if (!trimmed) return fallback;
+  if (trimmed.includes(";") || /url\s*\(/i.test(trimmed)) return fallback;
+  if (/^(linear-gradient|radial-gradient)\([#0-9a-zA-Z,.\s%()-]+\)$/.test(trimmed)) {
     return trimmed;
   }
   return fallback;
@@ -365,27 +367,29 @@ function createCategoryNavigation(rawConfig = {}) {
       config.order.map((name, index) => [normalizeName(name), index]),
     );
     const featuredKey = normalizeName(config.featuredName);
-    const sortedCategoryEntries = Array.from(byKey.values())
+    const configuredLabelFor = (entry) => (
+      getConfiguredCategoryPresentation(entry.name).label || normalizeCategoryName(entry.name)
+    );
+    const sortableEntries = Array.from(byKey.values())
       .map((entry) => ({
         entry,
-        presentation: buildCategoryPresentation(entry.name, entry),
+        sortKey: normalizeName(entry.name),
+        label: configuredLabelFor(entry),
       }))
       .sort((left, right) => {
-        const leftKey = normalizeName(left.presentation.name);
-        const rightKey = normalizeName(right.presentation.name);
-        if (leftKey === featuredKey) return -1;
-        if (rightKey === featuredKey) return 1;
+        if (left.sortKey === featuredKey) return -1;
+        if (right.sortKey === featuredKey) return 1;
 
-        const leftOrder = orderLookup.has(leftKey) ? orderLookup.get(leftKey) : Number.POSITIVE_INFINITY;
-        const rightOrder = orderLookup.has(rightKey) ? orderLookup.get(rightKey) : Number.POSITIVE_INFINITY;
+        const leftOrder = orderLookup.has(left.sortKey) ? orderLookup.get(left.sortKey) : Number.POSITIVE_INFINITY;
+        const rightOrder = orderLookup.has(right.sortKey) ? orderLookup.get(right.sortKey) : Number.POSITIVE_INFINITY;
         if (leftOrder !== rightOrder) return leftOrder - rightOrder;
-        if (left.presentation.optionIndex !== right.presentation.optionIndex) {
-          return left.presentation.optionIndex - right.presentation.optionIndex;
-        }
-        return left.presentation.label.localeCompare(right.presentation.label, "zh-Hans-CN");
+        const leftIndex = Number.isFinite(left.entry.optionIndex) ? left.entry.optionIndex : Number.POSITIVE_INFINITY;
+        const rightIndex = Number.isFinite(right.entry.optionIndex) ? right.entry.optionIndex : Number.POSITIVE_INFINITY;
+        if (leftIndex !== rightIndex) return leftIndex - rightIndex;
+        return left.label.localeCompare(right.label, "zh-Hans-CN");
       });
     const usedCategoryEmojis = new Set(["\u{1f4cb}"]);
-    const categoryItems = sortedCategoryEntries.map(({ entry }) => {
+    const categoryItems = sortableEntries.map(({ entry }) => {
       const { optionIndex, ...item } = buildCategoryPresentation(entry.name, {
         ...entry,
         usedEmojis: usedCategoryEmojis,

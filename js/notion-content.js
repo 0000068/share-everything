@@ -93,7 +93,11 @@
     sanitizeUrl,
     shouldOpenLinkInNewTab,
   } = contentUrl;
-  const { createPostArticleRenderer } = articleRenderer;
+  const {
+    CALENDAR_ICON_SVG,
+    CLOCK_ICON_SVG,
+    createPostArticleRenderer,
+  } = articleRenderer;
 
   if (
     !ALL_CATEGORY ||
@@ -133,7 +137,9 @@
     typeof sanitizeCspResourceUrl !== "function" ||
     typeof sanitizeUrl !== "function" ||
     typeof shouldOpenLinkInNewTab !== "function" ||
-    typeof createPostArticleRenderer !== "function"
+    typeof createPostArticleRenderer !== "function" ||
+    typeof CALENDAR_ICON_SVG !== "string" ||
+    typeof CLOCK_ICON_SVG !== "string"
   ) {
     throw new Error("notion-content-shared.js, notion-content-utils.js, notion-content-url.js, and notion-article-renderer.js must load before notion-content.js");
   }
@@ -324,6 +330,14 @@
     Bmatrix: ["{", "}"],
     vmatrix: ["|", "|"],
     Vmatrix: ["‖", "‖"],
+  });
+  const LATEX_MATH_VARIANTS = Object.freeze({
+    mathbb: "double-struck",
+    mathcal: "script",
+    mathfrak: "fraktur",
+    mathbf: "bold",
+    mathsf: "sans-serif",
+    mathtt: "monospace",
   });
   const MAX_LATEX_PARSE_DEPTH = 32;
 
@@ -519,6 +533,25 @@
 
     if (command === "mathrm" || command === "operatorname") {
       return createMathIdentifier(readRawLatexGroup(state), ' mathvariant="normal"');
+    }
+
+    if (LATEX_MATH_VARIANTS[command]) {
+      return createMathIdentifier(
+        readRawLatexGroup(state),
+        ` mathvariant="${LATEX_MATH_VARIANTS[command]}"`,
+      );
+    }
+
+    if (command === "overline") {
+      return `<mover accent="true">${parseLatexRequiredArgument(state)}<mo stretchy="true">‾</mo></mover>`;
+    }
+
+    if (command === "underline") {
+      return `<munder accentunder="true">${parseLatexRequiredArgument(state)}<mo stretchy="true">_</mo></munder>`;
+    }
+
+    if (command === "boxed") {
+      return `<menclose notation="box">${parseLatexRequiredArgument(state)}</menclose>`;
     }
 
     if (command === "begin") {
@@ -1217,6 +1250,8 @@
     ALL_CATEGORY,
     BOOKMARK_CATEGORY,
     BOOKMARK_ONLY_CATEGORIES,
+    CALENDAR_ICON_SVG,
+    CLOCK_ICON_SVG,
     DEFAULT_CATEGORY_COLOR,
     DEFAULT_COVER_GRADIENT,
     DEFAULT_NOTION_CONTENT_PROPERTY_CANDIDATES,

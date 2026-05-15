@@ -1,3 +1,10 @@
+// This file is the public compatibility surface for `api/*` and the smoke-check
+// harness. Several `require` destructures below pull symbols that are NOT
+// re-exported below — they are used by `loadCommonJsModule(.., [list])` in
+// scripts/smoke-check.mjs and scripts/smoke-check/* to bind closure-internal
+// helpers for testing. Do not delete unused imports as "dead code"; the harness
+// loses access to them, and the smoke suite fails opaquely.
+
 const {
   buildArticleStructuredData,
   buildPostUrl,

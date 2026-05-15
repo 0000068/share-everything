@@ -2,6 +2,24 @@
 
 All notable changes to this project are tracked here.
 
+## 5.9.0 - 2026-05-15
+
+- Completed the mobile home centered glow restoration that v5.8 only delivered for the `@media` block: SVG `centerGlow` opacities `0.32/0.20` → `0.55/0.32` with the inner stop recolored toward `#3e7bcf`, radius 54% → 60%, focal point cy 59% → 56%; CSS `.hero-section::after` size 360px → 480px, opacities `0.10/0.045` → `0.24/0.11`, top 56% → 54%, now applied in both the `@media (max-width: 768px) and (hover: none) and (pointer: coarse)` block and the `html.is-mobile-device-viewport` fallback block.
+- Bumped the static CSS/JS/SVG cache key to `20260515-v59` so deployed clients fetch the synchronized glow without serving the half-fixed v5.8 visual through the `stale-while-revalidate` window.
+- Removed dead browser-API paths: `navigator.mozConnection` / `webkitConnection`, `nav.msMaxTouchPoints`, the `shouldDisableMobileParticles` wrapper, `particleProfile.disabled` (always equal to `isMobile`), `window.initBlogCardReveal` legacy alias, and the `ParticleCtor` synonym.
+- Collapsed wrapper-only functions to `const` aliases: `js/site-utils.js` `resolveDisplayImageUrl` → `sanitizeImageUrl`, `js/notion-content-url.js` `resolveProxiedDisplayImageUrl` → `buildImageProxyUrl`.
+- Rewrote `js/blog-page.js` `resolveSafeCoverImage` from a broken-indent triple ternary to a 2-tier explicit-if chain.
+- Reorganized `js/ui-effects.js` to expose `window.UIEffects.initBlogCardReveal` in line with the other namespaced runtime modules.
+- SSR template contract hardened: `post.html` carries a `data-empty-link` anchor on the empty-state link; `api/post.js` empty-state replacement is attribute-order tolerant; smoke check asserts the postContent placeholder, postEmpty container, and data-empty-link anchor must exist.
+- Extended LaTeX coverage to `\mathbb`, `\mathcal`, `\mathfrak`, `\mathbf`, `\mathsf`, `\mathtt`, `\overline`, `\underline`, `\boxed`.
+- Fixed service-layer consistency: `server/category-navigation.js` `normalizeCategoryGradient` now accepts `radial-gradient` (matching the client side) and rejects `;` / `url()`; `server/post-service.js` `queryPublicPosts` paginates before decorating; `buildPublicCategories` splits sort and presentation phases instead of building the presentation twice.
+- Hardened cache eviction: `js/spa-router.js` `pageCache` adds `MAX_PAGE_CACHE_BYTES=2MB` total + `MAX_PER_ENTRY_CACHE_BYTES=1MB` per-entry size caps with `dropCacheEntry` / `evictOldestCacheEntry` accounting helpers.
+- New `scripts/lib/dotenv.mjs` shared parser replaces the duplicated `.env` loaders in `scripts/local-server.mjs` and `scripts/notion-live-check.mjs`.
+- `scripts/smoke-check/mobile-layout.mjs` enforces `.hero-section::after` parity (width/height/top/background) between the two mobile blocks and locks the v5.9 brightened opacity.
+- Notion icon SVGs (calendar, clock) extracted as `CALENDAR_ICON_SVG` / `CLOCK_ICON_SVG` constants on the shared content module and re-used by both blog cards and article meta rendering.
+- Documentation refreshed: `SITE_ARCHITECTURE.md` cache table splits `/api/posts-data` (s-maxage=60), `/api/post-data` (no-store), `/api/sitemap` (s-maxage=300), `/api/robots` (s-maxage=3600) into separate rows and explains the vercel.json header-stacking behavior; `FIX_TODO.md` rewritten to reflect "all 39+4 items landed" with 4 architectural backlog items carried forward.
+- Synchronized `package.json`, README badge, `SITE_ARCHITECTURE.md`, `CHANGELOG.md`, and the asset cache suffix with the `v5.9` release commit convention.
+
 ## 5.7.0 - 2026-05-15
 
 - Rebuilt the mobile home background as a static starfield SVG so it visually restores the richer particle-era look without running the mobile canvas animation.

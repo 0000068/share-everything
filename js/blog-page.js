@@ -394,13 +394,14 @@
     }
 
     function resolveSafeCoverImage(post) {
-      return typeof siteUtils.resolveProxiedDisplayImageUrl === "function"
-        ? siteUtils.resolveProxiedDisplayImageUrl(post?.coverImage)
-        : typeof siteUtils.resolveDisplayImageUrl === "function"
-          ? siteUtils.resolveDisplayImageUrl(post?.coverImage)
-        : typeof siteUtils.sanitizeImageUrl === "function"
-          ? siteUtils.sanitizeImageUrl(post?.coverImage)
-          : null;
+      const candidate = post?.coverImage;
+      if (typeof siteUtils.resolveProxiedDisplayImageUrl === "function") {
+        return siteUtils.resolveProxiedDisplayImageUrl(candidate);
+      }
+      if (typeof siteUtils.sanitizeImageUrl === "function") {
+        return siteUtils.sanitizeImageUrl(candidate);
+      }
+      return null;
     }
 
     function preloadCoverImages(posts = []) {
@@ -466,7 +467,7 @@
 
       revealFrame = window.requestAnimationFrame(() => {
         revealFrame = null;
-        cleanupCardReveal = window.initBlogCardReveal?.() || null;
+        cleanupCardReveal = window.UIEffects?.initBlogCardReveal?.() || null;
       });
     }
 
@@ -547,17 +548,17 @@
         return false;
       }
 
-      const previousSignature = JSON.stringify(categories.map((category) => [
-        category.name,
-        category.label,
-        category.emoji,
-      ]));
-      const nextSignature = JSON.stringify(normalizedCategories.map((category) => [
-        category.name,
-        category.label,
-        category.emoji,
-      ]));
-      if (previousSignature === nextSignature) {
+      const categoriesEqual =
+        normalizedCategories.length === categories.length &&
+        normalizedCategories.every((next, index) => {
+          const previous = categories[index];
+          return (
+            previous?.name === next.name &&
+            previous?.label === next.label &&
+            previous?.emoji === next.emoji
+          );
+        });
+      if (categoriesEqual) {
         return false;
       }
 
@@ -652,29 +653,11 @@
       const metaItems = [];
 
       if (post.date) {
-        metaItems.push(`
-              <span>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                  <line x1="16" y1="2" x2="16" y2="6"></line>
-                  <line x1="8" y1="2" x2="8" y2="6"></line>
-                  <line x1="3" y1="10" x2="21" y2="10"></line>
-                </svg>
-                ${esc(post.date)}
-              </span>
-        `);
+        metaItems.push(`<span>${SHARED_CONTENT.CALENDAR_ICON_SVG}${esc(post.date)}</span>`);
       }
 
       if (post.readTime) {
-        metaItems.push(`
-              <span>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <polyline points="12 6 12 12 16 14"></polyline>
-                </svg>
-                ${esc(post.readTime)}
-              </span>
-        `);
+        metaItems.push(`<span>${SHARED_CONTENT.CLOCK_ICON_SVG}${esc(post.readTime)}</span>`);
       }
       const coverHtml = safeCoverImage
         ? `<div class="blog-card-cover-placeholder blog-card-cover-img" data-cover-gradient="${esc(safeCoverGradient)}" data-cover-emoji="${safeCoverEmoji}" style="background: ${DEFAULT_COVER_GRADIENT}">
@@ -932,6 +915,9 @@
       announceStatus(nowBookmarked ? `已收藏文章：${postTitle}。` : `已取消收藏文章：${postTitle}。`);
 
       if (!nowBookmarked && isBookmarkView()) {
+        // Delay the re-render so the bounce animation (260ms) finishes before
+        // the card is removed from the grid; otherwise users see a jarring
+        // cut while their finger is still on the button.
         setTimeout(() => renderPosts(), 300);
       }
     }

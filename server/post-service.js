@@ -203,8 +203,8 @@ function filterPostsBySearch(posts, search) {
       return post._searchText.includes(normalizedSearch);
     }
 
-    if (typeof post !== "object" || post == null) {
-      return buildPostSearchText(post).includes(normalizedSearch);
+    if (!post || typeof post !== "object") {
+      return false;
     }
 
     let searchText = postSearchTextCache.get(post);
@@ -359,19 +359,21 @@ async function queryPublicPosts({
     schema: metadata.contentSchema,
     posts: Array.isArray(cachedSummaries) ? cachedSummaries : results,
   });
-  const decoratedResults = results.map((post) => decoratePostSummary(post, categoryOptionLookup));
 
   const safePageSize = Math.max(
     1,
     Math.min(normalizePositiveInteger(pageSize, DEFAULT_POST_PAGE_SIZE), 100),
   );
-  const total = decoratedResults.length;
+  const total = results.length;
   const totalPages = Math.max(1, Math.ceil(total / safePageSize));
   const currentPage = Math.max(1, Math.min(normalizePositiveInteger(page, 1), totalPages));
   const sliceStart = (currentPage - 1) * safePageSize;
+  const pageResults = results
+    .slice(sliceStart, sliceStart + safePageSize)
+    .map((post) => decoratePostSummary(post, categoryOptionLookup));
 
   return {
-    results: decoratedResults.slice(sliceStart, sliceStart + safePageSize),
+    results: pageResults,
     total,
     totalPages,
     currentPage,

@@ -67,9 +67,8 @@
     return proxyUrl.href;
   }
 
-  function resolveProxiedDisplayImageUrl(candidate, baseOrigin) {
-    return buildImageProxyUrl(candidate, baseOrigin);
-  }
+  // Public alias matching the higher-level "display image" terminology used by callers.
+  const resolveProxiedDisplayImageUrl = buildImageProxyUrl;
 
   function shouldOpenLinkInNewTab(href, baseOrigin) {
     try {

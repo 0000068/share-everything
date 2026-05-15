@@ -1,42 +1,11 @@
-import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadDotEnvFile } from "./lib/dotenv.mjs";
 
 const require = createRequire(import.meta.url);
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const strict = process.env.NOTION_LIVE_STRICT === "1";
-
-function loadDotEnvIfPresent() {
-  const envPath = path.join(rootDir, ".env");
-  if (!existsSync(envPath)) {
-    return false;
-  }
-
-  const source = readFileSync(envPath, "utf8");
-  source.split(/\r?\n/).forEach((line) => {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) return;
-
-    const equalsIndex = trimmed.indexOf("=");
-    if (equalsIndex <= 0) return;
-
-    const key = trimmed.slice(0, equalsIndex).trim();
-    let value = trimmed.slice(equalsIndex + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-
-    if (key && process.env[key] == null) {
-      process.env[key] = value;
-    }
-  });
-
-  return true;
-}
 
 function failOrSkip(message) {
   if (strict) {
@@ -65,7 +34,7 @@ function summarizeError(error) {
   };
 }
 
-loadDotEnvIfPresent();
+await loadDotEnvFile(path.join(rootDir, ".env"));
 
 if (!process.env.NOTION_TOKEN || !process.env.NOTION_DATABASE_ID) {
   failOrSkip("Notion live check requires NOTION_TOKEN and NOTION_DATABASE_ID.");

@@ -675,7 +675,7 @@ body.has-cursor-glow .cursor-glow {
 
   .ambient-background {
     background-color: #0b1021;
-    background-image: url("/assets/mobile-home-starry-bg.svg?v=20260515-r2-v57");
+    background-image: url("/assets/mobile-home-starry-bg.svg?v=20260515-v59");
     background-position: center top;
     background-repeat: no-repeat;
     background-size: cover;
@@ -727,15 +727,15 @@ body.has-cursor-glow .cursor-glow {
     content: "";
     position: absolute;
     left: 50%;
-    top: 56%;
+    top: 54%;
     transform: translate(-50%, -50%);
-    width: 360px;
-    height: 360px;
+    width: 480px;
+    height: 480px;
     border-radius: 50%;
     background: radial-gradient(
       circle,
-      rgba(73, 145, 255, 0.1) 0%,
-      rgba(24, 238, 255, 0.045) 34%,
+      rgba(73, 145, 255, 0.24) 0%,
+      rgba(24, 238, 255, 0.11) 34%,
       transparent 70%
     );
     pointer-events: none;
@@ -1074,13 +1074,23 @@ html.is-mobile-device-viewport {
   background-color: #0a0e1a;
 }
 
+/* ------------------------------------------------------------------------
+ * Mobile fallback block — paired with the `@media (max-width: 768px) and
+ * (hover: none) and (pointer: coarse)` rules above. The fallback class is
+ * toggled from js/site-utils.js when narrow viewport + touch capability are
+ * both detected, so Android browsers that misreport `(hover: none)` still
+ * receive the mobile layout. Any rule changed in the media query above MUST
+ * be mirrored here (and vice versa); the smoke-check `mobile-layout.mjs`
+ * suite enforces parity for the hero contract. Do not collapse these into a
+ * single block until the supported Android matrix has been re-verified.
+ * ------------------------------------------------------------------------ */
 html.is-mobile-device-viewport body {
   background-color: #0a0e1a;
 }
 
 html.is-mobile-device-viewport .ambient-background {
   background-color: #0b1021;
-  background-image: url("/assets/mobile-home-starry-bg.svg?v=20260515-r2-v57");
+  background-image: url("/assets/mobile-home-starry-bg.svg?v=20260515-v59");
   background-position: center top;
   background-repeat: no-repeat;
   background-size: cover;
@@ -1132,15 +1142,15 @@ html.is-mobile-device-viewport .hero-section::after {
   content: "";
   position: absolute;
   left: 50%;
-  top: 56%;
+  top: 54%;
   transform: translate(-50%, -50%);
-  width: 360px;
-  height: 360px;
+  width: 480px;
+  height: 480px;
   border-radius: 50%;
   background: radial-gradient(
     circle,
-    rgba(73, 145, 255, 0.1) 0%,
-    rgba(24, 238, 255, 0.045) 34%,
+    rgba(73, 145, 255, 0.24) 0%,
+    rgba(24, 238, 255, 0.11) 34%,
     transparent 70%
   );
   pointer-events: none;

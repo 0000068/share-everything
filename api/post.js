@@ -253,8 +253,12 @@ function replaceEmptyStateContent(html, { message, linkText = "返回博客列�
   );
 
   nextHtml = nextHtml.replace(
-    /(<div class="empty-state" id="postEmpty"[^>]*>[\s\S]*?<p class="empty-state-helper">\s*<a class="empty-state-link" href=")[^"]*("[^>]*>)[\s\S]*?(<\/a>)/,
-    (matched, prefix, middle, suffix) => `${prefix}/blog.html${middle}${escapeHtml(linkText)}${suffix}`,
+    /(<div class="empty-state" id="postEmpty"[^>]*>[\s\S]*?<p class="empty-state-helper">\s*)<a([^>]*\bdata-empty-link\b[^>]*)>[\s\S]*?<\/a>/,
+    (matched, prefix, attrs) => {
+      const cleanedAttrs = attrs.replace(/\s+href\s*=\s*"[^"]*"/i, "");
+      const safeAttrs = cleanedAttrs.endsWith(" ") ? cleanedAttrs : `${cleanedAttrs} `;
+      return `${prefix}<a${safeAttrs}href="/blog.html">${escapeHtml(linkText)}</a>`;
+    },
   );
 
   return nextHtml;

@@ -219,7 +219,7 @@
     function showEmpty(kind = "not-found") {
       const emptyState = getEmptySeoState(kind);
       const emptyMessage = emptyEl.querySelector("p");
-      const emptyLink = emptyEl.querySelector('a[href="/blog.html"]');
+      const emptyLink = emptyEl.querySelector("[data-empty-link]");
 
       skeletonEl.style.display = "none";
       contentEl.style.display = "none";
@@ -284,6 +284,18 @@
       });
     }
 
+    function disposePostPage({ clearStructuredData = false } = {}) {
+      isDisposed = true;
+      cleanupBookmarkHandlers();
+      cleanupBookmarkUpdates();
+      cleanupBackHandler();
+      clearStatusAnnouncement();
+      if (statusEl) statusEl.textContent = "";
+      if (clearStructuredData) {
+        window.StructuredData?.clear?.("post-article");
+      }
+    }
+
     if (!notionApi) {
       console.warn("NotionAPI is unavailable on post page.");
       initBackButton();
@@ -306,13 +318,7 @@
         showEmpty("unavailable");
       }
 
-      return () => {
-        cleanupBookmarkHandlers();
-        cleanupBookmarkUpdates();
-        cleanupBackHandler();
-        clearStatusAnnouncement();
-        if (statusEl) statusEl.textContent = "";
-      };
+      return () => disposePostPage();
     }
 
     async function loadPost() {
@@ -351,7 +357,7 @@
             title,
             description,
             url: canonicalUrl,
-            canonicalUrl: canonicalUrl,
+            canonicalUrl,
             ogImage: structuredDataImage,
             ogImageAlt: post.title,
             ogType: "article",
@@ -377,7 +383,7 @@
         contentEl.style.animation = shouldReuseServerMarkup ? "" : "fadeInUp 0.6s ease both";
         if (buildArticleStructuredData) {
           window.StructuredData?.set?.("post-article", buildArticleStructuredData(post, {
-            canonicalUrl: canonicalUrl,
+            canonicalUrl,
             defaultShareImageUrl,
             imageUrl: structuredDataImage,
           }));
@@ -407,15 +413,7 @@
     initBackButton();
     loadPost();
 
-    return () => {
-      isDisposed = true;
-      cleanupBookmarkHandlers();
-      cleanupBookmarkUpdates();
-      cleanupBackHandler();
-      clearStatusAnnouncement();
-      if (statusEl) statusEl.textContent = "";
-      window.StructuredData?.clear?.("post-article");
-    };
+    return () => disposePostPage({ clearStructuredData: true });
   }
 
   window.PageRuntime?.register("post", {

@@ -82,6 +82,12 @@ function normalizeSiteOrigin(value, fallback = SAFE_FALLBACK_SITE_ORIGIN) {
   }
 }
 
+// `pendingResolvers` has no explicit cap because every caller bounds total
+// enqueued work through an upstream budget — block-service caps recursive
+// block fetches at `NOTION_BLOCK_TOTAL_LIMIT` (default 2000) per post, and
+// no other call sites use this limiter. If a new caller is added, ensure it
+// either operates inside a similar total-work budget or wrap this with a
+// queue-depth check before enqueueing more tasks.
 function createAsyncLimiter(limit) {
   const safeLimit = Math.max(1, Math.trunc(normalizePositiveNumber(limit, 1)));
   let activeCount = 0;

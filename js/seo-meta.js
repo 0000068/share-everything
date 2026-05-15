@@ -118,21 +118,20 @@
     return resolvedUrl.href;
   }
 
+  const initialDescription = document.querySelector('meta[name="description"]')?.content;
+  const initialCanonicalHref = document.querySelector('link[rel="canonical"]')?.href;
   const initialOgUrl =
     document.querySelector('meta[property="og:url"]')?.content ||
-    document.querySelector('link[rel="canonical"]')?.href ||
+    initialCanonicalHref ||
     getUrlWithoutTrackingQuery(window.location.href);
-  const initialCanonicalUrl =
-    document.querySelector('link[rel="canonical"]')?.href ||
-    initialOgUrl;
+  const initialCanonicalUrl = initialCanonicalHref || initialOgUrl;
 
   updateSeoMeta({
     title: document.title,
-    description: document.querySelector('meta[name="description"]')?.content,
+    description: initialDescription,
     ogTitle: document.querySelector('meta[property="og:title"]')?.content || document.title,
     ogDescription:
-      document.querySelector('meta[property="og:description"]')?.content ||
-      document.querySelector('meta[name="description"]')?.content,
+      document.querySelector('meta[property="og:description"]')?.content || initialDescription,
     ogImage: document.querySelector('meta[property="og:image"]')?.content || DEFAULT_OG_IMAGE_URL,
     ogImageAlt:
       document.querySelector('meta[property="og:image:alt"]')?.content || DEFAULT_OG_IMAGE_ALT,

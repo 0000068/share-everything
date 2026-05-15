@@ -266,6 +266,27 @@ export function runMobileLayoutChecks(context) {
     "letter-spacing": "0",
   }, "narrow mobile fallback home");
 
+  const heroGlowContract = {
+    "width": "480px",
+    "height": "480px",
+    "top": "54%",
+    "border-radius": "50%",
+  };
+  expectDeclarations(assert, realMobileStyle, ".hero-section::after", heroGlowContract, "real-mobile hero glow");
+  expectDeclarations(assert, mobileFallbackStyle, "html.is-mobile-device-viewport .hero-section::after", heroGlowContract, "mobile fallback hero glow");
+  const heroGlowBackgroundRealMobile = readRuleDeclarations(realMobileStyle, ".hero-section::after").get("background") || "";
+  const heroGlowBackgroundMobileFallback = readRuleDeclarations(mobileFallbackStyle, "html.is-mobile-device-viewport .hero-section::after").get("background") || "";
+  assert.equal(
+    heroGlowBackgroundRealMobile,
+    heroGlowBackgroundMobileFallback,
+    "mobile hero glow background must match between the media query and the is-mobile-device-viewport fallback",
+  );
+  assert.match(
+    heroGlowBackgroundRealMobile,
+    /rgba\(73,\s*145,\s*255,\s*0\.24\)/,
+    "mobile hero glow inner stop should keep the v5.8 brightened opacity",
+  );
+
   expectBlogCardMobileContract(assert, realMobileBlog, "real-mobile blog cards", "30px");
   expectBlogCardMobileContract(assert, mobileFallbackBlog, "mobile fallback blog cards", "28px");
   expectDeclarations(assert, narrowMobileBlog, ".blog-card-body", {

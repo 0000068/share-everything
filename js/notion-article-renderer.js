@@ -7,6 +7,19 @@
     root.NotionArticleRenderer = exported;
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, () => {
+  const CALENDAR_ICON_SVG =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    + '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>'
+    + '<line x1="16" y1="2" x2="16" y2="6"></line>'
+    + '<line x1="8" y1="2" x2="8" y2="6"></line>'
+    + '<line x1="3" y1="10" x2="21" y2="10"></line>'
+    + "</svg>";
+  const CLOCK_ICON_SVG =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    + '<circle cx="12" cy="12" r="10"></circle>'
+    + '<polyline points="12 6 12 12 16 14"></polyline>'
+    + "</svg>";
+
   function createPostArticleRenderer({
     DEFAULT_CATEGORY_COLOR,
     escapeHtml,
@@ -48,29 +61,11 @@
         : renderBlocks(Array.isArray(post?.content) ? post.content : [], { baseOrigin });
 
       if (date) {
-        metaItems.push(`
-              <span>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                  <line x1="16" y1="2" x2="16" y2="6"></line>
-                  <line x1="8" y1="2" x2="8" y2="6"></line>
-                  <line x1="3" y1="10" x2="21" y2="10"></line>
-                </svg>
-                ${escapeHtml(date)}
-              </span>
-      `);
+        metaItems.push(`<span>${CALENDAR_ICON_SVG}${escapeHtml(date)}</span>`);
       }
 
       if (readTime) {
-        metaItems.push(`
-              <span>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <polyline points="12 6 12 12 16 14"></polyline>
-                </svg>
-                ${escapeHtml(readTime)}
-              </span>
-      `);
+        metaItems.push(`<span>${CLOCK_ICON_SVG}${escapeHtml(readTime)}</span>`);
       }
 
       const tagHtml = renderPostTags(post?.tags);
@@ -112,6 +107,8 @@
   }
 
   return Object.freeze({
+    CALENDAR_ICON_SVG,
+    CLOCK_ICON_SVG,
     createPostArticleRenderer,
   });
 });

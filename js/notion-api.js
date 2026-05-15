@@ -157,7 +157,9 @@
     function removeCacheEntry(key) {
       try {
         sessionStorage.removeItem(key);
-      } catch (error) {}
+      } catch (error) {
+        console.debug("Notion summary cache entry removal failed:", error);
+      }
     }
 
     function collectPostSummaryCacheEntries(excludeKey) {
@@ -511,7 +513,9 @@
               if (typeof parsedDetail?.notionCode === "string" && parsedDetail.notionCode) {
                 notionCode = parsedDetail.notionCode;
               }
-            } catch (error) {}
+            } catch (error) {
+              console.debug("Failed to parse Notion API error body as JSON:", error);
+            }
           }
 
           throw createRequestError(`Notion API error: ${response.status}${detail ? ` ${detail}` : ""}`, {
