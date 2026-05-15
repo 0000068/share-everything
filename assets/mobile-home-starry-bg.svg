@@ -1,27 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice">
   <defs>
-    <radialGradient id="centerGlow" cx="50%" cy="58%" r="56%">
-      <stop offset="0" stop-color="#315fae" stop-opacity=".34"/>
-      <stop offset=".34" stop-color="#203866" stop-opacity=".22"/>
+    <radialGradient id="centerGlow" cx="50%" cy="59%" r="54%">
+      <stop offset="0" stop-color="#315fae" stop-opacity=".32"/>
+      <stop offset=".36" stop-color="#203866" stop-opacity=".2"/>
       <stop offset=".72" stop-color="#101529" stop-opacity="0"/>
     </radialGradient>
-    <radialGradient id="topWash" cx="4%" cy="0" r="56%">
-      <stop offset="0" stop-color="#0a7182" stop-opacity=".48"/>
-      <stop offset=".38" stop-color="#123450" stop-opacity=".23"/>
-      <stop offset="1" stop-color="#101529" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="lowerViolet" cx="92%" cy="86%" r="46%">
-      <stop offset="0" stop-color="#4d2b72" stop-opacity=".18"/>
+    <radialGradient id="lowerViolet" cx="94%" cy="88%" r="42%">
+      <stop offset="0" stop-color="#4d2b72" stop-opacity=".16"/>
       <stop offset="1" stop-color="#101529" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="base" x1="0" x2="0" y1="0" y2="1">
-      <stop offset="0" stop-color="#12162b"/>
-      <stop offset=".52" stop-color="#121934"/>
+      <stop offset="0" stop-color="#14172d"/>
+      <stop offset=".52" stop-color="#11172f"/>
       <stop offset="1" stop-color="#090d1c"/>
     </linearGradient>
   </defs>
   <rect width="390" height="844" fill="url(#base)"/>
-  <rect width="390" height="844" fill="url(#topWash)"/>
   <rect width="390" height="844" fill="url(#centerGlow)"/>
   <rect width="390" height="844" fill="url(#lowerViolet)"/>
   <g opacity=".86">

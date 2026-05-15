@@ -675,7 +675,7 @@ body.has-cursor-glow .cursor-glow {
 
   .ambient-background {
     background-color: #0b1021;
-    background-image: url("/assets/mobile-home-starry-bg.svg?v=20260515-v57");
+    background-image: url("/assets/mobile-home-starry-bg.svg?v=20260515-r2-v57");
     background-position: center top;
     background-repeat: no-repeat;
     background-size: cover;
@@ -704,7 +704,7 @@ body.has-cursor-glow .cursor-glow {
     word-break: normal;
     position: relative;
     top: 0;
-    font-size: 2.5rem;
+    font-size: 2.44rem;
     line-height: 1;
     letter-spacing: 0;
     background: linear-gradient(
@@ -727,15 +727,15 @@ body.has-cursor-glow .cursor-glow {
     content: "";
     position: absolute;
     left: 50%;
-    top: 55%;
+    top: 56%;
     transform: translate(-50%, -50%);
     width: 360px;
     height: 360px;
     border-radius: 50%;
     background: radial-gradient(
       circle,
-      rgba(73, 145, 255, 0.12) 0%,
-      rgba(24, 238, 255, 0.06) 34%,
+      rgba(73, 145, 255, 0.1) 0%,
+      rgba(24, 238, 255, 0.045) 34%,
       transparent 70%
     );
     pointer-events: none;
@@ -937,13 +937,13 @@ body.has-cursor-glow .cursor-glow {
 
   .hero-section {
     width: 100%;
-    padding-top: clamp(150px, 21svh, 184px);
+    padding-top: clamp(168px, 24svh, 205px);
     gap: 12px;
   }
 
   .hero-title {
     top: 0;
-    font-size: 2.5rem;
+    font-size: 2.44rem;
     letter-spacing: 0;
   }
 
@@ -1080,7 +1080,7 @@ html.is-mobile-device-viewport body {
 
 html.is-mobile-device-viewport .ambient-background {
   background-color: #0b1021;
-  background-image: url("/assets/mobile-home-starry-bg.svg?v=20260515-v57");
+  background-image: url("/assets/mobile-home-starry-bg.svg?v=20260515-r2-v57");
   background-position: center top;
   background-repeat: no-repeat;
   background-size: cover;
@@ -1109,7 +1109,7 @@ html.is-mobile-device-viewport .hero-title {
   word-break: normal;
   position: relative;
   top: 0;
-  font-size: 2.5rem;
+  font-size: 2.44rem;
   line-height: 1;
   letter-spacing: 0;
   background: linear-gradient(
@@ -1132,15 +1132,15 @@ html.is-mobile-device-viewport .hero-section::after {
   content: "";
   position: absolute;
   left: 50%;
-  top: 55%;
+  top: 56%;
   transform: translate(-50%, -50%);
   width: 360px;
   height: 360px;
   border-radius: 50%;
   background: radial-gradient(
     circle,
-    rgba(73, 145, 255, 0.12) 0%,
-    rgba(24, 238, 255, 0.06) 34%,
+    rgba(73, 145, 255, 0.1) 0%,
+    rgba(24, 238, 255, 0.045) 34%,
     transparent 70%
   );
   pointer-events: none;
@@ -1208,13 +1208,13 @@ html.is-mobile-device-viewport .btn-tooltip {
 
 @media (max-width: 540px) {
   html.is-mobile-device-viewport .hero-section {
-    padding-top: clamp(150px, 21svh, 184px);
+    padding-top: clamp(168px, 24svh, 205px);
     gap: 12px;
   }
 
   html.is-mobile-device-viewport .hero-title {
     top: 0;
-    font-size: 2.5rem;
+    font-size: 2.44rem;
     letter-spacing: 0;
   }
 

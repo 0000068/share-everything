@@ -94,7 +94,7 @@ function expectStaticGradientTitle(assert, source, selector, label) {
     "white-space": "nowrap",
     "overflow-wrap": "normal",
     "word-break": "normal",
-    "font-size": "2.5rem",
+    "font-size": "2.44rem",
     "line-height": "1",
     "letter-spacing": "0",
     "background-size": "100% auto",
@@ -258,11 +258,11 @@ export function runMobileLayoutChecks(context) {
     "gap": "12px",
   }, "mobile fallback home");
   expectDeclarations(assert, narrowMobileStyle, ".hero-title", {
-    "font-size": "2.5rem",
+    "font-size": "2.44rem",
     "letter-spacing": "0",
   }, "narrow real-mobile home");
   expectDeclarations(assert, narrowMobileFallbackStyle, "html.is-mobile-device-viewport .hero-title", {
-    "font-size": "2.5rem",
+    "font-size": "2.44rem",
     "letter-spacing": "0",
   }, "narrow mobile fallback home");
 

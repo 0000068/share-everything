@@ -103,6 +103,7 @@ const vercelJson = read("vercel.json");
 const envExample = read(".env.example");
 const faviconPng = readFileSync("favicon.png");
 const ogImageJpg = readFileSync("og-image.jpg");
+const mobileHomeStarryBgSvg = read("assets/mobile-home-starry-bg.svg");
 const licenseText = read("LICENSE");
 const localServerJs = read("scripts/local-server.mjs");
 const releaseCheckJs = read("scripts/release-check.mjs");
@@ -354,6 +355,8 @@ assert.equal(
   "756d619b1e1f100d79ca20b18b91cfc356d1c650d99eac3b7c1f98f4e9534830",
   "favicon.png should match the approved compact brand artwork",
 );
+expectIncludes(mobileHomeStarryBgSvg, 'id="centerGlow"', "mobile home starfield should keep the centered static glow");
+expectNotIncludes(mobileHomeStarryBgSvg, 'id="topWash"', "mobile home starfield should not bring back the top-left wash");
 assert.deepEqual(readJpegDimensions(ogImageJpg, "og-image.jpg"), { width: 1200, height: 630 }, "og-image.jpg should use the standard Open Graph image size");
 assert.ok(ogImageJpg.length <= 80 * 1024, "og-image.jpg should stay at or below the 80KB Task D budget");
 expectIncludes(indexHtml, 'id="heroSearchForm"', "index.html should expose a real search form");
