@@ -1,0 +1,19 @@
+{
+  "name": "Share Everything",
+  "short_name": "Share",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0a0e1a",
+  "theme_color": "#111528",
+  "icons": [
+    {
+      "src": "/favicon.png?v=4",
+      "sizes": "256x256",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

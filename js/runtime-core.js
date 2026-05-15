@@ -82,7 +82,7 @@
         targetHead.appendChild(targetScript);
       }
 
-      const nonce = sourceScript.nonce || sourceScript.getAttribute("nonce") || "";
+      const nonce = readStructuredDataNonce();
       if (nonce) {
         targetScript.setAttribute("nonce", nonce);
       } else {

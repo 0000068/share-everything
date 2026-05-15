@@ -102,6 +102,8 @@ const featuredCategoryName = siteConfig.categoryNavigation.featured.name;
 const featuredCategoryHref = `/blog.html?category=${encodeURIComponent(featuredCategoryName)}`;
 const vercelJson = read("vercel.json");
 const envExample = read(".env.example");
+const webManifestJson = read("manifest.webmanifest");
+const webManifest = JSON.parse(webManifestJson);
 const faviconPng = readFileSync("favicon.png");
 const ogImageJpg = readFileSync("og-image.jpg");
 const mobileHomeStarryBgSvg = read("assets/mobile-home-starry-bg.svg");
@@ -359,8 +361,28 @@ expectIncludes(postHtml, 'property="og:image"', "post.html should declare og:ima
   ["post.html", postHtml],
 ].forEach(([label, htmlSource]) => {
   expectIncludes(htmlSource, 'type="image/png" href="/favicon.png?v=4"', `${label} should keep the approved PNG favicon artwork`);
+  expectIncludes(htmlSource, '<link rel="manifest" href="/manifest.webmanifest" />', `${label} should expose the standalone web app manifest`);
+  expectIncludes(htmlSource, '<meta name="mobile-web-app-capable" content="yes" />', `${label} should opt into standalone mobile display when installed`);
+  expectIncludes(htmlSource, '<meta name="apple-mobile-web-app-capable" content="yes" />', `${label} should opt into iOS standalone display when saved to home screen`);
+  expectIncludes(htmlSource, '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />', `${label} should let the starfield extend under the standalone status bar`);
+  expectIncludes(htmlSource, `<meta name="apple-mobile-web-app-title" content="${configuredSiteName}" />`, `${label} standalone title should follow site.config.json siteName`);
   expectNotIncludes(htmlSource, "favicon.svg", `${label} should not let a mismatched SVG favicon override the approved PNG artwork`);
 });
+assert.equal(webManifest.name, configuredSiteName, "web manifest name should follow site.config.json siteName");
+assert.equal(webManifest.short_name, "Share", "web manifest should keep a compact launcher title");
+assert.equal(webManifest.display, "standalone", "web manifest should request standalone display without the browser address bar");
+assert.equal(webManifest.orientation, "portrait-primary", "web manifest should preserve the portrait-first mobile composition");
+assert.equal(webManifest.background_color, "#0a0e1a", "web manifest background should match the mobile safe-area background");
+assert.equal(webManifest.theme_color, "#111528", "web manifest theme color should match the existing mobile browser chrome color");
+assert.deepEqual(webManifest.icons?.[0], {
+  src: "/favicon.png?v=4",
+  sizes: "256x256",
+  type: "image/png",
+  purpose: "any",
+}, "web manifest should use the approved compact PNG brand icon");
+expectIncludes(localServerJs, '[".webmanifest", "application/manifest+json; charset=utf-8"]', "local dev server should serve the web manifest with the manifest MIME type");
+expectIncludes(injectSiteMetaJs, "upsertStandaloneMetadata", "metadata injection should keep standalone mobile tags in sync");
+expectIncludes(injectSiteMetaJs, "buildWebManifest", "metadata injection should keep the web manifest in sync with site config");
 assert.equal(
   faviconPng.subarray(0, 8).toString("hex"),
   "89504e470d0a1a0a",

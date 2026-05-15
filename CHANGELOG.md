@@ -2,6 +2,14 @@
 
 All notable changes to this project are tracked here.
 
+## 6.0.0 - 2026-05-15
+
+- Refined the mobile home scene to match the reference more closely: the CSS hero glow now uses an offscreen 1100px falloff at `57%` with lower opacity stops (`0.08` / `0.04` / `0.018`), and the SVG starfield center glow is dimmed and moved lower so the visible circular spotlight from v5.10 no longer appears.
+- Added installable standalone web-app metadata (`manifest.webmanifest`, `display: standalone`, mobile/iOS app-capable meta tags, local MIME handling, and Vercel manifest revalidation) so installed mobile launches can present the intended no-address-bar composition. Normal Chrome browser chrome remains outside page control.
+- Hardened release verification across the Node 22/24 GitHub Actions matrix by forcing visual regression CDP traffic through the repo's deterministic WebSocket client.
+- Fixed review findings in runtime metadata/cache code: JSON-LD sync now uses the active page CSP nonce, post summary session-cache timestamps are validated before use, and site metadata injection uses literal-safe replacement callbacks.
+- Bumped the static CSS/JS/SVG cache key to `20260515-v60` and synchronized `package.json`, README badge, `SITE_ARCHITECTURE.md`, `CHANGELOG.md`, and standalone manifest coverage with the `v6.0` release commit convention.
+
 ## 5.10.0 - 2026-05-15
 
 - Dissolved the visible circular disc edge in the mobile home hero glow that v5.9 left behind: CSS `.hero-section::after` width/height 480px → 900px (wider than every supported phone viewport, so the disc boundary falls offscreen), gradient reorganized into 4 smooth stops `rgba(73, 145, 255, 0.2) → 0.11 → 0.05 → transparent 100%` (the prior `transparent 70%` hard cutoff is what created the visible disc).

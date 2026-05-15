@@ -35,6 +35,7 @@ const modulePreloadPaths = [
 const checkOnly = process.argv.includes("--check");
 const ogImagePath = "/og-image.jpg?v=4";
 const faviconPath = "/favicon.png?v=4";
+const manifestPath = "/manifest.webmanifest";
 const defaultSiteName = "Share Everything";
 
 function escapeAttribute(value) {
@@ -78,6 +79,14 @@ function readFeaturedName(config) {
     : "精选";
 }
 
+function readShortSiteName(siteName) {
+  return siteName === defaultSiteName ? "Share" : siteName.slice(0, 12);
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function replaceRequired(source, pattern, replacement, label) {
   if (!pattern.test(source)) {
     throw new Error(`Unable to update ${label}`);
@@ -85,6 +94,15 @@ function replaceRequired(source, pattern, replacement, label) {
 
   pattern.lastIndex = 0;
   return source.replace(pattern, replacement);
+}
+
+function replaceRequiredWith(source, pattern, replacer, label) {
+  if (!pattern.test(source)) {
+    throw new Error(`Unable to update ${label}`);
+  }
+
+  pattern.lastIndex = 0;
+  return source.replace(pattern, replacer);
 }
 
 function resolveTemplate(value, context) {
@@ -95,22 +113,103 @@ function upsertApplicationName(source, siteName) {
   const markup = `<meta name="application-name" content="${escapeAttribute(siteName)}" />`;
   const existingPattern = /<meta\s+name="application-name"\s+content="[^"]*"\s*\/?>/;
   if (existingPattern.test(source)) {
-    return source.replace(existingPattern, markup);
+    return source.replace(existingPattern, () => markup);
   }
 
-  return replaceRequired(
+  return replaceRequiredWith(
     source,
     /(<meta\s+name="theme-color"\s+content="[^"]*"\s*\/?>)/,
-    `$1\n    ${markup}`,
+    (_match, anchor) => `${anchor}\n    ${markup}`,
     "application-name",
   );
 }
 
+function upsertNamedMeta(source, { name, content, insertAfterName, label }) {
+  const markup = `<meta name="${name}" content="${escapeAttribute(content)}" />`;
+  const existingPattern = new RegExp(`<meta\\s+name="${escapeRegExp(name)}"\\s+content="[^"]*"\\s*\\/?>`);
+  if (existingPattern.test(source)) {
+    return source.replace(existingPattern, () => markup);
+  }
+
+  return replaceRequiredWith(
+    source,
+    new RegExp(`(<meta\\s+name="${escapeRegExp(insertAfterName)}"\\s+content="[^"]*"\\s*\\/?>)`),
+    (_match, anchor) => `${anchor}\n    ${markup}`,
+    label,
+  );
+}
+
+function upsertManifestLink(source) {
+  const markup = `<link rel="manifest" href="${manifestPath}" />`;
+  const existingPattern = /<link\s+rel="manifest"\s+href="[^"]*"\s*\/?>/;
+  if (existingPattern.test(source)) {
+    return source.replace(existingPattern, () => markup);
+  }
+
+  return replaceRequiredWith(
+    source,
+    /(<link\s+rel="icon"\s+type="image\/png"(?:\s+sizes="[^"]*")?\s+href="[^"]*"\s*\/?>)/,
+    (_match, anchor) => `${anchor}\n    ${markup}`,
+    "web app manifest link",
+  );
+}
+
+function upsertStandaloneMetadata(source, siteName) {
+  let nextSource = upsertApplicationName(source, siteName);
+  nextSource = upsertNamedMeta(nextSource, {
+    name: "mobile-web-app-capable",
+    content: "yes",
+    insertAfterName: "application-name",
+    label: "mobile web app capable",
+  });
+  nextSource = upsertNamedMeta(nextSource, {
+    name: "apple-mobile-web-app-capable",
+    content: "yes",
+    insertAfterName: "mobile-web-app-capable",
+    label: "apple mobile web app capable",
+  });
+  nextSource = upsertNamedMeta(nextSource, {
+    name: "apple-mobile-web-app-status-bar-style",
+    content: "black-translucent",
+    insertAfterName: "apple-mobile-web-app-capable",
+    label: "apple mobile status bar style",
+  });
+  nextSource = upsertNamedMeta(nextSource, {
+    name: "apple-mobile-web-app-title",
+    content: siteName,
+    insertAfterName: "apple-mobile-web-app-status-bar-style",
+    label: "apple mobile web app title",
+  });
+  return upsertManifestLink(nextSource);
+}
+
+function buildWebManifest(siteName) {
+  return `${JSON.stringify({
+    name: siteName,
+    short_name: readShortSiteName(siteName),
+    id: "/",
+    start_url: "/",
+    scope: "/",
+    display: "standalone",
+    orientation: "portrait-primary",
+    background_color: "#0a0e1a",
+    theme_color: "#111528",
+    icons: [
+      {
+        src: faviconPath,
+        sizes: "256x256",
+        type: "image/png",
+        purpose: "any",
+      },
+    ],
+  }, null, 2)}\n`;
+}
+
 function updateHeroTitle(source, siteName) {
-  return replaceRequired(
+  return replaceRequiredWith(
     source,
     /(<h1\b[^>]*\bclass="hero-title"[^>]*>)[\s\S]*?(<\/h1>)/,
-    `$1${escapeAttribute(siteName)}$2`,
+    (_match, prefix, suffix) => `${prefix}${escapeAttribute(siteName)}${suffix}`,
     "hero title",
   );
 }
@@ -120,7 +219,7 @@ function updatePageMeta(source, { canonicalUrl, ogImageUrl, page, siteName }) {
   const ogTitle = resolveTemplate(page.ogTitle, { siteName });
   const description = resolveTemplate(page.description, { siteName });
   let nextSource = source;
-  nextSource = upsertApplicationName(nextSource, siteName);
+  nextSource = upsertStandaloneMetadata(nextSource, siteName);
   nextSource = replaceRequired(
     nextSource,
     /<title>[\s\S]*?<\/title>/,
@@ -198,22 +297,22 @@ function updateModulePreloads(source, assetVersion) {
 
 function updateFeaturedCta(source, featuredName) {
   const featuredHref = `/blog.html?category=${encodeURIComponent(featuredName)}`;
-  let nextSource = replaceRequired(
+  let nextSource = replaceRequiredWith(
     source,
     /(<a[^>]*\bid="ctaStart"[^>]*\bhref=")[^"]*(")/,
-    `$1${escapeAttribute(featuredHref)}$2`,
+    (_match, prefix, suffix) => `${prefix}${escapeAttribute(featuredHref)}${suffix}`,
     "featured CTA href",
   );
-  nextSource = replaceRequired(
+  nextSource = replaceRequiredWith(
     nextSource,
     /(<a[^>]*\bid="ctaStart"[^>]*\baria-label=")[^"]*(")/,
-    `$1${escapeAttribute(featuredName)}$2`,
+    (_match, prefix, suffix) => `${prefix}${escapeAttribute(featuredName)}${suffix}`,
     "featured CTA aria-label",
   );
-  return replaceRequired(
+  return replaceRequiredWith(
     nextSource,
     /(<a[^>]*\bid="ctaStart"[^>]*>[\s\S]*?<span class="btn-tooltip">)[\s\S]*?(<\/span>)/,
-    `$1${escapeAttribute(featuredName)}$2`,
+    (_match, prefix, suffix) => `${prefix}${escapeAttribute(featuredName)}${suffix}`,
     "featured CTA tooltip",
   );
 }
@@ -242,6 +341,15 @@ for (const page of pages) {
     if (!checkOnly) {
       await writeFile(page.file, nextSource);
     }
+  }
+}
+
+const manifestSource = await readFile("manifest.webmanifest", "utf8");
+const nextManifestSource = buildWebManifest(siteName);
+if (nextManifestSource !== manifestSource) {
+  changedFiles.push("manifest.webmanifest");
+  if (!checkOnly) {
+    await writeFile("manifest.webmanifest", nextManifestSource);
   }
 }
 

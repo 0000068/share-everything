@@ -38,6 +38,7 @@ expectIncludes(vercelJson, '"/posts/:id"', "Vercel should rewrite canonical arti
 expectIncludes(vercelJson, '"/robots.txt"', "Vercel should serve a dynamic robots.txt");
 expectIncludes(vercelJson, '"/sitemap.xml"', "Vercel should serve a dynamic sitemap");
 expectIncludes(vercelJson, '"/favicon.png"', "Vercel should set cache headers for the approved brand favicon asset");
+expectIncludes(vercelJson, '"/manifest.webmanifest"', "Vercel should set revalidation headers for the standalone web manifest");
 expectIncludes(vercelJson, '"/og-image.jpg"', "Vercel should set cache headers for the Open Graph image asset");
 expectNotIncludes(vercelJson, '"/favicon.svg"', "Vercel should not preserve a cache rule for the removed SVG favicon");
 expectIncludes(vercelJson, "max-age=3600, stale-while-revalidate=86400", "Vercel should give versioned static scripts and styles a short browser cache");
@@ -46,6 +47,11 @@ const rootHeaderRule = parsedVercelJson.headers.find((entry) => entry.source ===
 assert.ok(
   rootHeaderRule?.headers?.some((header) => header.key === "Cache-Control" && header.value === "public, max-age=0, must-revalidate"),
   "Vercel should explicitly give the root route the same revalidation policy as static HTML files",
+);
+const manifestHeaderRule = parsedVercelJson.headers.find((entry) => entry.source === "/manifest.webmanifest");
+assert.ok(
+  manifestHeaderRule?.headers?.some((header) => header.key === "Cache-Control" && header.value === "public, max-age=0, must-revalidate"),
+  "Vercel should revalidate the web manifest so standalone mobile metadata updates promptly",
 );
 const apiHeaderRule = parsedVercelJson.headers.find((entry) => entry.source === "/api/(.*)");
 assert.ok(

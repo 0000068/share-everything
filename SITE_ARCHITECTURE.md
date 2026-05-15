@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v5.10
+> Version: v6.0
 > Updated: 2026-05-15
 
 ## 1. Overview
@@ -33,7 +33,18 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v5.10 Highlights
+## 2. Version v6.0 Highlights
+
+v6.0 finishes the mobile home visual pass by removing the visible blue spotlight disc, adds standalone mobile launch metadata for the no-address-bar composition, and hardens the release checks that caught the Node 22 failure.
+
+- The mobile home `.hero-section::after` glow now renders as a subtle offscreen falloff: 900px -> 1100px square, top 54% -> 57%, and opacity stops reduced to `0.08` -> `0.04` -> `0.018` -> `transparent 100%`. The same values are applied in both the real mobile media query and the `html.is-mobile-device-viewport` fallback block.
+- `assets/mobile-home-starry-bg.svg` dims and lowers the center glow (`cy=59%`, `r=64%`, opacities `.34/.16`) and slightly reduces the lower violet wash, matching the reference without the top-left wash or the v5.10 circular spotlight.
+- Static pages now link `/manifest.webmanifest` and include mobile/iOS standalone meta tags. The manifest requests `display: standalone`, uses the approved 256px PNG icon, and is served locally as `application/manifest+json`; Vercel revalidates it with `public, max-age=0, must-revalidate`.
+- `scripts/visual-regression.mjs` always uses the repo's deterministic CDP WebSocket client so strict visual checks behave the same on the GitHub Actions Node 22/24 matrix.
+- Runtime polish fixes from the review are included: active-page nonce preservation for JSON-LD sync, validated session-cache timestamps, literal-safe metadata replacement callbacks, and `.claude/` ignored as local tooling state.
+- Static CSS/JS/SVG entry URLs use the `20260515-v60` cache key so deployed browsers and CDNs fetch the v6.0 visual assets promptly.
+
+## 2.1 Version v5.10 Highlights
 
 v5.10 dissolves the visible disc edge in the mobile home hero glow and adds a smoke-check parity contract that prevents the v5.8 / v5.9 pattern of forgetting to update one of the two mobile CSS blocks.
 
@@ -41,7 +52,7 @@ v5.10 dissolves the visible disc edge in the mobile home hero glow and adds a sm
 - `scripts/smoke-check/mobile-layout.mjs` now requires (a) byte-exact `background` equality between the two mobile blocks and (b) the gradient must contain `transparent 100%` (the prior `transparent 70%` is rejected). Regressing the disc edge or splitting the two blocks again will fail CI.
 - Static CSS/JS/SVG entry URLs use the `20260515-v510` cache key so browsers and CDNs fetch the wider glow without serving v5.9's narrow disc through the `stale-while-revalidate` window.
 
-## 2.1 Version v5.9 Highlights
+## 2.2 Version v5.9 Highlights
 
 v5.9 completed the mobile home visual restoration that v5.8 only partially delivered and landed the full post-v5.8 cross-review backlog — 39 phased fixes plus 4 audit-stage corrections — in a single release.
 

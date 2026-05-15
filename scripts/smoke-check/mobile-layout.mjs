@@ -287,9 +287,9 @@ export function runMobileLayoutChecks(context) {
   // releases (v5.8 / v5.9) regressed by updating only the @media block and
   // leaving the is-mobile-device-viewport fallback at the dim v5.7 values.
   const heroGlowContract = {
-    "width": "900px",
-    "height": "900px",
-    "top": "54%",
+    "width": "1100px",
+    "height": "1100px",
+    "top": "57%",
     "border-radius": "50%",
   };
   expectDeclarations(assert, realMobileStyle, ".hero-section::after", heroGlowContract, "real-mobile hero glow");
@@ -303,8 +303,8 @@ export function runMobileLayoutChecks(context) {
   );
   assert.match(
     heroGlowBackgroundRealMobile,
-    /rgba\(73,\s*145,\s*255,\s*0\.2\)/,
-    "mobile hero glow inner stop should keep the v5.10 wide-soft opacity",
+    /rgba\(73,\s*145,\s*255,\s*0\.08\)/,
+    "mobile hero glow inner stop should stay subtle enough to avoid a visible spotlight",
   );
   assert.match(
     heroGlowBackgroundRealMobile,

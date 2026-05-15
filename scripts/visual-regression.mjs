@@ -669,9 +669,10 @@ class DevToolsWebSocket {
 }
 
 function createDevToolsClient(webSocketUrl) {
-  return typeof WebSocket === "function"
-    ? new NativeDevToolsWebSocket(webSocketUrl)
-    : new DevToolsWebSocket(webSocketUrl);
+  // Use the small built-in CDP WebSocket client for deterministic CI behavior.
+  // Node's native WebSocket has changed subtly across 22.x/24.x, which can
+  // make strict visual checks pass on one matrix entry and fail on another.
+  return new DevToolsWebSocket(webSocketUrl);
 }
 
 async function createPage(debugPort) {

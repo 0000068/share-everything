@@ -675,7 +675,7 @@ body.has-cursor-glow .cursor-glow {
 
   .ambient-background {
     background-color: #0b1021;
-    background-image: url("/assets/mobile-home-starry-bg.svg?v=20260515-v510");
+    background-image: url("/assets/mobile-home-starry-bg.svg?v=20260515-v60");
     background-position: center top;
     background-repeat: no-repeat;
     background-size: cover;
@@ -727,16 +727,16 @@ body.has-cursor-glow .cursor-glow {
     content: "";
     position: absolute;
     left: 50%;
-    top: 54%;
+    top: 57%;
     transform: translate(-50%, -50%);
-    width: 900px;
-    height: 900px;
+    width: 1100px;
+    height: 1100px;
     border-radius: 50%;
     background: radial-gradient(
       circle,
-      rgba(73, 145, 255, 0.2) 0%,
-      rgba(73, 145, 255, 0.11) 28%,
-      rgba(24, 238, 255, 0.05) 55%,
+      rgba(73, 145, 255, 0.08) 0%,
+      rgba(73, 145, 255, 0.04) 30%,
+      rgba(24, 238, 255, 0.018) 58%,
       transparent 100%
     );
     pointer-events: none;
@@ -1091,7 +1091,7 @@ html.is-mobile-device-viewport body {
 
 html.is-mobile-device-viewport .ambient-background {
   background-color: #0b1021;
-  background-image: url("/assets/mobile-home-starry-bg.svg?v=20260515-v510");
+  background-image: url("/assets/mobile-home-starry-bg.svg?v=20260515-v60");
   background-position: center top;
   background-repeat: no-repeat;
   background-size: cover;
@@ -1143,16 +1143,16 @@ html.is-mobile-device-viewport .hero-section::after {
   content: "";
   position: absolute;
   left: 50%;
-  top: 54%;
+  top: 57%;
   transform: translate(-50%, -50%);
-  width: 900px;
-  height: 900px;
+  width: 1100px;
+  height: 1100px;
   border-radius: 50%;
   background: radial-gradient(
     circle,
-    rgba(73, 145, 255, 0.2) 0%,
-    rgba(73, 145, 255, 0.11) 28%,
-    rgba(24, 238, 255, 0.05) 55%,
+    rgba(73, 145, 255, 0.08) 0%,
+    rgba(73, 145, 255, 0.04) 30%,
+    rgba(24, 238, 255, 0.018) 58%,
     transparent 100%
   );
   pointer-events: none;

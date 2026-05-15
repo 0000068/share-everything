@@ -449,15 +449,17 @@
 
       const cached = readSessionCache(getPostSummaryCacheKey(pageId));
       if (!cached) return null;
+      const timestamp = Number(cached.timestamp);
+      if (!Number.isFinite(timestamp)) return null;
 
       const summary = normalizePostSummary(cached.data);
       if (!summary) return null;
 
-      rememberPostSummaryInMemory(summary, cached.timestamp);
+      rememberPostSummaryInMemory(summary, timestamp);
       return {
         summary,
-        timestamp: cached.timestamp,
-        age: Date.now() - cached.timestamp,
+        timestamp,
+        age: Date.now() - timestamp,
       };
     }
 
