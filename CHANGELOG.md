@@ -2,6 +2,15 @@
 
 All notable changes to this project are tracked here.
 
+## 6.10.0 - 2026-05-16
+
+- 修复 SSR 路径上一处中文字符串编码损坏（fallback empty state link 默认值）。
+- 恢复 SSR 响应 CSP header 的 per-request nonce，为未来 inline executable script 保留可选 opt-in 路径。
+- 抽出 normalizeColorName helper，纠正 site-utils 与 block-service 几处注释的精度问题。
+- 真正删除 bookmark CSS.escape fallback 的死代码（替代 v6.9 的扩写 fallback）。
+- 清理 html-rewriter 9 个未使用的 export，统一到共享 escapeHtmlAttribute。
+- 新增 SSR 成功路径 CSP nonce 自动化断言，弥补 v6.5 覆盖缺口。
+
 ## 6.9.0 - 2026-05-16
 
 - JSON-LD and initial JSON data-block scripts no longer carry decorative CSP nonces.

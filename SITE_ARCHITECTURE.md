@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v6.9
+> Version: v6.10
 > Updated: 2026-05-16
 
 ## 1. Overview
@@ -33,7 +33,17 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v6.9 Highlights
+## 2. Version v6.10 Highlights
+
+v6.10 closes the v6.10 repair plan exactly: encoding repair, CSP header nonce restoration, small missed cleanups, and a narrower helper surface.
+
+- The SSR empty-state link default in `api/post.js` is restored to the correct UTF-8 `返回博客列表` string.
+- SSR success responses again generate a per-request CSP header nonce while inert JSON data blocks continue to omit decorative nonce attributes.
+- `normalizeColorName`, the site-utils alias comment, and the block-service worker-floor comment document the intended narrower semantics.
+- `js/bookmark.js` now relies on native `CSS.escape`, and `scripts/lib/html-rewriter.mjs` exposes only the 8 functions imported by `scripts/inject-site-meta.mjs`.
+- Static CSS/JS/SVG entry URLs use the `20260516-v610` cache key so deployed browsers fetch the refreshed build promptly.
+
+## 2.1 Version v6.9 Highlights
 
 v6.9 closes the final audit-polish items around inert script data blocks, selector escaping, and local API parity.
 

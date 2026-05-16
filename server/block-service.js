@@ -15,6 +15,10 @@ const NOTION_BLOCK_CHILD_CONCURRENCY = normalizePositiveNumber(process.env.NOTIO
 // The limiter is what enforces the upstream API rate ceiling; the worker count
 // just shapes the recursion tree so siblings can interleave instead of
 // strictly sequencing.
+// Math.max(1, Math.trunc(...)) is intentional: normalizePositiveNumber accepts
+// 0 < x < 1 as positive, but Math.trunc would round that down to 0. The
+// Math.max(1, ...) floor ensures at least one worker even under sub-integer
+// env overrides.
 const BLOCK_CHILD_WORKER_COUNT = Math.max(1, Math.trunc(NOTION_BLOCK_CHILD_CONCURRENCY));
 const NOTION_BLOCK_TOTAL_LIMIT = Math.max(
   1,

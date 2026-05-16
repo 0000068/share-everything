@@ -93,7 +93,7 @@
         name,
         label: truncateText(category.label, POST_SUMMARY_SESSION_MAX_CATEGORY_LABEL_LENGTH, name),
         emoji: truncateText(category.emoji, 8),
-        color: truncateText(category.color, 32),
+        color: normalizeColorName(category.color),
         categoryColor: normalizeCategoryColor(category.categoryColor),
         coverGradient: truncateText(category.coverGradient, POST_SUMMARY_SESSION_MAX_GRADIENT_LENGTH),
       };
@@ -283,6 +283,10 @@
       return normalizedValue.length > maxLength
         ? normalizedValue.slice(0, maxLength).trim()
         : normalizedValue;
+    }
+
+    function normalizeColorName(value) {
+      return truncateText(value, 32);
     }
 
     function normalizeSessionTags(tags) {

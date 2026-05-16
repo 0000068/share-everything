@@ -1108,8 +1108,8 @@ expectIncludes(runtimeCoreJs, "function start(pageId = getPageIdFromUrl(window.l
 expectNotIncludes(runtimeCoreJs, "if (pageId === getPageIdFromUrl(window.location.href))", "PageRuntime.register should not initialize pages during module import");
 expectIncludes(appJs, "window.PageRuntime?.start?.();", "app.js should start the current page after all page modules register");
 expectIncludes(bookmarkJs, "parseSerializedTags", "bookmark fallback should recover serialized tags");
-expectIncludes(bookmarkJs, "codeUnit >= 0x0001", "bookmark selector fallback should escape control characters when CSS.escape is unavailable");
-expectIncludes(bookmarkJs, "codeUnit.toString(16)", "bookmark selector fallback should use CSS-compatible hexadecimal escapes");
+expectIncludes(bookmarkJs, "window.CSS.escape(String(value))", "bookmark selector escaping should rely on the native CSS.escape implementation");
+expectNotIncludes(bookmarkJs, "codeUnit.toString(16)", "bookmark selector escaping should not keep the deleted fallback implementation");
 expectIncludes(bookmarkJs, "createBookmarkEntry", "bookmark manager should centralize bookmark record creation");
 expectIncludes(bookmarkJs, "buildCardBookmarkSource", "bookmark manager should centralize DOM snapshot extraction");
 expectIncludes(bookmarkJs, "hydrateMissingMetadata", "bookmark manager should hydrate legacy metadata");
@@ -1809,7 +1809,8 @@ expectIncludes(apiPostJs, "insertBeforeEndTag", "article HTML route should centr
 expectNotIncludes(apiPostJs, "result !== html", "article HTML route should track replacement matches explicitly instead of comparing final strings");
 expectIncludes(apiPostJs, "resolveShareImageUrl(post.coverImage, defaultShareImageUrl, siteOrigin)", "article HTML route should resolve og:image against the site origin consistently");
 expectIncludes(apiPostJs, "../server/security-policy", "article HTML route should reuse the shared security policy builder");
-expectNotIncludes(apiPostJs, "createCspNonce", "article HTML route should not add nonces to inert JSON data blocks");
+expectIncludes(apiPostJs, "createCspNonce", "article HTML route should generate a per-request CSP nonce for the response header even though current templates only contain inert data blocks");
+expectIncludes(apiPostJs, "applyHtmlSecurityHeaders(res, { scriptNonce })", "article HTML route should pass the generated nonce into the response header on the SSR success path");
 expectIncludes(apiPostJs, "applyHtmlSecurityHeaders", "article HTML route should emit CSP headers from the SSR function");
 expectNotIncludes(apiPostJs, "replaceContentSecurityPolicyMeta", "article HTML route should leave template CSP meta static while response headers carry CSP");
 expectIncludes(postHtml, "<!--SSR_HEAD_META_START-->", "post template should mark the SSR-owned head metadata block explicitly");
@@ -1913,6 +1914,16 @@ expectNotIncludes(
   nonceHeaderFallbackRes.textBody.match(/<meta http-equiv="Content-Security-Policy"[^>]*>/)?.[0] || "",
   "nonce-",
   "article HTML route should not mirror response nonces into the CSP meta tag",
+);
+expectIncludes(
+  apiPostJs,
+  "const scriptNonce = createCspNonce();",
+  "SSR success path source should generate a per-request CSP nonce",
+);
+expectIncludes(
+  apiPostJs,
+  "applyHtmlSecurityHeaders(res, { scriptNonce })",
+  "SSR success path source should pass the generated nonce into the response header",
 );
 
 const replacedHeadMeta = await apiPostHelpers.replaceHeadMeta(`<!doctype html><html><head>

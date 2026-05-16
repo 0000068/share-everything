@@ -20,7 +20,7 @@ const {
   readQueryString,
 } = require("../server/public-content");
 const { escapeHtmlAttribute } = require("../server/html-escape");
-const { applyHtmlSecurityHeaders } = require("../server/security-policy");
+const { applyHtmlSecurityHeaders, createCspNonce } = require("../server/security-policy");
 
 let templatePromise = null;
 let parse5Promise = null;
@@ -299,7 +299,7 @@ async function replaceHeadMeta(html, { title, description, url, image, imageAlt,
   return applyPatches(html, patches.filter(Boolean));
 }
 
-async function replaceEmptyStateContent(html, { message, linkText = "杩斿洖鍗氬鍒楄〃" }) {
+async function replaceEmptyStateContent(html, { message, linkText = "返回博客列表" }) {
   const doc = await parseTemplate(html);
   const emptyState = findElementById(doc, "postEmpty");
   if (!emptyState) {
@@ -437,6 +437,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    const scriptNonce = createCspNonce();
     const post = await fetchPublicPost(routeId);
     const postUrl = buildPostUrl(post.id);
     const pageTitle = formatPostTitle(post.title, siteName);
@@ -465,7 +466,7 @@ module.exports = async function handler(req, res) {
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");
-    applyHtmlSecurityHeaders(res);
+    applyHtmlSecurityHeaders(res, { scriptNonce });
     return res.status(200).send(html);
   } catch (error) {
     const status = getPublicPostErrorStatus(error);

@@ -100,7 +100,8 @@
     }
   }
 
-  // Public alias matching the shared NotionContent module's naming.
+  // Client-side simplified alias. Uses window.location.origin internally
+  // instead of the shared NotionContent module's baseOrigin parameter.
   const resolveDisplayImageUrl = sanitizeImageUrl;
 
   function resolveProxiedDisplayImageUrl(candidate) {

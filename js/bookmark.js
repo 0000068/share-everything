@@ -15,39 +15,7 @@
     let storageSyncTimer = null;
 
     function escapeSelectorValue(value) {
-      if (window.CSS?.escape) {
-        return window.CSS.escape(value);
-      }
-
-      const stringValue = String(value);
-      let escaped = "";
-      for (let index = 0; index < stringValue.length; index += 1) {
-        const char = stringValue.charAt(index);
-        const codeUnit = stringValue.charCodeAt(index);
-        const isControl = (codeUnit >= 0x0001 && codeUnit <= 0x001f) || codeUnit === 0x007f;
-        const isDigit = codeUnit >= 0x0030 && codeUnit <= 0x0039;
-        const isLetter = (
-          (codeUnit >= 0x0041 && codeUnit <= 0x005a) ||
-          (codeUnit >= 0x0061 && codeUnit <= 0x007a)
-        );
-
-        if (codeUnit === 0x0000) {
-          escaped += "\uFFFD";
-        } else if (
-          isControl ||
-          (index === 0 && isDigit) ||
-          (index === 1 && isDigit && stringValue.charCodeAt(0) === 0x002d)
-        ) {
-          escaped += `\\${codeUnit.toString(16)} `;
-        } else if (index === 0 && codeUnit === 0x002d && stringValue.length === 1) {
-          escaped += "\\-";
-        } else if (codeUnit >= 0x0080 || codeUnit === 0x002d || codeUnit === 0x005f || isDigit || isLetter) {
-          escaped += char;
-        } else {
-          escaped += `\\${char}`;
-        }
-      }
-      return escaped;
+      return window.CSS.escape(String(value));
     }
 
     function normalizeText(value, fallback = "") {
