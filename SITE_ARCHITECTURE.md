@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v6.6
+> Version: v6.7
 > Updated: 2026-05-16
 
 ## 1. Overview
@@ -33,7 +33,16 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v6.6 Highlights
+## 2. Version v6.7 Highlights
+
+v6.7 moves SSR article template mutation from regex replacements to parse5-backed DOM source ranges.
+
+- `api/post.js` parses `post.html` before mutating head metadata, article content, fallback empty state, and inline JSON payloads.
+- SSR replacements now target node IDs, comments, attributes, and end-tag ranges instead of matching template text with regular expressions.
+- The smoke harness injects parse5 into CommonJS module tests so the same helper paths run under the VM-based checks.
+- Static CSS/JS/SVG entry URLs use the `20260516-v67` cache key so deployed browsers fetch the refreshed build promptly.
+
+## 2.1 Version v6.6 Highlights
 
 v6.6 migrates static metadata injection to a parse5-backed DOM workflow while keeping committed HTML formatting stable.
 

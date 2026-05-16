@@ -8,6 +8,7 @@ import { runNotionApiClientChecks } from "./smoke-check/notion-api-client.mjs";
 import { runPublicContentAndNotionChecks } from "./smoke-check/public-content-notion.mjs";
 import { runRoutingAndVercelChecks } from "./smoke-check/routing-vercel.mjs";
 import { runServerModuleChecks } from "./smoke-check/server-modules.mjs";
+import * as parse5ForSmokeCheck from "parse5";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -203,7 +204,9 @@ const {
   "IMAGE_PROXY_MAX_BYTES",
   "IMAGE_PROXY_MAX_REDIRECTS",
 ]);
-const apiPostHandler = loadCommonJsModule("api/post.js");
+const apiPostHandler = loadCommonJsModule("api/post.js", [], {
+  __parse5ForSmokeCheck: parse5ForSmokeCheck,
+});
 const apiRobotsHandler = loadCommonJsModule("api/robots.js");
 const apiPostsDataHandler = loadCommonJsModule("api/posts-data.js");
 const apiPostDataHandler = loadCommonJsModule("api/post-data.js");
@@ -216,7 +219,9 @@ const {
   "replacePostContent",
   "replaceHeadMeta",
   "replaceEmptyStateContent",
-]);
+], {
+  __parse5ForSmokeCheck: parse5ForSmokeCheck,
+});
 const {
   __test: serverNotionHelpers,
 } = loadCommonJsModule("server/notion-server.js", [
@@ -1791,13 +1796,13 @@ expectIncludes(apiPostJs, "rejectUnsupportedReadMethod", "article HTML route sho
 expectIncludes(apiPostJs, "getPublicPostErrorStatus", "article HTML route should reuse shared public-post error mapping");
 expectIncludes(apiPostJs, "fetchPublicPost", "article HTML route should only render posts from the public blog set");
 expectIncludes(apiPostJs, "renderPostArticle(post, { renderedContent, baseOrigin })", "article HTML route should reuse the shared article-shell renderer for SSR");
-expectIncludes(apiPostJs, "POST_CONTENT_PATTERN", "article HTML route should tolerate harmless postContent template attribute changes");
-expectIncludes(apiPostJs, "postContent:fallback", "article HTML route should fall back to article insertion when the postContent anchor changes");
+expectIncludes(apiPostJs, 'findElementById(doc, "postContent")', "article HTML route should tolerate harmless postContent template attribute changes");
+expectIncludes(apiPostJs, "Falling back to article insertion", "article HTML route should fall back to article insertion when the postContent anchor changes");
 expectIncludes(apiPostJs, '"Cache-Control", "no-store"', "article HTML route should not cache public post responses");
 expectIncludes(apiPostJs, "templatePromise = null;", "article HTML route should clear a failed production template read before retrying");
 expectIncludes(apiPostJs, "HEAD_META_BLOCK_START", "article HTML route should replace head metadata through explicit template anchors");
-expectIncludes(apiPostJs, "replaceMarkup(", "article HTML route should use literal-safe SSR replacements for dynamic content");
-expectIncludes(apiPostJs, "upsertHeadMarkup", "article HTML route should centralize head-tag insertion and replacement");
+expectIncludes(apiPostJs, "parseTemplate(html)", "article HTML route should parse the SSR template before dynamic replacements");
+expectIncludes(apiPostJs, "insertBeforeEndTag", "article HTML route should centralize DOM-node insertion and replacement");
 expectNotIncludes(apiPostJs, "result !== html", "article HTML route should track replacement matches explicitly instead of comparing final strings");
 expectIncludes(apiPostJs, "resolveShareImageUrl(post.coverImage, defaultShareImageUrl, siteOrigin)", "article HTML route should resolve og:image against the site origin consistently");
 expectIncludes(apiPostJs, "../server/security-policy", "article HTML route should reuse the shared security policy builder");
@@ -1818,7 +1823,7 @@ expectNotIncludes(serverPostServiceJs, "Object.defineProperty(post, POST_SEARCH_
 const replacementSentinel = "$& :: $` :: $'";
 const escapedReplacementSentinel = "$&amp; :: $` :: $&#39;";
 const nonceSentinel = "nonce-test-123";
-const replacedPostContent = apiPostHelpers.replacePostContent(
+const replacedPostContent = await apiPostHelpers.replacePostContent(
   '<article><div class="placeholder" id="postContent" data-template="changed"></div></article>',
   {
     id: "post-1",
@@ -1832,7 +1837,7 @@ const replacedPostContent = apiPostHelpers.replacePostContent(
 );
 expectIncludes(replacedPostContent, 'id="postContent" style="display: block;"', "post content replacement should not depend on the original style attribute");
 expectIncludes(replacedPostContent, "Rendered body", "post content replacement should preserve SSR article body markup");
-const injectedInitialPostData = apiPostHelpers.injectInitialPostData("<main></main>", {
+const injectedInitialPostData = await apiPostHelpers.injectInitialPostData("<main></main>", {
   title: replacementSentinel,
 }, {
   scriptNonce: nonceSentinel,
@@ -1858,7 +1863,7 @@ assert.ok(
   "article HTML route should keep the inline initial payload summary-only when SSR markup is already present",
 );
 
-const structuredDataHtml = apiPostHelpers.upsertStructuredDataScript("<head></head>", "post-article", {
+const structuredDataHtml = await apiPostHelpers.upsertStructuredDataScript("<head></head>", "post-article", {
   headline: replacementSentinel,
 }, {
   scriptNonce: nonceSentinel,
@@ -1911,7 +1916,7 @@ expectNotIncludes(
   "article HTML route should not mirror response nonces into the CSP meta tag",
 );
 
-const replacedHeadMeta = apiPostHelpers.replaceHeadMeta(`<!doctype html><html><head>
+const replacedHeadMeta = await apiPostHelpers.replaceHeadMeta(`<!doctype html><html><head>
 <!--SSR_HEAD_META_START-->
 <title>Old</title>
 <meta name="description" content="old" />
@@ -1946,7 +1951,7 @@ console.warn = (...args) => {
   sameValueReplacementWarnings.push(args.join(" "));
 };
 try {
-  apiPostHelpers.replaceHeadMeta(`<!doctype html><html><head>
+  await apiPostHelpers.replaceHeadMeta(`<!doctype html><html><head>
 <title>Same title</title>
 <meta name="description" content="Same description" />
 <meta property="og:title" content="Same title" />
@@ -1975,14 +1980,14 @@ assert.equal(
   "head metadata replacement should not warn when a template pattern matched but the replacement value is unchanged",
 );
 
-const replacedEmptyState = apiPostHelpers.replaceEmptyStateContent(
+const replacedEmptyState = await apiPostHelpers.replaceEmptyStateContent(
   '<div class="empty-state" id="postEmpty"><svg></svg><p>old</p><p class="empty-state-helper"><a class="empty-state-link" data-empty-link href="/old">old</a></p></div>',
   {
     message: replacementSentinel,
     linkText: replacementSentinel,
   },
 );
-const replacedEmptyStateReversedOrder = apiPostHelpers.replaceEmptyStateContent(
+const replacedEmptyStateReversedOrder = await apiPostHelpers.replaceEmptyStateContent(
   '<div class="empty-state" id="postEmpty"><svg></svg><p>old</p><p class="empty-state-helper"><a class="empty-state-link" href="/old" data-empty-link>old</a></p></div>',
   { message: "ignored", linkText: replacementSentinel },
 );

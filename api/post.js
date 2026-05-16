@@ -26,14 +26,10 @@ const {
 } = require("../server/security-policy");
 
 let templatePromise = null;
+let parse5Promise = null;
 const IS_DEVELOPMENT = process.env.NODE_ENV === "development";
-const HEAD_CLOSE_PATTERN = /<\/head>/;
-const MAIN_CLOSE_PATTERN = /<\/main>/;
-const POST_ARTICLE_CLOSE_PATTERN = /<\/article>/;
-const POST_CONTENT_PATTERN = /<div\b(?=[^>]*\bid=["']postContent["'])[^>]*>\s*<\/div>/;
 const HEAD_META_BLOCK_START = "<!--SSR_HEAD_META_START-->";
 const HEAD_META_BLOCK_END = "<!--SSR_HEAD_META_END-->";
-const HEAD_META_INSERTION_ANCHOR = /<meta\s+property="og:image:alt"\s+content="[^"]*"\s*\/?>/;
 
 function formatFallbackTitle(title, siteName) {
   return `${title} - ${siteName}`;
@@ -60,100 +56,175 @@ function serializeJsonForScript(value) {
   return JSON.stringify(value).replace(/</g, "\\u003c");
 }
 
-function escapeRegex(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function replaceMarkup(html, pattern, markup, label) {
-  let didMatch = false;
-  const result = html.replace(pattern, () => {
-    didMatch = true;
-    return markup;
-  });
-  if (label && !didMatch) {
-    console.warn(`SSR: Pattern for "${label}" did not match template. The post.html structure may have changed.`);
+function loadParse5() {
+  if (globalThis.__parse5ForSmokeCheck) {
+    return Promise.resolve(globalThis.__parse5ForSmokeCheck);
   }
-  return result;
-}
-
-function insertMarkupBefore(html, pattern, markup, indentation = "", label = "") {
-  let didMatch = false;
-  const result = html.replace(pattern, (matched) => {
-    didMatch = true;
-    return `${markup}\n${indentation}${matched}`;
-  });
-  if (label && !didMatch) {
-    console.warn(`SSR: Pattern for "${label}" did not match template. The post.html structure may have changed.`);
+  if (!parse5Promise) {
+    parse5Promise = import("parse5");
   }
-  return result;
+  return parse5Promise;
 }
 
-function insertMarkupAfter(html, pattern, markup, indentation = "    ") {
-  return html.replace(pattern, (matched) => `${matched}\n${indentation}${markup}`);
+async function parseTemplate(html) {
+  const parse5 = await loadParse5();
+  return parse5.parse(html, { sourceCodeLocationInfo: true });
 }
 
-function upsertHeadMarkup(html, pattern, markup) {
-  let didMatch = false;
-  const result = html.replace(pattern, () => {
-    didMatch = true;
-    return markup;
-  });
-  if (didMatch) {
-    return result;
+function getAttribute(node, name) {
+  return node?.attrs?.find((attr) => attr.name === name)?.value || "";
+}
+
+function hasAttribute(node, name) {
+  return Boolean(node?.attrs?.some((attr) => attr.name === name));
+}
+
+function isElement(node, tagName = "") {
+  return Boolean(node?.tagName) && (!tagName || node.tagName === tagName);
+}
+
+function walk(node, visitor) {
+  if (!node) return null;
+  if (visitor(node)) return node;
+  for (const child of node.childNodes || []) {
+    const match = walk(child, visitor);
+    if (match) return match;
   }
+  return null;
+}
 
-  return insertMarkupAfter(html, HEAD_META_INSERTION_ANCHOR, markup);
+function findElement(doc, predicate) {
+  return walk(doc, (node) => isElement(node) && predicate(node));
+}
+
+function findElementById(doc, id) {
+  return findElement(doc, (node) => getAttribute(node, "id") === id);
+}
+
+function findElementByTag(doc, tagName) {
+  return findElement(doc, (node) => node.tagName === tagName);
+}
+
+function findMeta(doc, attrName, attrValue) {
+  return findElement(doc, (node) => (
+    node.tagName === "meta" && getAttribute(node, attrName) === attrValue
+  ));
+}
+
+function findLink(doc, rel) {
+  return findElement(doc, (node) => node.tagName === "link" && getAttribute(node, "rel") === rel);
+}
+
+function findComment(doc, marker) {
+  const expected = marker.replace(/^<!--|-->$/g, "");
+  return walk(doc, (node) => node.nodeName === "#comment" && String(node.data || "").trim() === expected);
+}
+
+function sourceRange(node) {
+  const location = node?.sourceCodeLocation;
+  if (!location) return null;
+  return { start: location.startOffset, end: location.endOffset };
+}
+
+function startTagRange(node) {
+  const location = node?.sourceCodeLocation?.startTag;
+  if (!location) return null;
+  return { start: location.startOffset, end: location.endOffset };
+}
+
+function innerRange(node) {
+  const location = node?.sourceCodeLocation;
+  if (!location?.startTag || !location?.endTag) return null;
+  return { start: location.startTag.endOffset, end: location.endTag.startOffset };
+}
+
+function endTagStart(node) {
+  return node?.sourceCodeLocation?.endTag?.startOffset;
+}
+
+function applyPatches(html, patches) {
+  return patches
+    .filter((patch) => Number.isInteger(patch.start) && Number.isInteger(patch.end))
+    .sort((a, b) => b.start - a.start)
+    .reduce((nextHtml, patch) => (
+      `${nextHtml.slice(0, patch.start)}${patch.markup}${nextHtml.slice(patch.end)}`
+    ), html);
+}
+
+function insertBeforeEndTag(html, node, markup, indentation = "") {
+  const offset = endTagStart(node);
+  if (!Number.isInteger(offset)) return html;
+  return applyPatches(html, [{ start: offset, end: offset, markup: `${markup}\n${indentation}` }]);
+}
+
+function serializeAttribute(name, value) {
+  if (value === "" || value === true) return ` ${name}`;
+  return ` ${name}="${escapeHtmlAttribute(value)}"`;
+}
+
+function replaceElement(html, node, markup, label) {
+  const range = sourceRange(node);
+  if (!range) {
+    if (label) {
+      console.warn(`SSR: Node for "${label}" did not expose a source range. The post.html structure may have changed.`);
+    }
+    return html;
+  }
+  return applyPatches(html, [{ ...range, markup }]);
 }
 
 function buildNonceAttribute(scriptNonce = "") {
   return scriptNonce ? ` nonce="${escapeHtmlAttribute(scriptNonce)}"` : "";
 }
 
-function upsertStructuredDataScript(html, key, payload, { scriptNonce = "" } = {}) {
+async function upsertStructuredDataScript(html, key, payload, { scriptNonce = "" } = {}) {
   const marker = `data-structured-data="${escapeHtmlAttribute(key)}"`;
   const scriptTag = `    <script type="application/ld+json"${buildNonceAttribute(scriptNonce)} ${marker}>${serializeJsonForScript(payload)}</script>`;
-  const markerPattern = escapeRegex(marker);
-  const existingPattern = new RegExp(
-    `<script type="application/ld\\+json"[^>]*${markerPattern}[^>]*>[\\s\\S]*?<\\/script>`,
+  const doc = await parseTemplate(html);
+  const existing = findElement(
+    doc,
+    (node) => (
+      node.tagName === "script"
+        && getAttribute(node, "type") === "application/ld+json"
+        && getAttribute(node, "data-structured-data") === key
+    ),
   );
 
-  if (existingPattern.test(html)) {
-    return replaceMarkup(html, existingPattern, scriptTag);
+  if (existing) {
+    return replaceElement(html, existing, scriptTag, `structuredData:${key}`);
   }
 
-  return insertMarkupBefore(html, HEAD_CLOSE_PATTERN, scriptTag, "  ");
+  const head = findElementByTag(doc, "head");
+  return head ? insertBeforeEndTag(html, head, scriptTag, "  ") : `${html}\n${scriptTag}`;
 }
 
-function injectInitialPostData(html, payload, { scriptNonce = "" } = {}) {
+async function injectInitialPostData(html, payload, { scriptNonce = "" } = {}) {
   const scriptTag = `    <script id="initialPostData" type="application/json"${buildNonceAttribute(scriptNonce)}>${serializeJsonForScript(payload)}</script>`;
-  return insertMarkupBefore(html, MAIN_CLOSE_PATTERN, scriptTag, "    ", "initialPostData");
+  const doc = await parseTemplate(html);
+  const main = findElementByTag(doc, "main");
+  if (!main) {
+    console.warn('SSR: Node for "initialPostData" did not match template. The post.html structure may have changed.');
+    return html;
+  }
+  return insertBeforeEndTag(html, main, scriptTag, "    ");
 }
 
-function replacePostContent(html, post, { renderedContent, baseOrigin }) {
+async function replacePostContent(html, post, { renderedContent, baseOrigin }) {
   const articleMarkup = renderPostArticle(post, { renderedContent, baseOrigin });
   const replacement = `<div id="postContent" style="display: block;">${articleMarkup}</div>`;
-  let didMatch = false;
-  const result = html.replace(POST_CONTENT_PATTERN, () => {
-    didMatch = true;
-    return replacement;
-  });
-
-  if (didMatch) {
-    return result;
+  const doc = await parseTemplate(html);
+  const postContent = findElementById(doc, "postContent");
+  if (postContent) {
+    return replaceElement(html, postContent, replacement, "postContent");
   }
 
   console.warn('SSR: Pattern for "postContent" did not match template. Falling back to article insertion.');
-  return insertMarkupBefore(
-    html,
-    POST_ARTICLE_CLOSE_PATTERN,
-    replacement,
-    "        ",
-    "postContent:fallback",
-  );
+  const article = findElementById(doc, "postArticle") || findElementByTag(doc, "article");
+  return article ? insertBeforeEndTag(html, article, replacement, "        ") : html;
 }
 
-function replaceHeadMeta(html, { title, description, url, image, imageAlt, canonicalUrl, robots, ogType }) {
-  const headMetaBlock = [
+function buildHeadMetaBlock({ title, description, url, image, imageAlt, canonicalUrl, robots, ogType }) {
+  return [
     `    ${HEAD_META_BLOCK_START}`,
     `    <title>${escapeHtml(title)}</title>`,
     `    <meta name="description" content="${escapeHtmlAttribute(description)}" />`,
@@ -167,68 +238,101 @@ function replaceHeadMeta(html, { title, description, url, image, imageAlt, canon
     `    <link rel="canonical" href="${escapeHtmlAttribute(canonicalUrl)}" />`,
     `    ${HEAD_META_BLOCK_END}`,
   ].join("\n");
-  const headMetaBlockPattern = new RegExp(
-    `^[ \\t]*${escapeRegex(HEAD_META_BLOCK_START)}[\\s\\S]*?^[ \\t]*${escapeRegex(HEAD_META_BLOCK_END)}`,
-    "m",
-  );
+}
 
-  if (headMetaBlockPattern.test(html)) {
-    return replaceMarkup(html, headMetaBlockPattern, headMetaBlock, "headMetaBlock");
+function tagPatch(node, markup) {
+  const range = sourceRange(node);
+  return range ? { ...range, markup } : null;
+}
+
+function innerPatch(node, markup) {
+  const range = node ? {
+    start: node.sourceCodeLocation?.startTag?.endOffset,
+    end: node.sourceCodeLocation?.endTag?.startOffset,
+  } : null;
+  return range && Number.isInteger(range.start) && Number.isInteger(range.end)
+    ? { ...range, markup }
+    : null;
+}
+
+function insertionPatchBeforeEnd(node, markup, indentation = "  ") {
+  const offset = endTagStart(node);
+  return Number.isInteger(offset) ? { start: offset, end: offset, markup: `${markup}\n${indentation}` } : null;
+}
+
+async function replaceHeadMeta(html, { title, description, url, image, imageAlt, canonicalUrl, robots, ogType }) {
+  const doc = await parseTemplate(html);
+  const start = findComment(doc, HEAD_META_BLOCK_START);
+  const end = findComment(doc, HEAD_META_BLOCK_END);
+  const startOffset = start?.sourceCodeLocation?.startOffset;
+  const endOffset = end?.sourceCodeLocation?.endOffset;
+
+  if (Number.isInteger(startOffset) && Number.isInteger(endOffset) && startOffset < endOffset) {
+    return applyPatches(html, [{
+      start: startOffset,
+      end: endOffset,
+      markup: buildHeadMetaBlock({ title, description, url, image, imageAlt, canonicalUrl, robots, ogType }),
+    }]);
   }
 
-  const replacements = [
-    [/<title>[\s\S]*?<\/title>/, `<title>${escapeHtml(title)}</title>`, "title"],
-    [/<meta\s+name="description"\s+content="[^"]*"\s*\/?>/, `<meta name="description" content="${escapeHtmlAttribute(description)}" />`, "meta:description"],
-    [/<meta\s+property="og:title"\s+content="[^"]*"\s*\/?>/, `<meta property="og:title" content="${escapeHtmlAttribute(title)}" />`, "og:title"],
-    [/<meta\s+property="og:description"\s+content="[^"]*"\s*\/?>/, `<meta property="og:description" content="${escapeHtmlAttribute(description)}" />`, "og:description"],
-    [/<meta\s+property="og:type"\s+content="[^"]*"\s*\/?>/, `<meta property="og:type" content="${escapeHtmlAttribute(ogType || "website")}" />`, "og:type"],
-    [/<meta\s+property="og:url"\s+content="[^"]*"\s*\/?>/, `<meta property="og:url" content="${escapeHtmlAttribute(url)}" />`, "og:url"],
-    [/<meta\s+property="og:image"\s+content="[^"]*"\s*\/?>/, `<meta property="og:image" content="${escapeHtmlAttribute(image)}" />`, "og:image"],
-    [/<meta\s+property="og:image:alt"\s+content="[^"]*"\s*\/?>/, `<meta property="og:image:alt" content="${escapeHtmlAttribute(imageAlt)}" />`, "og:image:alt"],
+  const head = findElementByTag(doc, "head");
+  const titleNode = findElementByTag(doc, "title");
+  const robotsNode = findMeta(doc, "name", "robots");
+  const canonical = findLink(doc, "canonical");
+  const patches = [
+    titleNode
+      ? innerPatch(titleNode, escapeHtml(title))
+      : insertionPatchBeforeEnd(head, `    <title>${escapeHtml(title)}</title>`),
+    tagPatch(findMeta(doc, "name", "description"), `    <meta name="description" content="${escapeHtmlAttribute(description)}" />`),
+    tagPatch(findMeta(doc, "property", "og:title"), `    <meta property="og:title" content="${escapeHtmlAttribute(title)}" />`),
+    tagPatch(findMeta(doc, "property", "og:description"), `    <meta property="og:description" content="${escapeHtmlAttribute(description)}" />`),
+    tagPatch(findMeta(doc, "property", "og:type"), `    <meta property="og:type" content="${escapeHtmlAttribute(ogType || "website")}" />`),
+    tagPatch(findMeta(doc, "property", "og:url"), `    <meta property="og:url" content="${escapeHtmlAttribute(url)}" />`),
+    tagPatch(findMeta(doc, "property", "og:image"), `    <meta property="og:image" content="${escapeHtmlAttribute(image)}" />`),
+    tagPatch(findMeta(doc, "property", "og:image:alt"), `    <meta property="og:image:alt" content="${escapeHtmlAttribute(imageAlt)}" />`),
+    canonical
+      ? tagPatch(canonical, `    <link rel="canonical" href="${escapeHtmlAttribute(canonicalUrl)}" />`)
+      : insertionPatchBeforeEnd(head, `    <link rel="canonical" href="${escapeHtmlAttribute(canonicalUrl)}" />`),
   ];
 
-  let nextHtml = html;
-  replacements.forEach(([pattern, replacement, label]) => {
-    nextHtml = replaceMarkup(nextHtml, pattern, replacement, label);
-  });
-
   if (typeof robots === "string" && robots) {
-    nextHtml = upsertHeadMarkup(
-      nextHtml,
-      /<meta\s+name="robots"\s+content="[^"]*"\s*\/?>/,
-      `<meta name="robots" content="${escapeHtmlAttribute(robots)}" />`,
-    );
-  } else {
-    nextHtml = nextHtml.replace(/\s*<meta\s+name="robots"\s+content="[^"]*"\s*\/?>/, "");
+    patches.push(robotsNode
+      ? tagPatch(robotsNode, `    <meta name="robots" content="${escapeHtmlAttribute(robots)}" />`)
+      : insertionPatchBeforeEnd(head, `    <meta name="robots" content="${escapeHtmlAttribute(robots)}" />`));
+  } else if (robotsNode) {
+    patches.push(tagPatch(robotsNode, ""));
   }
 
-  nextHtml = upsertHeadMarkup(
-    nextHtml,
-    /<link\s+rel="canonical"\s+href="[^"]*"\s*\/?>/,
-    `<link rel="canonical" href="${escapeHtmlAttribute(canonicalUrl)}" />`,
-  );
-
-  return nextHtml;
+  return applyPatches(html, patches.filter(Boolean));
 }
 
-function replaceEmptyStateContent(html, { message, linkText = "返回博客列表" }) {
-  let nextHtml = html.replace(
-    /(<div class="empty-state" id="postEmpty"[^>]*>[\s\S]*?<\/svg>\s*<p>)[\s\S]*?(<\/p>)/,
-    (matched, prefix, suffix) => `${prefix}${escapeHtml(message)}${suffix}`,
-  );
+async function replaceEmptyStateContent(html, { message, linkText = "杩斿洖鍗氬鍒楄〃" }) {
+  const doc = await parseTemplate(html);
+  const emptyState = findElementById(doc, "postEmpty");
+  if (!emptyState) {
+    console.warn('SSR: Node for "postEmpty" did not match template. The post.html structure may have changed.');
+    return html;
+  }
 
-  nextHtml = nextHtml.replace(
-    /(<div class="empty-state" id="postEmpty"[^>]*>[\s\S]*?<p class="empty-state-helper">\s*)<a([^>]*\bdata-empty-link\b[^>]*)>[\s\S]*?<\/a>/,
-    (matched, prefix, attrs) => {
-      const cleanedAttrs = attrs.replace(/\s+href\s*=\s*"[^"]*"/i, "");
-      const safeAttrs = cleanedAttrs.endsWith(" ") ? cleanedAttrs : `${cleanedAttrs} `;
-      return `${prefix}<a${safeAttrs}href="/blog.html">${escapeHtml(linkText)}</a>`;
-    },
-  );
+  const messageNode = walk(emptyState, (node) => (
+    isElement(node, "p") && getAttribute(node, "class") !== "empty-state-helper"
+  ));
+  const emptyLink = walk(emptyState, (node) => isElement(node, "a") && hasAttribute(node, "data-empty-link"));
+  const patches = [];
 
-  return nextHtml;
+  if (messageNode) {
+    patches.push({ ...innerRange(messageNode), markup: escapeHtml(message) });
+  }
+
+  if (emptyLink) {
+    const linkAttrs = new Map((emptyLink.attrs || []).map((attr) => [attr.name, attr.value]));
+    linkAttrs.set("href", "/blog.html");
+    const attrs = Array.from(linkAttrs, ([name, value]) => serializeAttribute(name, value)).join("");
+    patches.push({ ...sourceRange(emptyLink), markup: `<a${attrs}>${escapeHtml(linkText)}</a>` });
+  }
+
+  return applyPatches(html, patches.filter((patch) => patch?.start != null && patch?.end != null));
 }
-
 function buildInitialPostPayload(post) {
   return {
     id: post.id,
@@ -266,8 +370,35 @@ function buildUnavailableContent(siteName = getSiteName()) {
   };
 }
 
-function renderFallbackPage(html, fallback, { url, canonicalUrl, image, imageAlt }) {
-  let nextHtml = replaceHeadMeta(html, {
+async function setElementDisplay(html, id, display, label) {
+  const doc = await parseTemplate(html);
+  const node = findElementById(doc, id);
+  if (!node) {
+    console.warn(`SSR: Node for "${label}" did not match template. The post.html structure may have changed.`);
+    return html;
+  }
+  return replaceStartTag(html, node, { style: `display: ${display};` }, label);
+}
+
+function replaceStartTag(html, node, updates, label) {
+  const range = startTagRange(node);
+  if (!range) {
+    if (label) {
+      console.warn(`SSR: Node for "${label}" did not expose a source range. The post.html structure may have changed.`);
+    }
+    return html;
+  }
+  const attrMap = new Map((node.attrs || []).map((attr) => [attr.name, attr.value]));
+  Object.entries(updates).forEach(([name, value]) => {
+    if (value == null) attrMap.delete(name);
+    else attrMap.set(name, value);
+  });
+  const attrs = Array.from(attrMap, ([name, value]) => serializeAttribute(name, value)).join("");
+  return applyPatches(html, [{ ...range, markup: `<${node.tagName}${attrs}>` }]);
+}
+
+async function renderFallbackPage(html, fallback, { url, canonicalUrl, image, imageAlt }) {
+  let nextHtml = await replaceHeadMeta(html, {
     title: fallback.title,
     description: fallback.description,
     url,
@@ -277,12 +408,12 @@ function renderFallbackPage(html, fallback, { url, canonicalUrl, image, imageAlt
     robots: fallback.robots,
     ogType: fallback.ogType,
   });
-  nextHtml = replaceEmptyStateContent(nextHtml, {
+  nextHtml = await replaceEmptyStateContent(nextHtml, {
     message: fallback.message,
     linkText: fallback.linkText,
   });
-  nextHtml = replaceMarkup(nextHtml, /<div\s+id="postSkeleton"(?=[\s>])/, '<div id="postSkeleton" style="display: none;"', "fallback:postSkeleton");
-  nextHtml = replaceMarkup(nextHtml, /id="postEmpty"\s+style="display:\s*none;?"/, 'id="postEmpty" style="display: flex;"', "fallback:postEmpty");
+  nextHtml = await setElementDisplay(nextHtml, "postSkeleton", "none", "fallback:postSkeleton");
+  nextHtml = await setElementDisplay(nextHtml, "postEmpty", "flex", "fallback:postEmpty");
   return nextHtml;
 }
 
@@ -300,7 +431,7 @@ module.exports = async function handler(req, res) {
 
   if (!routeId) {
     const fallback = buildNotFoundContent(siteName);
-    html = renderFallbackPage(html, fallback, {
+    html = await renderFallbackPage(html, fallback, {
       url: `${siteOrigin}/post.html`,
       canonicalUrl: `${siteOrigin}/post.html`,
       image: defaultShareImageUrl,
@@ -322,7 +453,7 @@ module.exports = async function handler(req, res) {
     const articleStructuredData = buildArticleStructuredData(post);
     const renderedContent = renderPostContent(post, { baseOrigin: siteOrigin });
 
-    html = replaceHeadMeta(html, {
+    html = await replaceHeadMeta(html, {
       title: pageTitle,
       description: pageDescription,
       url: postUrl,
@@ -332,13 +463,13 @@ module.exports = async function handler(req, res) {
       robots: "index, follow",
       ogType: "article",
     });
-    html = replaceMarkup(html, /<div\s+id="postSkeleton"(?=[\s>])/, '<div id="postSkeleton" style="display: none;"', "postSkeleton");
-    html = replacePostContent(html, post, {
+    html = await setElementDisplay(html, "postSkeleton", "none", "postSkeleton");
+    html = await replacePostContent(html, post, {
       renderedContent,
       baseOrigin: siteOrigin,
     });
-    html = injectInitialPostData(html, buildInitialPostPayload(post), { scriptNonce });
-    html = upsertStructuredDataScript(html, "post-article", articleStructuredData, { scriptNonce });
+    html = await injectInitialPostData(html, buildInitialPostPayload(post), { scriptNonce });
+    html = await upsertStructuredDataScript(html, "post-article", articleStructuredData, { scriptNonce });
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");
@@ -352,7 +483,7 @@ module.exports = async function handler(req, res) {
     }
 
     applyPublicErrorHeaders(res, error);
-    html = renderFallbackPage(html, fallback, {
+    html = await renderFallbackPage(html, fallback, {
       url: buildPostUrl(routeId),
       canonicalUrl: buildPostUrl(routeId),
       image: defaultShareImageUrl,

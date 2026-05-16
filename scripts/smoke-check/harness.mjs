@@ -97,6 +97,7 @@ function loadCommonJsModule(relativePath, exportedNames = [], sandboxOverrides =
       ...sandboxOverrides,
     }, {
       filename,
+      importModuleDynamically: (specifier) => import(specifier),
     });
 
     return module.exports;

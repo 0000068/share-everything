@@ -2,6 +2,13 @@
 
 All notable changes to this project are tracked here.
 
+## 6.7.0 - 2026-05-16
+
+- SSR article template mutation now uses parse5-backed DOM source ranges instead of regex template rewrites.
+- Post content, fallback empty-state, head metadata, initial JSON, and structured data insertion share node-based replacement helpers.
+- Smoke checks inject parse5 into the CommonJS VM harness so the SSR helpers are exercised without experimental Node flags.
+- Static assets now use the v6.7 cache key for fresh deployed loads.
+
 ## 6.6.0 - 2026-05-16
 
 - Static metadata injection now uses DOM-based parsing instead of regex rewrites.
