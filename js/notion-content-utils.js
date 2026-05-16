@@ -25,18 +25,48 @@
     date: Object.freeze(["date"]),
   });
 
-  // Intentionally accepts only legacy CSS color syntax (#hex, rgb/rgba/hsl/hsla
-  // with comma-separated components). Modern CSS Color Level 4 syntax
-  // (space-separated `rgb(0 0 0 / 50%)`, `oklch(...)`, color-mix, etc.) is
-  // rejected because this helper is used to sanitize values that flow into
-  // inline `style="..."` attributes from Notion select option colors and
-  // checked-in site config — both of which only ever produce legacy syntax,
-  // and a permissive regex would widen the inline-style attack surface.
+  const CSS_COLOR_FUNCTIONS = new Set([
+    "rgb",
+    "rgba",
+    "hsl",
+    "hsla",
+    "hwb",
+    "lab",
+    "lch",
+    "oklab",
+    "oklch",
+    "color",
+    "color-mix",
+  ]);
+
+  function hasBalancedParentheses(value) {
+    let depth = 0;
+    for (const char of value) {
+      if (char === "(") depth += 1;
+      else if (char === ")") depth -= 1;
+      if (depth < 0) return false;
+    }
+    return depth === 0;
+  }
+
+  function isSafeCssColorFunction(value) {
+    const openIndex = value.indexOf("(");
+    if (openIndex <= 0 || !value.endsWith(")")) return false;
+
+    const functionName = value.slice(0, openIndex).trim().toLowerCase();
+    if (!CSS_COLOR_FUNCTIONS.has(functionName)) return false;
+    if (!hasBalancedParentheses(value)) return false;
+    if (/[;"'\\<>]/.test(value) || /\/\*|\*\//.test(value)) return false;
+    if (/\b(?:url|var)\s*\(/i.test(value)) return false;
+    return /^[#a-zA-Z0-9,.\s%()+\-/*]+$/.test(value);
+  }
+
   function sanitizeCssColorValue(value, fallback) {
     if (typeof value !== "string") return fallback;
     const trimmed = value.trim();
     if (/^#[0-9a-fA-F]{3,8}$/.test(trimmed)) return trimmed;
     if (/^(rgba?|hsla?)\([0-9,.\s%]+\)$/i.test(trimmed)) return trimmed;
+    if (isSafeCssColorFunction(trimmed)) return trimmed;
     return fallback;
   }
 

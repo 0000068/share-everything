@@ -109,6 +109,31 @@ export function runContentModuleChecks(context) {
     "hello world tag one tag two",
     "notion-content-utils.js should provide the canonical post search text normalizer",
   );
+  assert.equal(
+    notionContentUtilsHelpers.sanitizeCssColorValue("rgb(0 0 0 / 50%)", "fallback"),
+    "rgb(0 0 0 / 50%)",
+    "notion-content-utils.js should accept CSS Color Level 4 rgb syntax",
+  );
+  assert.equal(
+    notionContentUtilsHelpers.sanitizeCssColorValue("oklch(62% 0.18 250)", "fallback"),
+    "oklch(62% 0.18 250)",
+    "notion-content-utils.js should accept oklch colors",
+  );
+  assert.equal(
+    notionContentUtilsHelpers.sanitizeCssColorValue("color-mix(in srgb, #112233 40%, white)", "fallback"),
+    "color-mix(in srgb, #112233 40%, white)",
+    "notion-content-utils.js should accept conservative color-mix syntax",
+  );
+  assert.equal(
+    notionContentUtilsHelpers.sanitizeCssColorValue("rgb(var(--unsafe))", "fallback"),
+    "fallback",
+    "notion-content-utils.js should reject CSS variables in inline color values",
+  );
+  assert.equal(
+    notionContentUtilsHelpers.sanitizeCssColorValue("oklch(62% 0.18 250);background:url(x)", "fallback"),
+    "fallback",
+    "notion-content-utils.js should reject inline style breakouts",
+  );
   const extractedSchema = notionContentUtilsHelpers.resolveNotionContentSchema({
     properties: {
       Name: { id: "title-id", name: "Name", type: "title" },

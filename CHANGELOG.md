@@ -2,6 +2,13 @@
 
 All notable changes to this project are tracked here.
 
+## 6.8.0 - 2026-05-16
+
+- Shared CSS color sanitization now accepts conservative CSS Color Level 4 functions.
+- `rgb(0 0 0 / 50%)`, `oklch(...)`, and safe `color-mix(...)` values now work across client and server rendering.
+- Inline color values still reject style breakouts, `url(...)`, CSS variables, comments, and unbalanced functions.
+- Static assets now use the v6.8 cache key for fresh deployed loads.
+
 ## 6.7.0 - 2026-05-16
 
 - SSR article template mutation now uses parse5-backed DOM source ranges instead of regex template rewrites.

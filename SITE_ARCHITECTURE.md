@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v6.7
+> Version: v6.8
 > Updated: 2026-05-16
 
 ## 1. Overview
@@ -33,7 +33,16 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v6.7 Highlights
+## 2. Version v6.8 Highlights
+
+v6.8 expands shared category color sanitization to carefully support modern CSS Color Level 4 values.
+
+- `js/notion-content-utils.js` accepts `rgb(0 0 0 / 50%)`, `oklch(...)`, and safe `color-mix(...)` values through a function-name allowlist.
+- The sanitizer still rejects `url(...)`, `var(...)`, comments, quotes, angle brackets, semicolons, and unbalanced parentheses before values reach inline styles.
+- Client cards, SSR article shells, and server category presentation all share the same color sanitizer.
+- Static CSS/JS/SVG entry URLs use the `20260516-v68` cache key so deployed browsers fetch the refreshed build promptly.
+
+## 2.1 Version v6.7 Highlights
 
 v6.7 moves SSR article template mutation from regex replacements to parse5-backed DOM source ranges.
 

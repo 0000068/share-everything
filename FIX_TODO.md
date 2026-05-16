@@ -1,6 +1,6 @@
 # 修复清单
 
-> 更新时间：2026-05-16（v6.7 发布）
+> 更新时间：2026-05-16（v6.8 发布）
 
 ---
 
@@ -15,7 +15,6 @@
 | ID | 简述 | 触发条件 |
 |---|---|---|
 | `A-1` | **CSS `.is-mobile-device-viewport` 双写整合**。目前 `style.css` / `blog-page.css` / `post-page.css` 每条移动端规则都在 `@media (max-width: 768px) and (hover: none) and (pointer: coarse)` 块与 `html.is-mobile-device-viewport` 兜底块中各写一份（共 ~107 处），是为兼容 Android 误报 `(hover: none)` 的有意冗余。已落地：在 `style.css` 添加大段说明注释 + 在 `scripts/smoke-check/mobile-layout.mjs` 增加 hero glow parity assertion。**触发整合**：(a) 评估目前 Android Chrome / Samsung Internet / vivo / Brave 都正确报告 `(hover: none) and (pointer: coarse)`；(b) 或引入 PostCSS 自动派生兜底类。 |
-| `B-1` | **CSS Color Level 4 语法支持**。`js/notion-content-utils.js` 的 `sanitizeCssColorValue` 仅接受 legacy 语法（`#hex`、`rgba(r, g, b, a)`），拒绝 `rgb(0 0 0 / 50%)` / `oklch(...)` / `color-mix(...)` 等现代写法。已落地：在函数前加保守原因注释。**触发支持**：site config 或 Notion 数据库开始使用 modern 颜色语法。 |
 | `B-2` | **菜单 active 状态 i18n-safe 校验**。`js/blog-page.js:506-516` 使用 `button.dataset.nav === "bookmarks"` / `"overview"` 区分激活按钮（之前是中文文本匹配，已重构）。当前 data 值是英文 key，i18n 安全。**触发再审**：站点引入运行时多语言切换时确认 data-nav 仍是 stable key。 |
 
 ---
