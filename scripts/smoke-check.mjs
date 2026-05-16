@@ -1790,7 +1790,7 @@ assert.equal(
   0,
   "post page should remove cross-tab bookmark listeners during cleanup",
 );
-expectIncludes(apiPostJs, 'upsertStructuredDataScript(html, "post-article"', "article HTML route should emit structured data");
+expectIncludes(apiPostJs, 'upsertStructuredDataScript(editor, "post-article"', "article HTML route should emit structured data through the shared template editor");
 expectIncludes(apiPostJs, 'id="initialPostData"', "article HTML route should emit initial post data");
 expectIncludes(apiPostJs, "buildUnavailableContent", "article HTML route should distinguish upstream failures from not-found routes");
 expectIncludes(apiPostJs, "getSiteName", "article HTML route should read the configured site name");
@@ -1800,12 +1800,20 @@ expectIncludes(apiPostJs, "rejectUnsupportedReadMethod", "article HTML route sho
 expectIncludes(apiPostJs, "getPublicPostErrorStatus", "article HTML route should reuse shared public-post error mapping");
 expectIncludes(apiPostJs, "fetchPublicPost", "article HTML route should only render posts from the public blog set");
 expectIncludes(apiPostJs, "renderPostArticle(post, { renderedContent, baseOrigin })", "article HTML route should reuse the shared article-shell renderer for SSR");
-expectIncludes(apiPostJs, 'findElementById(doc, "postContent")', "article HTML route should tolerate harmless postContent template attribute changes");
+expectIncludes(apiPostJs, 'findElementById(editor.doc, "postContent")', "article HTML route should tolerate harmless postContent template attribute changes");
 expectIncludes(apiPostJs, "Falling back to article insertion", "article HTML route should fall back to article insertion when the postContent anchor changes");
 expectIncludes(apiPostJs, '"Cache-Control", "no-store"', "article HTML route should not cache public post responses");
 expectIncludes(apiPostJs, "templatePromise = null;", "article HTML route should clear a failed production template read before retrying");
 expectIncludes(apiPostJs, "HEAD_META_BLOCK_START", "article HTML route should replace head metadata through explicit template anchors");
 expectIncludes(apiPostJs, "parseTemplate(html)", "article HTML route should parse the SSR template before dynamic replacements");
+expectIncludes(apiPostJs, "async function createTemplateEditor(html)", "article HTML route should centralize one parse5 document per SSR template edit batch");
+expectIncludes(apiPostJs, "const editor = await createTemplateEditor(html);", "SSR success path should create one template editor before dynamic replacements");
+expectIncludes(apiPostJs, "html = editor.apply();", "SSR success path should apply accumulated DOM patches once after dynamic replacements");
+assert.equal(
+  (apiPostJs.match(/await parseTemplate\(html\)/g) || []).length,
+  1,
+  "article HTML route should only parse each template editor source once",
+);
 expectIncludes(apiPostJs, "insertBeforeEndTag", "article HTML route should centralize DOM-node insertion and replacement");
 expectNotIncludes(apiPostJs, "result !== html", "article HTML route should track replacement matches explicitly instead of comparing final strings");
 expectIncludes(apiPostJs, "resolveShareImageUrl(post.coverImage, defaultShareImageUrl, siteOrigin)", "article HTML route should resolve og:image against the site origin consistently");

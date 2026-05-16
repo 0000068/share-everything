@@ -1,6 +1,6 @@
 # 修复清单
 
-> 更新时间：2026-05-16（v7.0 发布）
+> 更新时间：2026-05-16（v7.1 发布）
 
 ---
 
@@ -19,6 +19,11 @@
 ---
 
 ## 三、历史完成记录
+
+### v7.1 SSR performance (2026-05-16)
+
+- Parsed post.html once per SSR render path through api/post.js createTemplateEditor, then applied accumulated DOM patches in one pass.
+- Kept string-input SSR helper wrappers covered by smoke checks while the live success path uses the shared editor directly.
 
 ### v7.0 backlog (2026-05-16)
 

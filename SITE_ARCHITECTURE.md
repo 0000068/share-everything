@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v7.0
+> Version: v7.1
 > Updated: 2026-05-16
 
 ## 1. Overview
@@ -33,7 +33,16 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v7.0 Highlights
+## 2. Version v7.1 Highlights
+
+v7.1 reduces SSR article-template work by parsing `post.html` once per render path and applying accumulated DOM patches in one pass.
+
+- `api/post.js` now creates a shared template editor around one parse5 document and patch list.
+- SSR success rendering queues head metadata, skeleton visibility, article content, initial JSON, and JSON-LD insertion before a single `editor.apply()`.
+- The string-input helper wrappers stay testable for smoke checks, while the live success path uses the editor directly.
+- Static CSS/JS/SVG entry URLs use the `20260516-v71` cache key so deployed browsers fetch the refreshed build promptly.
+
+## 2.1 Version v7.0 Highlights
 
 v7.0 removes the hand-maintained mobile fallback CSS debt by deriving compatibility rules from the real touch media queries.
 

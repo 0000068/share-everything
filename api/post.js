@@ -148,10 +148,46 @@ function applyPatches(html, patches) {
     ), html);
 }
 
-function insertBeforeEndTag(html, node, markup, indentation = "") {
+function isTemplateEditor(value) {
+  return Boolean(value?.__templateEditor);
+}
+
+async function createTemplateEditor(html) {
+  const doc = await parseTemplate(html);
+  const patches = [];
+  return {
+    __templateEditor: true,
+    html,
+    doc,
+    patches,
+    addPatch(patch) {
+      if (patch && Number.isInteger(patch.start) && Number.isInteger(patch.end)) {
+        patches.push(patch);
+      }
+      return this;
+    },
+    apply() {
+      return applyPatches(html, patches);
+    },
+  };
+}
+
+function withTemplateEditor(htmlOrEditor, mutator) {
+  if (isTemplateEditor(htmlOrEditor)) {
+    mutator(htmlOrEditor);
+    return htmlOrEditor;
+  }
+
+  return createTemplateEditor(htmlOrEditor).then((editor) => {
+    mutator(editor);
+    return editor.apply();
+  });
+}
+
+function insertBeforeEndTag(editor, node, markup, indentation = "") {
   const offset = endTagStart(node);
-  if (!Number.isInteger(offset)) return html;
-  return applyPatches(html, [{ start: offset, end: offset, markup: `${markup}\n${indentation}` }]);
+  if (!Number.isInteger(offset)) return editor;
+  return editor.addPatch({ start: offset, end: offset, markup: `${markup}\n${indentation}` });
 }
 
 function serializeAttribute(name, value) {
@@ -159,61 +195,73 @@ function serializeAttribute(name, value) {
   return ` ${name}="${escapeHtmlAttribute(value)}"`;
 }
 
-function replaceElement(html, node, markup, label) {
+function replaceElement(editor, node, markup, label) {
   const range = sourceRange(node);
   if (!range) {
     if (label) {
       console.warn(`SSR: Node for "${label}" did not expose a source range. The post.html structure may have changed.`);
     }
-    return html;
+    return editor;
   }
-  return applyPatches(html, [{ ...range, markup }]);
+  return editor.addPatch({ ...range, markup });
 }
 
-async function upsertStructuredDataScript(html, key, payload) {
+function upsertStructuredDataScript(htmlOrEditor, key, payload) {
   const marker = `data-structured-data="${escapeHtmlAttribute(key)}"`;
   const scriptTag = `    <script type="application/ld+json" ${marker}>${serializeJsonForScript(payload)}</script>`;
-  const doc = await parseTemplate(html);
-  const existing = findElement(
-    doc,
-    (node) => (
-      node.tagName === "script"
-        && getAttribute(node, "type") === "application/ld+json"
-        && getAttribute(node, "data-structured-data") === key
-    ),
-  );
+  return withTemplateEditor(htmlOrEditor, (editor) => {
+    const existing = findElement(
+      editor.doc,
+      (node) => (
+        node.tagName === "script"
+          && getAttribute(node, "type") === "application/ld+json"
+          && getAttribute(node, "data-structured-data") === key
+      ),
+    );
 
-  if (existing) {
-    return replaceElement(html, existing, scriptTag, `structuredData:${key}`);
-  }
+    if (existing) {
+      replaceElement(editor, existing, scriptTag, `structuredData:${key}`);
+      return;
+    }
 
-  const head = findElementByTag(doc, "head");
-  return head ? insertBeforeEndTag(html, head, scriptTag, "  ") : `${html}\n${scriptTag}`;
+    const head = findElementByTag(editor.doc, "head");
+    if (head) {
+      insertBeforeEndTag(editor, head, scriptTag, "  ");
+      return;
+    }
+
+    editor.addPatch({ start: editor.html.length, end: editor.html.length, markup: `\n${scriptTag}` });
+  });
 }
 
-async function injectInitialPostData(html, payload) {
+function injectInitialPostData(htmlOrEditor, payload) {
   const scriptTag = `    <script id="initialPostData" type="application/json">${serializeJsonForScript(payload)}</script>`;
-  const doc = await parseTemplate(html);
-  const main = findElementByTag(doc, "main");
-  if (!main) {
-    console.warn('SSR: Node for "initialPostData" did not match template. The post.html structure may have changed.');
-    return html;
-  }
-  return insertBeforeEndTag(html, main, scriptTag, "    ");
+  return withTemplateEditor(htmlOrEditor, (editor) => {
+    const main = findElementByTag(editor.doc, "main");
+    if (!main) {
+      console.warn('SSR: Node for "initialPostData" did not match template. The post.html structure may have changed.');
+      return;
+    }
+    insertBeforeEndTag(editor, main, scriptTag, "    ");
+  });
 }
 
-async function replacePostContent(html, post, { renderedContent, baseOrigin }) {
+function replacePostContent(htmlOrEditor, post, { renderedContent, baseOrigin }) {
   const articleMarkup = renderPostArticle(post, { renderedContent, baseOrigin });
   const replacement = `<div id="postContent" style="display: block;">${articleMarkup}</div>`;
-  const doc = await parseTemplate(html);
-  const postContent = findElementById(doc, "postContent");
-  if (postContent) {
-    return replaceElement(html, postContent, replacement, "postContent");
-  }
+  return withTemplateEditor(htmlOrEditor, (editor) => {
+    const postContent = findElementById(editor.doc, "postContent");
+    if (postContent) {
+      replaceElement(editor, postContent, replacement, "postContent");
+      return;
+    }
 
-  console.warn('SSR: Pattern for "postContent" did not match template. Falling back to article insertion.');
-  const article = findElementById(doc, "postArticle") || findElementByTag(doc, "article");
-  return article ? insertBeforeEndTag(html, article, replacement, "        ") : html;
+    console.warn('SSR: Pattern for "postContent" did not match template. Falling back to article insertion.');
+    const article = findElementById(editor.doc, "postArticle") || findElementByTag(editor.doc, "article");
+    if (article) {
+      insertBeforeEndTag(editor, article, replacement, "        ");
+    }
+  });
 }
 
 function buildHeadMetaBlock({ title, description, url, image, imageAlt, canonicalUrl, robots, ogType }) {
@@ -253,78 +301,79 @@ function insertionPatchBeforeEnd(node, markup, indentation = "  ") {
   return Number.isInteger(offset) ? { start: offset, end: offset, markup: `${markup}\n${indentation}` } : null;
 }
 
-async function replaceHeadMeta(html, { title, description, url, image, imageAlt, canonicalUrl, robots, ogType }) {
-  const doc = await parseTemplate(html);
-  const start = findComment(doc, HEAD_META_BLOCK_START);
-  const end = findComment(doc, HEAD_META_BLOCK_END);
-  const startOffset = start?.sourceCodeLocation?.startOffset;
-  const endOffset = end?.sourceCodeLocation?.endOffset;
+function replaceHeadMeta(htmlOrEditor, { title, description, url, image, imageAlt, canonicalUrl, robots, ogType }) {
+  return withTemplateEditor(htmlOrEditor, (editor) => {
+    const doc = editor.doc;
+    const start = findComment(doc, HEAD_META_BLOCK_START);
+    const end = findComment(doc, HEAD_META_BLOCK_END);
+    const startOffset = start?.sourceCodeLocation?.startOffset;
+    const endOffset = end?.sourceCodeLocation?.endOffset;
 
-  if (Number.isInteger(startOffset) && Number.isInteger(endOffset) && startOffset < endOffset) {
-    return applyPatches(html, [{
-      start: startOffset,
-      end: endOffset,
-      markup: buildHeadMetaBlock({ title, description, url, image, imageAlt, canonicalUrl, robots, ogType }),
-    }]);
-  }
+    if (Number.isInteger(startOffset) && Number.isInteger(endOffset) && startOffset < endOffset) {
+      editor.addPatch({
+        start: startOffset,
+        end: endOffset,
+        markup: buildHeadMetaBlock({ title, description, url, image, imageAlt, canonicalUrl, robots, ogType }),
+      });
+      return;
+    }
 
-  const head = findElementByTag(doc, "head");
-  const titleNode = findElementByTag(doc, "title");
-  const robotsNode = findMeta(doc, "name", "robots");
-  const canonical = findLink(doc, "canonical");
-  const patches = [
-    titleNode
-      ? innerPatch(titleNode, escapeHtml(title))
-      : insertionPatchBeforeEnd(head, `    <title>${escapeHtml(title)}</title>`),
-    tagPatch(findMeta(doc, "name", "description"), `    <meta name="description" content="${escapeHtmlAttribute(description)}" />`),
-    tagPatch(findMeta(doc, "property", "og:title"), `    <meta property="og:title" content="${escapeHtmlAttribute(title)}" />`),
-    tagPatch(findMeta(doc, "property", "og:description"), `    <meta property="og:description" content="${escapeHtmlAttribute(description)}" />`),
-    tagPatch(findMeta(doc, "property", "og:type"), `    <meta property="og:type" content="${escapeHtmlAttribute(ogType || "website")}" />`),
-    tagPatch(findMeta(doc, "property", "og:url"), `    <meta property="og:url" content="${escapeHtmlAttribute(url)}" />`),
-    tagPatch(findMeta(doc, "property", "og:image"), `    <meta property="og:image" content="${escapeHtmlAttribute(image)}" />`),
-    tagPatch(findMeta(doc, "property", "og:image:alt"), `    <meta property="og:image:alt" content="${escapeHtmlAttribute(imageAlt)}" />`),
-    canonical
-      ? tagPatch(canonical, `    <link rel="canonical" href="${escapeHtmlAttribute(canonicalUrl)}" />`)
-      : insertionPatchBeforeEnd(head, `    <link rel="canonical" href="${escapeHtmlAttribute(canonicalUrl)}" />`),
-  ];
+    const head = findElementByTag(doc, "head");
+    const titleNode = findElementByTag(doc, "title");
+    const robotsNode = findMeta(doc, "name", "robots");
+    const canonical = findLink(doc, "canonical");
+    const patches = [
+      titleNode
+        ? innerPatch(titleNode, escapeHtml(title))
+        : insertionPatchBeforeEnd(head, `    <title>${escapeHtml(title)}</title>`),
+      tagPatch(findMeta(doc, "name", "description"), `    <meta name="description" content="${escapeHtmlAttribute(description)}" />`),
+      tagPatch(findMeta(doc, "property", "og:title"), `    <meta property="og:title" content="${escapeHtmlAttribute(title)}" />`),
+      tagPatch(findMeta(doc, "property", "og:description"), `    <meta property="og:description" content="${escapeHtmlAttribute(description)}" />`),
+      tagPatch(findMeta(doc, "property", "og:type"), `    <meta property="og:type" content="${escapeHtmlAttribute(ogType || "website")}" />`),
+      tagPatch(findMeta(doc, "property", "og:url"), `    <meta property="og:url" content="${escapeHtmlAttribute(url)}" />`),
+      tagPatch(findMeta(doc, "property", "og:image"), `    <meta property="og:image" content="${escapeHtmlAttribute(image)}" />`),
+      tagPatch(findMeta(doc, "property", "og:image:alt"), `    <meta property="og:image:alt" content="${escapeHtmlAttribute(imageAlt)}" />`),
+      canonical
+        ? tagPatch(canonical, `    <link rel="canonical" href="${escapeHtmlAttribute(canonicalUrl)}" />`)
+        : insertionPatchBeforeEnd(head, `    <link rel="canonical" href="${escapeHtmlAttribute(canonicalUrl)}" />`),
+    ];
 
-  if (typeof robots === "string" && robots) {
-    patches.push(robotsNode
-      ? tagPatch(robotsNode, `    <meta name="robots" content="${escapeHtmlAttribute(robots)}" />`)
-      : insertionPatchBeforeEnd(head, `    <meta name="robots" content="${escapeHtmlAttribute(robots)}" />`));
-  } else if (robotsNode) {
-    patches.push(tagPatch(robotsNode, ""));
-  }
+    if (typeof robots === "string" && robots) {
+      patches.push(robotsNode
+        ? tagPatch(robotsNode, `    <meta name="robots" content="${escapeHtmlAttribute(robots)}" />`)
+        : insertionPatchBeforeEnd(head, `    <meta name="robots" content="${escapeHtmlAttribute(robots)}" />`));
+    } else if (robotsNode) {
+      patches.push(tagPatch(robotsNode, ""));
+    }
 
-  return applyPatches(html, patches.filter(Boolean));
+    patches.filter(Boolean).forEach((patch) => editor.addPatch(patch));
+  });
 }
 
-async function replaceEmptyStateContent(html, { message, linkText = "返回博客列表" }) {
-  const doc = await parseTemplate(html);
-  const emptyState = findElementById(doc, "postEmpty");
-  if (!emptyState) {
-    console.warn('SSR: Node for "postEmpty" did not match template. The post.html structure may have changed.');
-    return html;
-  }
+function replaceEmptyStateContent(htmlOrEditor, { message, linkText = "返回博客列表" }) {
+  return withTemplateEditor(htmlOrEditor, (editor) => {
+    const emptyState = findElementById(editor.doc, "postEmpty");
+    if (!emptyState) {
+      console.warn('SSR: Node for "postEmpty" did not match template. The post.html structure may have changed.');
+      return;
+    }
 
-  const messageNode = walk(emptyState, (node) => (
-    isElement(node, "p") && getAttribute(node, "class") !== "empty-state-helper"
-  ));
-  const emptyLink = walk(emptyState, (node) => isElement(node, "a") && hasAttribute(node, "data-empty-link"));
-  const patches = [];
+    const messageNode = walk(emptyState, (node) => (
+      isElement(node, "p") && getAttribute(node, "class") !== "empty-state-helper"
+    ));
+    const emptyLink = walk(emptyState, (node) => isElement(node, "a") && hasAttribute(node, "data-empty-link"));
 
-  if (messageNode) {
-    patches.push({ ...innerRange(messageNode), markup: escapeHtml(message) });
-  }
+    if (messageNode) {
+      editor.addPatch({ ...innerRange(messageNode), markup: escapeHtml(message) });
+    }
 
-  if (emptyLink) {
-    const linkAttrs = new Map((emptyLink.attrs || []).map((attr) => [attr.name, attr.value]));
-    linkAttrs.set("href", "/blog.html");
-    const attrs = Array.from(linkAttrs, ([name, value]) => serializeAttribute(name, value)).join("");
-    patches.push({ ...sourceRange(emptyLink), markup: `<a${attrs}>${escapeHtml(linkText)}</a>` });
-  }
-
-  return applyPatches(html, patches.filter((patch) => patch?.start != null && patch?.end != null));
+    if (emptyLink) {
+      const linkAttrs = new Map((emptyLink.attrs || []).map((attr) => [attr.name, attr.value]));
+      linkAttrs.set("href", "/blog.html");
+      const attrs = Array.from(linkAttrs, ([name, value]) => serializeAttribute(name, value)).join("");
+      editor.addPatch({ ...sourceRange(emptyLink), markup: `<a${attrs}>${escapeHtml(linkText)}</a>` });
+    }
+  });
 }
 function buildInitialPostPayload(post) {
   return {
@@ -363,23 +412,24 @@ function buildUnavailableContent(siteName = getSiteName()) {
   };
 }
 
-async function setElementDisplay(html, id, display, label) {
-  const doc = await parseTemplate(html);
-  const node = findElementById(doc, id);
-  if (!node) {
-    console.warn(`SSR: Node for "${label}" did not match template. The post.html structure may have changed.`);
-    return html;
-  }
-  return replaceStartTag(html, node, { style: `display: ${display};` }, label);
+function setElementDisplay(htmlOrEditor, id, display, label) {
+  return withTemplateEditor(htmlOrEditor, (editor) => {
+    const node = findElementById(editor.doc, id);
+    if (!node) {
+      console.warn(`SSR: Node for "${label}" did not match template. The post.html structure may have changed.`);
+      return;
+    }
+    replaceStartTag(editor, node, { style: `display: ${display};` }, label);
+  });
 }
 
-function replaceStartTag(html, node, updates, label) {
+function replaceStartTag(editor, node, updates, label) {
   const range = startTagRange(node);
   if (!range) {
     if (label) {
       console.warn(`SSR: Node for "${label}" did not expose a source range. The post.html structure may have changed.`);
     }
-    return html;
+    return editor;
   }
   const attrMap = new Map((node.attrs || []).map((attr) => [attr.name, attr.value]));
   Object.entries(updates).forEach(([name, value]) => {
@@ -387,11 +437,12 @@ function replaceStartTag(html, node, updates, label) {
     else attrMap.set(name, value);
   });
   const attrs = Array.from(attrMap, ([name, value]) => serializeAttribute(name, value)).join("");
-  return applyPatches(html, [{ ...range, markup: `<${node.tagName}${attrs}>` }]);
+  return editor.addPatch({ ...range, markup: `<${node.tagName}${attrs}>` });
 }
 
 async function renderFallbackPage(html, fallback, { url, canonicalUrl, image, imageAlt }) {
-  let nextHtml = await replaceHeadMeta(html, {
+  const editor = await createTemplateEditor(html);
+  replaceHeadMeta(editor, {
     title: fallback.title,
     description: fallback.description,
     url,
@@ -401,13 +452,13 @@ async function renderFallbackPage(html, fallback, { url, canonicalUrl, image, im
     robots: fallback.robots,
     ogType: fallback.ogType,
   });
-  nextHtml = await replaceEmptyStateContent(nextHtml, {
+  replaceEmptyStateContent(editor, {
     message: fallback.message,
     linkText: fallback.linkText,
   });
-  nextHtml = await setElementDisplay(nextHtml, "postSkeleton", "none", "fallback:postSkeleton");
-  nextHtml = await setElementDisplay(nextHtml, "postEmpty", "flex", "fallback:postEmpty");
-  return nextHtml;
+  setElementDisplay(editor, "postSkeleton", "none", "fallback:postSkeleton");
+  setElementDisplay(editor, "postEmpty", "flex", "fallback:postEmpty");
+  return editor.apply();
 }
 
 module.exports = async function handler(req, res) {
@@ -446,7 +497,8 @@ module.exports = async function handler(req, res) {
     const articleStructuredData = buildArticleStructuredData(post);
     const renderedContent = renderPostContent(post, { baseOrigin: siteOrigin });
 
-    html = await replaceHeadMeta(html, {
+    const editor = await createTemplateEditor(html);
+    replaceHeadMeta(editor, {
       title: pageTitle,
       description: pageDescription,
       url: postUrl,
@@ -456,13 +508,14 @@ module.exports = async function handler(req, res) {
       robots: "index, follow",
       ogType: "article",
     });
-    html = await setElementDisplay(html, "postSkeleton", "none", "postSkeleton");
-    html = await replacePostContent(html, post, {
+    setElementDisplay(editor, "postSkeleton", "none", "postSkeleton");
+    replacePostContent(editor, post, {
       renderedContent,
       baseOrigin: siteOrigin,
     });
-    html = await injectInitialPostData(html, buildInitialPostPayload(post));
-    html = await upsertStructuredDataScript(html, "post-article", articleStructuredData);
+    injectInitialPostData(editor, buildInitialPostPayload(post));
+    upsertStructuredDataScript(editor, "post-article", articleStructuredData);
+    html = editor.apply();
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");

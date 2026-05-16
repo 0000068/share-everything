@@ -2,6 +2,13 @@
 
 All notable changes to this project are tracked here.
 
+## 7.1.0 - 2026-05-16
+
+- SSR article rendering now parses `post.html` once per render path and accumulates DOM source-range patches through a shared template editor.
+- Head metadata, skeleton visibility, article content, initial JSON, and JSON-LD insertion now apply in one patch pass on the success path.
+- The existing helper tests still exercise string-input wrappers while smoke checks lock the parse-once success path.
+- Static assets now use the v7.1 cache key for fresh deployed loads.
+
 ## 7.0.0 - 2026-05-16
 
 - Added a PostCSS-based mobile fallback generator for `html.is-mobile-device-viewport` compatibility CSS.
