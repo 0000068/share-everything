@@ -5,7 +5,13 @@
 (() => {
   const BookmarkManager = (() => {
     const BOOKMARK_KEY = "bookmarked_posts";
-    const BOOKMARK_METADATA_VERSION = 4;
+    // Incrementing this value forces every client to re-hydrate Notion metadata
+    // for previously-bookmarked posts on next access. This is NOT a real schema
+    // version — there is no migration logic, just "stored entry lags hydration
+    // generation → fetch fresh data on read". The stored property is still
+    // named `metadataVersion` for backward compatibility with existing entries
+    // in users' localStorage; do not rename the field.
+    const BOOKMARK_METADATA_HYDRATION_GENERATION = 4;
     const siteUtils = window.SiteUtils || {};
     const resolveDisplayImageUrl = siteUtils.resolveDisplayImageUrl;
     const sanitizeImageUrl = siteUtils.sanitizeImageUrl;
@@ -122,7 +128,7 @@
     }
 
     function needsMetadataHydration(bookmark) {
-      return Number(bookmark?.metadataVersion || 0) < BOOKMARK_METADATA_VERSION;
+      return Number(bookmark?.metadataVersion || 0) < BOOKMARK_METADATA_HYDRATION_GENERATION;
     }
 
     function hasLegacyMetadata() {
@@ -151,7 +157,7 @@
         coverEmoji: source?.coverEmoji || "📝",
         coverGradient: source?.coverGradient || null,
         tags: Array.isArray(source?.tags) ? source.tags : [],
-        metadataVersion: BOOKMARK_METADATA_VERSION,
+        metadataVersion: BOOKMARK_METADATA_HYDRATION_GENERATION,
         timestamp,
       });
     }

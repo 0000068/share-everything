@@ -717,6 +717,17 @@ expectIncludes(localServerJs, "body,", "local dev server should pass parsed body
 expectIncludes(packageJson, '"notion:live-check": "node scripts/notion-live-check.mjs"', "package scripts should expose the optional live Notion integration check");
 expectIncludes(packageJson, '"mobile:fallbacks": "node scripts/build-mobile-fallbacks.mjs"', "package scripts should expose the mobile fallback generator");
 expectIncludes(packageJson, '"check": "node scripts/build-mobile-fallbacks.mjs --check && node scripts/inject-site-meta.mjs --check && node scripts/smoke-check.mjs"', "package check should verify generated mobile fallbacks before smoke checks");
+const buildMobileFallbacksJs = read("scripts/build-mobile-fallbacks.mjs");
+expectIncludes(buildMobileFallbacksJs, "isKeyframeStep", "mobile fallback generator should skip prefixing keyframe step selectors");
+expectIncludes(buildMobileFallbacksJs, "keyframes", "mobile fallback generator should recognize @keyframes at-rules when filtering keyframe steps");
+for (const cssFile of ["css/style.css", "css/blog-page.css", "css/post-page.css"]) {
+  const cssSource = read(cssFile);
+  assert.equal(
+    /html\.is-mobile-device-viewport\s+(?:\d+%|from\b|to\b)/.test(cssSource),
+    false,
+    `${cssFile} should never contain html.is-mobile-device-viewport prefixed onto a keyframe step`,
+  );
+}
 expectIncludes(packageJson, '"visual:check": "node scripts/visual-regression.mjs"', "package scripts should expose the browser visual regression check");
 expectIncludes(packageJson, '"verify:release": "node scripts/release-check.mjs"', "package scripts should expose the strict release check");
 expectIncludes(packageJson, '"license": "MIT"', "package metadata should match the published README license");
@@ -1114,7 +1125,8 @@ expectNotIncludes(bookmarkJs, "codeUnit.toString(16)", "bookmark selector escapi
 expectIncludes(bookmarkJs, "createBookmarkEntry", "bookmark manager should centralize bookmark record creation");
 expectIncludes(bookmarkJs, "buildCardBookmarkSource", "bookmark manager should centralize DOM snapshot extraction");
 expectIncludes(bookmarkJs, "hydrateMissingMetadata", "bookmark manager should hydrate legacy metadata");
-expectIncludes(bookmarkJs, "BOOKMARK_METADATA_VERSION = 4", "bookmark metadata should upgrade when persistence rules change");
+expectIncludes(bookmarkJs, "BOOKMARK_METADATA_HYDRATION_GENERATION = 4", "bookmark metadata should re-hydrate when the persistence generation bumps");
+expectIncludes(bookmarkJs, "no migration logic", "bookmark metadata constant should document that it is a hydration trigger, not a schema version");
 expectIncludes(bookmarkJs, "resolveDisplayImageUrl", "bookmark normalization should preserve displayable cover images");
 expectIncludes(bookmarkJs, "coverPlaceholder?.dataset?.coverGradient", "bookmark DOM fallback should preserve card gradients");
 expectIncludes(bookmarkJs, "coverPlaceholder?.dataset?.coverEmoji", "bookmark DOM fallback should preserve card emojis");

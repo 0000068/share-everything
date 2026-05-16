@@ -2,6 +2,13 @@
 
 All notable changes to this project are tracked here.
 
+## 7.2.0 - 2026-05-16
+
+- Mobile fallback CSS generator now skips `@keyframes` step selectors so future keyframe blocks inside touch media queries do not produce invalid CSS.
+- Image proxy now sniffs response body magic bytes for SVG/XML signatures and rejects with 415 even when the upstream `Content-Type` claims a raster image, adding defense in depth on top of the existing MIME allow-list.
+- Renamed `BOOKMARK_METADATA_VERSION` to `BOOKMARK_METADATA_HYDRATION_GENERATION` with an explanatory comment — the value is a "force re-hydrate on read" trigger, not a schema version (no migration logic exists).
+- Static assets now use the v7.2 cache key for fresh deployed loads.
+
 ## 7.1.0 - 2026-05-16
 
 - SSR article rendering now parses `post.html` once per render path and accumulates DOM source-range patches through a shared template editor.

@@ -89,8 +89,19 @@ function prefixSelector(selector) {
     .join(",\n  ");
 }
 
+// @keyframes step selectors ("0%", "from", "to" etc.) must NOT receive the
+// `html.is-mobile-device-viewport` prefix — combining them yields invalid CSS
+// like `html.is-mobile-device-viewport 0% {}`. The check inspects the immediate
+// parent because postcss models keyframe steps as one-level children of the
+// @keyframes at-rule.
+function isKeyframeStep(node) {
+  const parent = node.parent;
+  if (!parent || parent.type !== "atrule") return false;
+  return /^(-webkit-|-moz-|-ms-|-o-)?keyframes$/i.test(parent.name || "");
+}
+
 function prefixRules(node) {
-  if (node.type === "rule") {
+  if (node.type === "rule" && !isKeyframeStep(node)) {
     node.selector = prefixSelector(node.selector);
   }
 

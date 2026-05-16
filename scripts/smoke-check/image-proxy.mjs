@@ -114,6 +114,33 @@ await svgImageProxyHandler({
 }, imageProxySvgRes);
 assert.equal(imageProxySvgRes.statusCode, 415, "image proxy endpoint should reject active SVG images");
 assert.equal(imageProxySvgRes.getHeader("cache-control"), "no-store", "rejected SVG proxy responses should not be cached");
+const disguisedSvgBody = Buffer.from('<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"><script>1</script></svg>');
+const disguisedSvgProxyHandler = loadCommonJsModule("api/image.js", [], {
+  __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
+  __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
+    body: disguisedSvgBody,
+    headers: {
+      "content-type": "image/png",
+      "content-length": String(disguisedSvgBody.byteLength),
+    },
+  }),
+});
+const imageProxyDisguisedSvgRes = createApiResponseRecorder();
+await disguisedSvgProxyHandler({
+  method: "GET",
+  query: { src: "https://assets.example.com/disguised.png" },
+}, imageProxyDisguisedSvgRes);
+assert.equal(
+  imageProxyDisguisedSvgRes.statusCode,
+  415,
+  "image proxy endpoint should reject bodies whose magic bytes look like SVG/XML even when Content-Type claims a raster format",
+);
+assert.equal(
+  imageProxyDisguisedSvgRes.getHeader("cache-control"),
+  "no-store",
+  "disguised SVG rejections should not be cached",
+);
+expectIncludes(apiImageJs, "hasSvgOrXmlSignature", "image proxy endpoint should sniff response body for XML/SVG signatures regardless of declared MIME type");
 let blockedImageProxyFetchCount = 0;
 const blockedImageProxyHandler = loadCommonJsModule("api/image.js", [], {
   __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,

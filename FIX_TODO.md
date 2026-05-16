@@ -1,6 +1,6 @@
 # 修复清单
 
-> 更新时间：2026-05-16（v7.1 发布）
+> 更新时间：2026-05-16（v7.2 发布）
 
 ---
 
@@ -19,6 +19,12 @@
 ---
 
 ## 三、历史完成记录
+
+### v7.2 defense-in-depth + naming (2026-05-16)
+
+- `scripts/build-mobile-fallbacks.mjs` `prefixRules` now skips `@keyframes` step children — `0% / from / to` selectors no longer get the `html.is-mobile-device-viewport` prefix that would yield invalid CSS.
+- `api/image.js` adds body magic-byte sniffing on top of the MIME allow-list, rejecting `<?xml` / `<svg` / `<!DOCTYPE svg` payloads as 415 even when the upstream `Content-Type` claims a raster format.
+- `js/bookmark.js` renames `BOOKMARK_METADATA_VERSION` to `BOOKMARK_METADATA_HYDRATION_GENERATION` and documents that it is a "force re-hydrate on read" trigger, not a real schema version. The stored property name is left untouched.
 
 ### v7.1 SSR performance (2026-05-16)
 

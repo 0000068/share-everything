@@ -462,6 +462,23 @@ function isImageContentType(contentType) {
   return /^image\/[a-z0-9.+-]+$/.test(mediaType) && !BLOCKED_IMAGE_CONTENT_TYPES.has(mediaType);
 }
 
+// Content-Type alone is not authoritative — an upstream can declare image/png
+// while shipping SVG/XML bytes. Browsers respect X-Content-Type-Options:nosniff
+// for script execution, but <img src> still renders SVG payloads regardless of
+// declared MIME. Reject responses whose first bytes look like XML/SVG markup.
+function hasSvgOrXmlSignature(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.byteLength === 0) return false;
+  const head = buffer.subarray(0, Math.min(256, buffer.byteLength))
+    .toString("utf8")
+    .replace(/^[﻿\s]+/, "")
+    .toLowerCase();
+  return (
+    head.startsWith("<?xml")
+    || head.startsWith("<svg")
+    || /^<!doctype\s+svg/.test(head)
+  );
+}
+
 async function readBoundedImageBuffer(response) {
   const contentLength = Number(response.headers.get("content-length"));
   if (Number.isFinite(contentLength) && contentLength > IMAGE_PROXY_MAX_BYTES) {
@@ -530,6 +547,11 @@ module.exports = async function handler(req, res) {
     }
 
     const body = await readBoundedImageBuffer(response);
+    if (hasSvgOrXmlSignature(body)) {
+      const error = new Error("Upstream response body looks like SVG/XML despite the declared image MIME type");
+      error.status = 415;
+      throw error;
+    }
     return res.status(200).send(body);
   } catch (error) {
     const status = Number(error?.status) || (error?.name === "AbortError" ? 504 : 502);

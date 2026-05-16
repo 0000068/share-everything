@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v7.1
+> Version: v7.2
 > Updated: 2026-05-16
 
 ## 1. Overview
@@ -33,7 +33,16 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v7.1 Highlights
+## 2. Version v7.2 Highlights
+
+v7.2 closes three small but real defense / clarity gaps left after v7.0–v7.1.
+
+- `scripts/build-mobile-fallbacks.mjs` now skips keyframe step selectors so future `@keyframes` blocks inside touch media queries cannot produce invalid `html.is-mobile-device-viewport 0% { ... }` CSS.
+- `api/image.js` sniffs the first bytes of every proxied response body for `<?xml` / `<svg` / `<!DOCTYPE svg` signatures and rejects with 415 even when the upstream `Content-Type` claims a raster MIME — defense in depth on top of the existing MIME allow-list.
+- `js/bookmark.js` renames `BOOKMARK_METADATA_VERSION` to `BOOKMARK_METADATA_HYDRATION_GENERATION` and documents that the constant is a "force refresh on read" trigger, not a real schema version (there is no migration logic). The stored `metadataVersion` field is left untouched for backward compatibility with existing entries in users' localStorage.
+- Static CSS/JS/SVG entry URLs use the `20260516-v72` cache key so deployed browsers fetch the refreshed build promptly.
+
+## 2.1 Version v7.1 Highlights
 
 v7.1 reduces SSR article-template work by parsing `post.html` once per render path and applying accumulated DOM patches in one pass.
 
