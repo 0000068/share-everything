@@ -2,6 +2,13 @@
 
 All notable changes to this project are tracked here.
 
+## 6.3.0 - 2026-05-16
+
+- Metadata escaping now behaves consistently across server rendering and tooling.
+- Notion content load-order errors now name the exact missing dependency.
+- The shared release checks cover the new HTML escape helper modules.
+- Static assets now use the v6.3 cache key for fresh deployed loads.
+
 ## 6.2.0 - 2026-05-16
 
 - Server and browser category gradients now handle `calc()` plus signs consistently.

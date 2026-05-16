@@ -675,7 +675,7 @@ body.has-cursor-glow .cursor-glow {
 
   .ambient-background {
     background-color: #0b1021;
-    background-image: url("/assets/mobile-home-starry-bg.svg?v=20260516-v62");
+    background-image: url("/assets/mobile-home-starry-bg.svg?v=20260516-v63");
     background-position: center top;
     background-repeat: no-repeat;
     background-size: cover;
@@ -1091,7 +1091,7 @@ html.is-mobile-device-viewport body {
 
 html.is-mobile-device-viewport .ambient-background {
   background-color: #0b1021;
-  background-image: url("/assets/mobile-home-starry-bg.svg?v=20260516-v62");
+  background-image: url("/assets/mobile-home-starry-bg.svg?v=20260516-v63");
   background-position: center top;
   background-repeat: no-repeat;
   background-size: cover;

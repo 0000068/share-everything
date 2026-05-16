@@ -19,6 +19,7 @@ const {
   rejectUnsupportedReadMethod,
   readQueryString,
 } = require("../server/public-content");
+const { escapeHtmlAttribute } = require("../server/html-escape");
 const {
   applyHtmlSecurityHeaders,
   buildContentSecurityPolicy,
@@ -56,10 +57,6 @@ function getTemplate() {
     });
   }
   return templatePromise;
-}
-
-function escapeAttribute(value) {
-  return escapeHtml(value).replace(/`/g, "&#96;");
 }
 
 function serializeJsonForScript(value) {
@@ -118,7 +115,7 @@ function isContentSecurityPolicyMetaTag(metaTag) {
 }
 
 function replaceContentSecurityPolicyMeta(html, options = {}) {
-  const markup = `<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(
+  const markup = `<meta http-equiv="Content-Security-Policy" content="${escapeHtmlAttribute(
     buildContentSecurityPolicy({
       ...options,
       includeFrameAncestors: false,
@@ -150,11 +147,11 @@ function replaceContentSecurityPolicyMeta(html, options = {}) {
 }
 
 function buildNonceAttribute(scriptNonce = "") {
-  return scriptNonce ? ` nonce="${escapeAttribute(scriptNonce)}"` : "";
+  return scriptNonce ? ` nonce="${escapeHtmlAttribute(scriptNonce)}"` : "";
 }
 
 function upsertStructuredDataScript(html, key, payload, { scriptNonce = "" } = {}) {
-  const marker = `data-structured-data="${escapeAttribute(key)}"`;
+  const marker = `data-structured-data="${escapeHtmlAttribute(key)}"`;
   const scriptTag = `    <script type="application/ld+json"${buildNonceAttribute(scriptNonce)} ${marker}>${serializeJsonForScript(payload)}</script>`;
   const markerPattern = escapeRegex(marker);
   const existingPattern = new RegExp(
@@ -200,15 +197,15 @@ function replaceHeadMeta(html, { title, description, url, image, imageAlt, canon
   const headMetaBlock = [
     `    ${HEAD_META_BLOCK_START}`,
     `    <title>${escapeHtml(title)}</title>`,
-    `    <meta name="description" content="${escapeAttribute(description)}" />`,
-    `    <meta property="og:title" content="${escapeAttribute(title)}" />`,
-    `    <meta property="og:description" content="${escapeAttribute(description)}" />`,
-    `    <meta property="og:type" content="${escapeAttribute(ogType || "website")}" />`,
-    `    <meta property="og:url" content="${escapeAttribute(url)}" />`,
-    `    <meta property="og:image" content="${escapeAttribute(image)}" />`,
-    `    <meta property="og:image:alt" content="${escapeAttribute(imageAlt)}" />`,
-    ...(typeof robots === "string" && robots ? [`    <meta name="robots" content="${escapeAttribute(robots)}" />`] : []),
-    `    <link rel="canonical" href="${escapeAttribute(canonicalUrl)}" />`,
+    `    <meta name="description" content="${escapeHtmlAttribute(description)}" />`,
+    `    <meta property="og:title" content="${escapeHtmlAttribute(title)}" />`,
+    `    <meta property="og:description" content="${escapeHtmlAttribute(description)}" />`,
+    `    <meta property="og:type" content="${escapeHtmlAttribute(ogType || "website")}" />`,
+    `    <meta property="og:url" content="${escapeHtmlAttribute(url)}" />`,
+    `    <meta property="og:image" content="${escapeHtmlAttribute(image)}" />`,
+    `    <meta property="og:image:alt" content="${escapeHtmlAttribute(imageAlt)}" />`,
+    ...(typeof robots === "string" && robots ? [`    <meta name="robots" content="${escapeHtmlAttribute(robots)}" />`] : []),
+    `    <link rel="canonical" href="${escapeHtmlAttribute(canonicalUrl)}" />`,
     `    ${HEAD_META_BLOCK_END}`,
   ].join("\n");
   const headMetaBlockPattern = new RegExp(
@@ -222,13 +219,13 @@ function replaceHeadMeta(html, { title, description, url, image, imageAlt, canon
 
   const replacements = [
     [/<title>[\s\S]*?<\/title>/, `<title>${escapeHtml(title)}</title>`, "title"],
-    [/<meta\s+name="description"\s+content="[^"]*"\s*\/?>/, `<meta name="description" content="${escapeAttribute(description)}" />`, "meta:description"],
-    [/<meta\s+property="og:title"\s+content="[^"]*"\s*\/?>/, `<meta property="og:title" content="${escapeAttribute(title)}" />`, "og:title"],
-    [/<meta\s+property="og:description"\s+content="[^"]*"\s*\/?>/, `<meta property="og:description" content="${escapeAttribute(description)}" />`, "og:description"],
-    [/<meta\s+property="og:type"\s+content="[^"]*"\s*\/?>/, `<meta property="og:type" content="${escapeAttribute(ogType || "website")}" />`, "og:type"],
-    [/<meta\s+property="og:url"\s+content="[^"]*"\s*\/?>/, `<meta property="og:url" content="${escapeAttribute(url)}" />`, "og:url"],
-    [/<meta\s+property="og:image"\s+content="[^"]*"\s*\/?>/, `<meta property="og:image" content="${escapeAttribute(image)}" />`, "og:image"],
-    [/<meta\s+property="og:image:alt"\s+content="[^"]*"\s*\/?>/, `<meta property="og:image:alt" content="${escapeAttribute(imageAlt)}" />`, "og:image:alt"],
+    [/<meta\s+name="description"\s+content="[^"]*"\s*\/?>/, `<meta name="description" content="${escapeHtmlAttribute(description)}" />`, "meta:description"],
+    [/<meta\s+property="og:title"\s+content="[^"]*"\s*\/?>/, `<meta property="og:title" content="${escapeHtmlAttribute(title)}" />`, "og:title"],
+    [/<meta\s+property="og:description"\s+content="[^"]*"\s*\/?>/, `<meta property="og:description" content="${escapeHtmlAttribute(description)}" />`, "og:description"],
+    [/<meta\s+property="og:type"\s+content="[^"]*"\s*\/?>/, `<meta property="og:type" content="${escapeHtmlAttribute(ogType || "website")}" />`, "og:type"],
+    [/<meta\s+property="og:url"\s+content="[^"]*"\s*\/?>/, `<meta property="og:url" content="${escapeHtmlAttribute(url)}" />`, "og:url"],
+    [/<meta\s+property="og:image"\s+content="[^"]*"\s*\/?>/, `<meta property="og:image" content="${escapeHtmlAttribute(image)}" />`, "og:image"],
+    [/<meta\s+property="og:image:alt"\s+content="[^"]*"\s*\/?>/, `<meta property="og:image:alt" content="${escapeHtmlAttribute(imageAlt)}" />`, "og:image:alt"],
   ];
 
   let nextHtml = html;
@@ -240,7 +237,7 @@ function replaceHeadMeta(html, { title, description, url, image, imageAlt, canon
     nextHtml = upsertHeadMarkup(
       nextHtml,
       /<meta\s+name="robots"\s+content="[^"]*"\s*\/?>/,
-      `<meta name="robots" content="${escapeAttribute(robots)}" />`,
+      `<meta name="robots" content="${escapeHtmlAttribute(robots)}" />`,
     );
   } else {
     nextHtml = nextHtml.replace(/\s*<meta\s+name="robots"\s+content="[^"]*"\s*\/?>/, "");
@@ -249,7 +246,7 @@ function replaceHeadMeta(html, { title, description, url, image, imageAlt, canon
   nextHtml = upsertHeadMarkup(
     nextHtml,
     /<link\s+rel="canonical"\s+href="[^"]*"\s*\/?>/,
-    `<link rel="canonical" href="${escapeAttribute(canonicalUrl)}" />`,
+    `<link rel="canonical" href="${escapeHtmlAttribute(canonicalUrl)}" />`,
   );
 
   return nextHtml;

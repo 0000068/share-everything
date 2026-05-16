@@ -36,7 +36,8 @@ export function runContentModuleChecks(context) {
   expectIncludes(notionContentJs, "root?.NotionContentUtils", "shared notion content module should read extracted pure utilities from the browser global");
   expectIncludes(notionContentJs, "root?.NotionContentUrl", "shared notion content module should read extracted URL helpers from the browser global");
   expectIncludes(notionContentJs, "root?.NotionArticleRenderer", "shared notion content module should read the article renderer from the browser global");
-  expectIncludes(notionContentJs, "notion-content-shared.js, notion-content-utils.js, notion-content-url.js, and notion-article-renderer.js must load before notion-content.js", "shared notion content module should fail loudly when the browser load order is wrong");
+  expectIncludes(notionContentJs, "notion-content.js dependencies missing or wrong type", "shared notion content module should fail loudly when the browser load order is wrong");
+  expectIncludes(notionContentJs, "missingDependencies.join", "shared notion content module should name the missing browser load-order dependency");
 
   expectIncludes(notionContentUtilsJs, "function resolveNotionContentSchema", "notion-content-utils.js should own Notion schema resolution");
   expectIncludes(notionContentUtilsJs, "function getPageProperty", "notion-content-utils.js should own schema-based page property lookup");

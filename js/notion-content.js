@@ -99,49 +99,62 @@
     createPostArticleRenderer,
   } = articleRenderer;
 
-  if (
-    !ALL_CATEGORY ||
-    !BOOKMARK_CATEGORY ||
-    !BOOKMARK_ONLY_CATEGORIES ||
-    !CATEGORY_COLORS ||
-    !CATEGORY_GRADIENTS ||
-    !DEFAULT_CATEGORY_COLOR ||
-    !DEFAULT_COVER_GRADIENT ||
-    !FEATURED_CATEGORY_DEFINITIONS ||
-    !REMOTE_BLOG_CATEGORIES ||
-    !SUPPORTED_BLOG_CATEGORIES ||
-    typeof getBookmarkOnlyCategories !== "function" ||
-    typeof getCategoryColor !== "function" ||
-    typeof getRemoteBlogCategories !== "function" ||
-    typeof getSupportedBlogCategories !== "function" ||
-    typeof gradientForCategory !== "function" ||
-    !DEFAULT_NOTION_CONTENT_PROPERTY_CANDIDATES ||
-    typeof buildPostSearchText !== "function" ||
-    typeof escapeHtml !== "function" ||
-    typeof getBaseOrigin !== "function" ||
-    typeof getPageProperty !== "function" ||
-    typeof normalizeName !== "function" ||
-    typeof normalizePostTags !== "function" ||
-    typeof normalizeSearchText !== "function" ||
-    typeof resolveNotionContentSchema !== "function" ||
-    typeof sanitizeCssColorValue !== "function" ||
-    !IMAGE_PROXY_PATH ||
-    !SAFE_IMAGE_PROTOCOLS ||
-    !SAFE_LINK_PROTOCOLS ||
-    typeof getUrlHostname !== "function" ||
-    typeof isLikelyEphemeralAssetUrl !== "function" ||
-    typeof resolveDisplayImageUrl !== "function" ||
-    typeof resolveEmbeddableUrl !== "function" ||
-    typeof resolveProxiedDisplayImageUrl !== "function" ||
-    typeof resolveShareImageUrl !== "function" ||
-    typeof sanitizeCspResourceUrl !== "function" ||
-    typeof sanitizeUrl !== "function" ||
-    typeof shouldOpenLinkInNewTab !== "function" ||
-    typeof createPostArticleRenderer !== "function" ||
-    typeof CALENDAR_ICON_SVG !== "string" ||
-    typeof CLOCK_ICON_SVG !== "string"
-  ) {
-    throw new Error("notion-content-shared.js, notion-content-utils.js, notion-content-url.js, and notion-article-renderer.js must load before notion-content.js");
+  const REQUIRED_DEPENDENCIES = [
+    { path: "sharedContent.ALL_CATEGORY", value: ALL_CATEGORY, kind: "truthy" },
+    { path: "sharedContent.BOOKMARK_CATEGORY", value: BOOKMARK_CATEGORY, kind: "truthy" },
+    { path: "sharedContent.BOOKMARK_ONLY_CATEGORIES", value: BOOKMARK_ONLY_CATEGORIES, kind: "truthy" },
+    { path: "sharedContent.CATEGORY_COLORS", value: CATEGORY_COLORS, kind: "truthy" },
+    { path: "sharedContent.CATEGORY_GRADIENTS", value: CATEGORY_GRADIENTS, kind: "truthy" },
+    { path: "sharedContent.DEFAULT_CATEGORY_COLOR", value: DEFAULT_CATEGORY_COLOR, kind: "truthy" },
+    { path: "sharedContent.DEFAULT_COVER_GRADIENT", value: DEFAULT_COVER_GRADIENT, kind: "truthy" },
+    { path: "sharedContent.FEATURED_CATEGORY_DEFINITIONS", value: FEATURED_CATEGORY_DEFINITIONS, kind: "truthy" },
+    { path: "sharedContent.REMOTE_BLOG_CATEGORIES", value: REMOTE_BLOG_CATEGORIES, kind: "truthy" },
+    { path: "sharedContent.SUPPORTED_BLOG_CATEGORIES", value: SUPPORTED_BLOG_CATEGORIES, kind: "truthy" },
+    { path: "sharedContent.getBookmarkOnlyCategories", value: getBookmarkOnlyCategories, kind: "function" },
+    { path: "sharedContent.getCategoryColor", value: getCategoryColor, kind: "function" },
+    { path: "sharedContent.getRemoteBlogCategories", value: getRemoteBlogCategories, kind: "function" },
+    { path: "sharedContent.getSupportedBlogCategories", value: getSupportedBlogCategories, kind: "function" },
+    { path: "sharedContent.gradientForCategory", value: gradientForCategory, kind: "function" },
+    { path: "sharedUtils.DEFAULT_NOTION_CONTENT_PROPERTY_CANDIDATES", value: DEFAULT_NOTION_CONTENT_PROPERTY_CANDIDATES, kind: "truthy" },
+    { path: "sharedUtils.buildPostSearchText", value: buildPostSearchText, kind: "function" },
+    { path: "sharedUtils.escapeHtml", value: escapeHtml, kind: "function" },
+    { path: "sharedUtils.getBaseOrigin", value: getBaseOrigin, kind: "function" },
+    { path: "sharedUtils.getPageProperty", value: getPageProperty, kind: "function" },
+    { path: "sharedUtils.normalizeName", value: normalizeName, kind: "function" },
+    { path: "sharedUtils.normalizePostTags", value: normalizePostTags, kind: "function" },
+    { path: "sharedUtils.normalizeSearchText", value: normalizeSearchText, kind: "function" },
+    { path: "sharedUtils.resolveNotionContentSchema", value: resolveNotionContentSchema, kind: "function" },
+    { path: "sharedUtils.sanitizeCssColorValue", value: sanitizeCssColorValue, kind: "function" },
+    { path: "contentUrl.IMAGE_PROXY_PATH", value: IMAGE_PROXY_PATH, kind: "truthy" },
+    { path: "contentUrl.SAFE_IMAGE_PROTOCOLS", value: SAFE_IMAGE_PROTOCOLS, kind: "truthy" },
+    { path: "contentUrl.SAFE_LINK_PROTOCOLS", value: SAFE_LINK_PROTOCOLS, kind: "truthy" },
+    { path: "contentUrl.getUrlHostname", value: getUrlHostname, kind: "function" },
+    { path: "contentUrl.isLikelyEphemeralAssetUrl", value: isLikelyEphemeralAssetUrl, kind: "function" },
+    { path: "contentUrl.resolveDisplayImageUrl", value: resolveDisplayImageUrl, kind: "function" },
+    { path: "contentUrl.resolveEmbeddableUrl", value: resolveEmbeddableUrl, kind: "function" },
+    { path: "contentUrl.resolveProxiedDisplayImageUrl", value: resolveProxiedDisplayImageUrl, kind: "function" },
+    { path: "contentUrl.resolveShareImageUrl", value: resolveShareImageUrl, kind: "function" },
+    { path: "contentUrl.sanitizeCspResourceUrl", value: sanitizeCspResourceUrl, kind: "function" },
+    { path: "contentUrl.sanitizeUrl", value: sanitizeUrl, kind: "function" },
+    { path: "contentUrl.shouldOpenLinkInNewTab", value: shouldOpenLinkInNewTab, kind: "function" },
+    { path: "articleRenderer.createPostArticleRenderer", value: createPostArticleRenderer, kind: "function" },
+    { path: "articleRenderer.CALENDAR_ICON_SVG", value: CALENDAR_ICON_SVG, kind: "string" },
+    { path: "articleRenderer.CLOCK_ICON_SVG", value: CLOCK_ICON_SVG, kind: "string" },
+  ];
+  const missingDependencies = REQUIRED_DEPENDENCIES
+    .filter(({ value, kind }) => (
+      kind === "function" ? typeof value !== "function"
+        : kind === "string" ? typeof value !== "string"
+          : !value
+    ))
+    .map(({ path }) => path);
+
+  if (missingDependencies.length > 0) {
+    throw new Error(
+      `notion-content.js dependencies missing or wrong type: ${missingDependencies.join(", ")}. ` +
+      "Ensure notion-content-shared.js, notion-content-utils.js, notion-content-url.js, " +
+      "and notion-article-renderer.js load before notion-content.js.",
+    );
   }
 
   const LATEX_SYMBOLS = Object.freeze({

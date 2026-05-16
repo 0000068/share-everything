@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v6.2
+> Version: v6.3
 > Updated: 2026-05-16
 
 ## 1. Overview
@@ -33,7 +33,16 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v6.2 Highlights
+## 2. Version v6.3 Highlights
+
+v6.3 consolidates HTML attribute escaping for server-side rendering and release tooling while making browser module dependency failures easier to diagnose.
+
+- SSR post metadata and static metadata injection now use shared HTML attribute escaping helpers.
+- `notion-content.js` reports the exact missing dependency when the browser load order is wrong.
+- Smoke checks cover the new helper modules so escape behavior stays syntax-checked.
+- Static CSS/JS/SVG entry URLs use the `20260516-v63` cache key so deployed browsers fetch the refreshed build promptly.
+
+## 2.1 Version v6.2 Highlights
 
 v6.2 aligns category gradient sanitization across server and browser rendering and refreshes release documentation guardrails.
 

@@ -1,4 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
+import { escapeHtmlAttribute } from "./lib/html-escape.mjs";
 
 const pages = [
   {
@@ -37,13 +38,6 @@ const ogImagePath = "/og-image.jpg?v=4";
 const faviconPath = "/favicon.png?v=4";
 const manifestPath = "/manifest.webmanifest";
 const defaultSiteName = "Share Everything";
-
-function escapeAttribute(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;");
-}
 
 function normalizeSiteOrigin(value) {
   const url = new URL(String(value || "").trim());
@@ -110,7 +104,7 @@ function resolveTemplate(value, context) {
 }
 
 function upsertApplicationName(source, siteName) {
-  const markup = `<meta name="application-name" content="${escapeAttribute(siteName)}" />`;
+  const markup = `<meta name="application-name" content="${escapeHtmlAttribute(siteName)}" />`;
   const existingPattern = /<meta\s+name="application-name"\s+content="[^"]*"\s*\/?>/;
   if (existingPattern.test(source)) {
     return source.replace(existingPattern, () => markup);
@@ -125,7 +119,7 @@ function upsertApplicationName(source, siteName) {
 }
 
 function upsertNamedMeta(source, { name, content, insertAfterName, label }) {
-  const markup = `<meta name="${name}" content="${escapeAttribute(content)}" />`;
+  const markup = `<meta name="${name}" content="${escapeHtmlAttribute(content)}" />`;
   const existingPattern = new RegExp(`<meta\\s+name="${escapeRegExp(name)}"\\s+content="[^"]*"\\s*\\/?>`);
   if (existingPattern.test(source)) {
     return source.replace(existingPattern, () => markup);
@@ -209,7 +203,7 @@ function updateHeroTitle(source, siteName) {
   return replaceRequiredWith(
     source,
     /(<h1\b[^>]*\bclass="hero-title"[^>]*>)[\s\S]*?(<\/h1>)/,
-    (_match, prefix, suffix) => `${prefix}${escapeAttribute(siteName)}${suffix}`,
+    (_match, prefix, suffix) => `${prefix}${escapeHtmlAttribute(siteName)}${suffix}`,
     "hero title",
   );
 }
@@ -223,45 +217,45 @@ function updatePageMeta(source, { canonicalUrl, ogImageUrl, page, siteName }) {
   nextSource = replaceRequired(
     nextSource,
     /<title>[\s\S]*?<\/title>/,
-    `<title>${escapeAttribute(title)}</title>`,
+    `<title>${escapeHtmlAttribute(title)}</title>`,
     "title",
   );
   if (typeof description === "string" && description) {
     nextSource = replaceRequired(
       nextSource,
       /<meta\s+name="description"\s+content="[^"]*"\s*\/?>/,
-      `<meta name="description" content="${escapeAttribute(description)}" />`,
+      `<meta name="description" content="${escapeHtmlAttribute(description)}" />`,
       "description",
     );
   }
   nextSource = replaceRequired(
     nextSource,
     /<meta\s+property="og:title"\s+content="[^"]*"\s*\/?>/,
-    `<meta property="og:title" content="${escapeAttribute(ogTitle)}" />`,
+    `<meta property="og:title" content="${escapeHtmlAttribute(ogTitle)}" />`,
     "og:title",
   );
   nextSource = replaceRequired(
     nextSource,
     /<meta\s+property="og:url"\s+content="[^"]*"\s*\/?>/,
-    `<meta property="og:url" content="${escapeAttribute(canonicalUrl)}" />`,
+    `<meta property="og:url" content="${escapeHtmlAttribute(canonicalUrl)}" />`,
     "og:url",
   );
   nextSource = replaceRequired(
     nextSource,
     /<meta\s+property="og:image"\s+content="[^"]*"\s*\/?>/,
-    `<meta property="og:image" content="${escapeAttribute(ogImageUrl)}" />`,
+    `<meta property="og:image" content="${escapeHtmlAttribute(ogImageUrl)}" />`,
     "og:image",
   );
   nextSource = replaceRequired(
     nextSource,
     /<meta\s+property="og:image:alt"\s+content="[^"]*"\s*\/?>/,
-    `<meta property="og:image:alt" content="${escapeAttribute(siteName)}" />`,
+    `<meta property="og:image:alt" content="${escapeHtmlAttribute(siteName)}" />`,
     "og:image:alt",
   );
   nextSource = replaceRequired(
     nextSource,
     /<link\s+rel="canonical"\s+href="[^"]*"\s*\/?>/,
-    `<link rel="canonical" href="${escapeAttribute(canonicalUrl)}" />`,
+    `<link rel="canonical" href="${escapeHtmlAttribute(canonicalUrl)}" />`,
     "canonical",
   );
   nextSource = replaceRequired(
@@ -278,7 +272,7 @@ function updatePageMeta(source, { canonicalUrl, ogImageUrl, page, siteName }) {
 
 function buildModulePreloadMarkup(assetVersion) {
   return modulePreloadPaths
-    .map((filename) => `    <link rel="modulepreload" href="/js/${filename}?v=${escapeAttribute(assetVersion)}" />`)
+    .map((filename) => `    <link rel="modulepreload" href="/js/${filename}?v=${escapeHtmlAttribute(assetVersion)}" />`)
     .join("\n");
 }
 
@@ -300,19 +294,19 @@ function updateFeaturedCta(source, featuredName) {
   let nextSource = replaceRequiredWith(
     source,
     /(<a[^>]*\bid="ctaStart"[^>]*\bhref=")[^"]*(")/,
-    (_match, prefix, suffix) => `${prefix}${escapeAttribute(featuredHref)}${suffix}`,
+    (_match, prefix, suffix) => `${prefix}${escapeHtmlAttribute(featuredHref)}${suffix}`,
     "featured CTA href",
   );
   nextSource = replaceRequiredWith(
     nextSource,
     /(<a[^>]*\bid="ctaStart"[^>]*\baria-label=")[^"]*(")/,
-    (_match, prefix, suffix) => `${prefix}${escapeAttribute(featuredName)}${suffix}`,
+    (_match, prefix, suffix) => `${prefix}${escapeHtmlAttribute(featuredName)}${suffix}`,
     "featured CTA aria-label",
   );
   return replaceRequiredWith(
     nextSource,
     /(<a[^>]*\bid="ctaStart"[^>]*>[\s\S]*?<span class="btn-tooltip">)[\s\S]*?(<\/span>)/,
-    (_match, prefix, suffix) => `${prefix}${escapeAttribute(featuredName)}${suffix}`,
+    (_match, prefix, suffix) => `${prefix}${escapeHtmlAttribute(featuredName)}${suffix}`,
     "featured CTA tooltip",
   );
 }
