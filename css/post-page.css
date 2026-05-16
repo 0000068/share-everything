@@ -853,168 +853,191 @@
   }
 }
 
-html.is-mobile-device-viewport body[data-page="post"] #spa-content,
-html.is-mobile-device-viewport body[data-page="post"] .page-transition-wrapper,
-html.is-mobile-device-viewport body[data-page="post"] .post-container,
-html.is-mobile-device-viewport body[data-page="post"] .post-article,
-html.is-mobile-device-viewport body[data-page="post"] .post-content {
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  overflow-x: hidden;
+/* ===== Generated mobile compatibility fallback =====
+ * Source: scripts/build-mobile-fallbacks.mjs.
+ * Edit the real touch media queries above, then run npm.cmd run mobile:fallbacks.
+ * ================================================= */
+
+@media (max-width: 768px) {
+  html.is-mobile-device-viewport body[data-page="post"] #spa-content,
+  html.is-mobile-device-viewport body[data-page="post"] .page-transition-wrapper,
+  html.is-mobile-device-viewport body[data-page="post"] .post-container,
+  html.is-mobile-device-viewport body[data-page="post"] .post-article,
+  html.is-mobile-device-viewport body[data-page="post"] .post-content {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  html.is-mobile-device-viewport .post-article {
+    max-width: 100%;
+  }
+
+  html.is-mobile-device-viewport .post-back {
+    width: fit-content;
+    max-width: min(100%, 142px);
+    margin-bottom: 26px;
+    min-height: 38px;
+    padding: 8px 14px 8px 11px;
+    border-radius: 999px;
+    border: 1px solid rgba(137, 224, 255, 0.16);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.035));
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    color: rgba(220, 247, 255, 0.78);
+    font-size: 0.82rem;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  html.is-mobile-device-viewport .post-back:active {
+    transform: translateY(1px);
+  }
+
+  html.is-mobile-device-viewport .post-back svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  html.is-mobile-device-viewport .post-header {
+    margin-bottom: 34px;
+  }
+
+  html.is-mobile-device-viewport .post-title {
+    font-size: clamp(2rem, 9.5vw, 2.8rem);
+    line-height: 1.15;
+  }
+
+  html.is-mobile-device-viewport .post-meta {
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    font-size: 0.82rem;
+  }
+
+  html.is-mobile-device-viewport .post-tags {
+    display: flex;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  html.is-mobile-device-viewport .post-tag {
+    display: inline-flex;
+    max-width: 100%;
+    min-width: 0;
+    padding: 3px 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.045);
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 0.72rem;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  html.is-mobile-device-viewport .post-content {
+    font-size: 1rem;
+    line-height: 1.78;
+  }
+
+  html.is-mobile-device-viewport .post-content h2,
+  html.is-mobile-device-viewport .post-content h3,
+  html.is-mobile-device-viewport .post-content h4 {
+    margin-top: 36px;
+    margin-bottom: 16px;
+  }
+
+  html.is-mobile-device-viewport .post-content h2 {
+    font-size: 1.7rem;
+  }
+
+  html.is-mobile-device-viewport .post-content h3 {
+    font-size: 1.35rem;
+  }
+
+  html.is-mobile-device-viewport .post-content h4 {
+    font-size: 1.1rem;
+  }
+
+  html.is-mobile-device-viewport .post-content p,
+  html.is-mobile-device-viewport .post-content ul,
+  html.is-mobile-device-viewport .post-content ol,
+  html.is-mobile-device-viewport .post-content blockquote,
+  html.is-mobile-device-viewport .post-content pre,
+  html.is-mobile-device-viewport .post-content img {
+    margin-bottom: 22px;
+  }
+
+  html.is-mobile-device-viewport .post-content ul,
+  html.is-mobile-device-viewport .post-content ol {
+    padding-left: 24px;
+  }
+
+  html.is-mobile-device-viewport .post-content blockquote {
+    padding: 18px 18px 18px 20px;
+  }
+
+  html.is-mobile-device-viewport .post-content pre {
+    padding: 18px;
+    border-radius: 18px;
+    font-size: 0.82rem;
+  }
+
+  html.is-mobile-device-viewport .post-math-display {
+    font-size: 1.04rem;
+  }
+
+  html.is-mobile-device-viewport .fab-bookmark {
+    bottom: calc(18px + env(safe-area-inset-bottom));
+    right: 18px;
+    width: 40px;
+    height: 40px;
+    padding: 0 10px;
+    border-radius: 14px;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  html.is-mobile-device-viewport .fab-bookmark:hover {
+    width: 40px;
+    gap: 0;
+    transform: none;
+  }
+
+  html.is-mobile-device-viewport .fab-bookmark-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  html.is-mobile-device-viewport .fab-bookmark-label {
+    display: none;
+  }
+
+  html.is-mobile-device-viewport .skeleton {
+    animation: none;
+  }
 }
 
-html.is-mobile-device-viewport .post-article {
-  max-width: 100%;
-}
+@media (max-width: 540px) {
+  html.is-mobile-device-viewport .post-title {
+    font-size: clamp(1.85rem, 10vw, 2.3rem);
+    line-height: 1.14;
+  }
 
-html.is-mobile-device-viewport .post-back {
-  width: fit-content;
-  max-width: min(100%, 142px);
-  margin-bottom: 26px;
-  min-height: 38px;
-  padding: 8px 14px 8px 11px;
-  border-radius: 999px;
-  border: 1px solid rgba(137, 224, 255, 0.16);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.035));
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  color: rgba(220, 247, 255, 0.78);
-  font-size: 0.82rem;
-  line-height: 1;
-  white-space: nowrap;
-}
+  html.is-mobile-device-viewport .post-content pre {
+    margin-left: -2px;
+    margin-right: -2px;
+    padding: 16px;
+  }
 
-html.is-mobile-device-viewport .post-back:active {
-  transform: translateY(1px);
-}
-
-html.is-mobile-device-viewport .post-back svg {
-  width: 15px;
-  height: 15px;
-}
-
-html.is-mobile-device-viewport .post-header {
-  margin-bottom: 34px;
-}
-
-html.is-mobile-device-viewport .post-title {
-  font-size: clamp(1.85rem, 10vw, 2.8rem);
-  line-height: 1.14;
-}
-
-html.is-mobile-device-viewport .post-meta {
-  flex-wrap: wrap;
-  gap: 10px 16px;
-  font-size: 0.82rem;
-}
-
-html.is-mobile-device-viewport .post-tags {
-  display: flex;
-  flex: 1 1 100%;
-  flex-wrap: wrap;
-  gap: 6px;
-  min-width: 0;
-}
-
-html.is-mobile-device-viewport .post-tag {
-  display: inline-flex;
-  max-width: 100%;
-  min-width: 0;
-  padding: 3px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.045);
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 0.72rem;
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-html.is-mobile-device-viewport .post-content {
-  font-size: 1rem;
-  line-height: 1.78;
-}
-
-html.is-mobile-device-viewport .post-content h2,
-html.is-mobile-device-viewport .post-content h3,
-html.is-mobile-device-viewport .post-content h4 {
-  margin-top: 36px;
-  margin-bottom: 16px;
-}
-
-html.is-mobile-device-viewport .post-content h2 {
-  font-size: 1.7rem;
-}
-
-html.is-mobile-device-viewport .post-content h3 {
-  font-size: 1.35rem;
-}
-
-html.is-mobile-device-viewport .post-content h4 {
-  font-size: 1.1rem;
-}
-
-html.is-mobile-device-viewport .post-content p,
-html.is-mobile-device-viewport .post-content ul,
-html.is-mobile-device-viewport .post-content ol,
-html.is-mobile-device-viewport .post-content blockquote,
-html.is-mobile-device-viewport .post-content pre,
-html.is-mobile-device-viewport .post-content img {
-  margin-bottom: 22px;
-}
-
-html.is-mobile-device-viewport .post-content ul,
-html.is-mobile-device-viewport .post-content ol {
-  padding-left: 24px;
-}
-
-html.is-mobile-device-viewport .post-content blockquote {
-  padding: 18px 18px 18px 20px;
-}
-
-html.is-mobile-device-viewport .post-content pre {
-  margin-left: -2px;
-  margin-right: -2px;
-  padding: 16px;
-  border-radius: 18px;
-  font-size: 0.82rem;
-}
-
-html.is-mobile-device-viewport .post-math-display {
-  font-size: 1.04rem;
-}
-
-html.is-mobile-device-viewport .fab-bookmark {
-  bottom: calc(16px + env(safe-area-inset-bottom));
-  right: 16px;
-  width: 40px;
-  height: 40px;
-  padding: 0 10px;
-  border-radius: 14px;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
-}
-
-html.is-mobile-device-viewport .fab-bookmark:hover {
-  width: 40px;
-  gap: 0;
-  transform: none;
-}
-
-html.is-mobile-device-viewport .fab-bookmark-icon {
-  width: 18px;
-  height: 18px;
-}
-
-html.is-mobile-device-viewport .fab-bookmark-label {
-  display: none;
-}
-
-html.is-mobile-device-viewport .skeleton {
-  animation: none;
+  html.is-mobile-device-viewport .fab-bookmark {
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    right: 16px;
+  }
 }

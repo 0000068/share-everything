@@ -2,6 +2,13 @@
 
 All notable changes to this project are tracked here.
 
+## 7.0.0 - 2026-05-16
+
+- Added a PostCSS-based mobile fallback generator for `html.is-mobile-device-viewport` compatibility CSS.
+- `npm.cmd run check` now verifies generated mobile fallback CSS before static metadata and smoke checks.
+- Removed the stale hand-written fallback parity burden from the smoke suite and let generated CSS plus visual regression guard the mobile contract.
+- Static assets now use the v7.0 cache key for fresh deployed loads.
+
 ## 6.10.0 - 2026-05-16
 
 - 修复 SSR 路径上一处中文字符串编码损坏（fallback empty state link 默认值）。

@@ -231,67 +231,41 @@ export function runMobileLayoutChecks(context) {
     blogPageCss,
     "@media (max-width: 540px) and (hover: none) and (pointer: coarse)",
   );
-  const mobileFallbackBlog = blogPageCss.slice(
-    blogPageCss.indexOf("html.is-mobile-device-viewport .blog-card.visible"),
+  assert.ok(
+    styleCss.includes("Generated mobile compatibility fallback"),
+    "shared CSS should label the generated mobile fallback block",
   );
-  const mobileFallbackStyle = styleCss.slice(
-    styleCss.indexOf("html.is-mobile-device-viewport .glow-orb"),
-  );
-  const narrowMobileFallbackStyle = extractCssBlock(
-    mobileFallbackStyle,
-    "@media (max-width: 540px)",
+  assert.ok(
+    blogPageCss.includes("Generated mobile compatibility fallback"),
+    "blog CSS should label the generated mobile fallback block",
   );
 
   expectStaticGradientTitle(assert, realMobileStyle, ".hero-title", "real-mobile home");
-  expectStaticGradientTitle(assert, mobileFallbackStyle, "html.is-mobile-device-viewport .hero-title", "mobile fallback home");
   expectDeclarations(assert, realMobileStyle, "html", {
     "background-color": "#0a0e1a",
   }, "real-mobile root");
   expectDeclarations(assert, realMobileStyle, "body", {
     "background-color": "#0a0e1a",
   }, "real-mobile body");
-  expectDeclarations(assert, mobileFallbackStyle, "html.is-mobile-device-viewport", {
-    "background-color": "#0a0e1a",
-  }, "mobile fallback root");
-  expectDeclarations(assert, mobileFallbackStyle, "html.is-mobile-device-viewport body", {
-    "background-color": "#0a0e1a",
-  }, "mobile fallback body");
   expectMobileAmbientBackground(assert, realMobileStyle, ".ambient-background", "real-mobile home background", { backgroundColor: "#0b1021", allowStars: true });
-  expectMobileAmbientBackground(assert, mobileFallbackStyle, "html.is-mobile-device-viewport .ambient-background", "mobile fallback home background", { backgroundColor: "#0b1021", allowStars: true });
   expectDeclarations(assert, realMobileStyle, "#particles-canvas", {
     "display": "none",
   }, "real-mobile home");
-  expectDeclarations(assert, mobileFallbackStyle, "html.is-mobile-device-viewport #particles-canvas", {
+  expectDeclarations(assert, realMobileStyle, ".glow-orb", {
     "display": "none",
-  }, "mobile fallback home");
+  }, "real-mobile home");
   expectDeclarations(assert, realMobileStyle, ".hero-section", {
     "padding": "clamp(148px, 21svh, 190px) 0 48px",
     "gap": "12px",
   }, "real-mobile home");
-  expectDeclarations(assert, mobileFallbackStyle, "html.is-mobile-device-viewport .hero-section", {
-    "padding": "clamp(148px, 21svh, 190px) 0 48px",
-    "gap": "12px",
-  }, "mobile fallback home");
   expectDeclarations(assert, narrowMobileStyle, ".hero-title", {
     "font-size": "2.44rem",
     "letter-spacing": "0",
   }, "narrow real-mobile home");
-  expectDeclarations(assert, narrowMobileFallbackStyle, "html.is-mobile-device-viewport .hero-title", {
-    "font-size": "2.44rem",
-    "letter-spacing": "0",
-  }, "narrow mobile fallback home");
 
   expectBlogCardMobileContract(assert, realMobileBlog, "real-mobile blog cards", "30px");
-  expectBlogCardMobileContract(assert, mobileFallbackBlog, "mobile fallback blog cards", "28px");
   expectTouchTargetContract(assert, realMobileBlog, ".filter-btn,\n  .page-btn,\n  .empty-state-action", "real-mobile touch targets");
-  expectTouchTargetContract(
-    assert,
-    mobileFallbackBlog,
-    "html.is-mobile-device-viewport .filter-btn,\nhtml.is-mobile-device-viewport .page-btn,\nhtml.is-mobile-device-viewport .empty-state-action",
-    "mobile fallback touch targets",
-  );
   expectBookmarkHitAreaContract(assert, realMobileBlog, "real-mobile bookmark hit area");
-  expectBookmarkHitAreaContract(assert, mobileFallbackBlog, "mobile fallback bookmark hit area");
   expectDeclarations(assert, narrowMobileBlog, ".blog-card-body", {
     "grid-template-columns": "minmax(0, 1fr) 28px",
   }, "narrow real-mobile blog cards");

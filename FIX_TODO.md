@@ -1,6 +1,6 @@
 # 修复清单
 
-> 更新时间：2026-05-16（v6.10 发布）
+> 更新时间：2026-05-16（v7.0 发布）
 
 ---
 
@@ -14,12 +14,16 @@
 
 | ID | 简述 | 触发条件 |
 |---|---|---|
-| `A-1` | **CSS `.is-mobile-device-viewport` 双写整合**。目前 `style.css` / `blog-page.css` / `post-page.css` 每条移动端规则都在 `@media (max-width: 768px) and (hover: none) and (pointer: coarse)` 块与 `html.is-mobile-device-viewport` 兜底块中各写一份（共 ~107 处），是为兼容 Android 误报 `(hover: none)` 的有意冗余。已落地：在 `style.css` 添加大段说明注释 + 在 `scripts/smoke-check/mobile-layout.mjs` 增加 hero glow parity assertion。**触发整合**：(a) 评估目前 Android Chrome / Samsung Internet / vivo / Brave 都正确报告 `(hover: none) and (pointer: coarse)`；(b) 或引入 PostCSS 自动派生兜底类。 |
 | `B-2` | **菜单 active 状态 i18n-safe 校验**。`js/blog-page.js:506-516` 使用 `button.dataset.nav === "bookmarks"` / `"overview"` 区分激活按钮（之前是中文文本匹配，已重构）。当前 data 值是英文 key，i18n 安全。**触发再审**：站点引入运行时多语言切换时确认 data-nav 仍是 stable key。 |
 
 ---
 
 ## 三、历史完成记录
+
+### v7.0 backlog (2026-05-16)
+
+- Completed A-1: scripts/build-mobile-fallbacks.mjs derives html.is-mobile-device-viewport fallback CSS from the real touch media queries.
+- npm.cmd run check now runs build-mobile-fallbacks --check before metadata and smoke checks, preventing generated CSS drift.
 
 ### v5.9 backlog（2026-05-15，本轮）
 

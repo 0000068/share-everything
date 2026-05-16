@@ -1,6 +1,6 @@
 {
   "name": "share-everything",
-  "version": "6.10.0",
+  "version": "7.0.0",
   "type": "commonjs",
   "private": false,
   "license": "MIT",
@@ -15,9 +15,10 @@
     "node": ">=22"
   },
   "scripts": {
-    "check": "node scripts/inject-site-meta.mjs --check && node scripts/smoke-check.mjs",
+    "check": "node scripts/build-mobile-fallbacks.mjs --check && node scripts/inject-site-meta.mjs --check && node scripts/smoke-check.mjs",
     "dev": "node scripts/local-server.mjs",
     "meta:inject": "node scripts/inject-site-meta.mjs",
+    "mobile:fallbacks": "node scripts/build-mobile-fallbacks.mjs",
     "notion:live-check": "node scripts/notion-live-check.mjs",
     "test": "npm run check",
     "verify": "npm run verify:release",
@@ -26,6 +27,8 @@
     "verify:release": "node scripts/release-check.mjs"
   },
   "devDependencies": {
-    "parse5": "^8.0.1"
+    "parse5": "^8.0.1",
+    "postcss": "^8.5.14",
+    "postcss-selector-parser": "^7.1.1"
   }
 }

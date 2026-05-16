@@ -58,6 +58,7 @@ import {
   "js/site-utils.js",
   "js/spa-router.js",
   "js/ui-effects.js",
+  "scripts/build-mobile-fallbacks.mjs",
   "scripts/inject-site-meta.mjs",
   "scripts/lib/html-escape.mjs",
   "scripts/lib/html-rewriter.mjs",
@@ -688,16 +689,14 @@ expectIncludes(styleCss, 'html.is-mobile-device-viewport body[data-page="post"] 
 expectIncludes(blogPageCss, "html.is-mobile-device-viewport .blog-grid", "blog mobile grid should also apply through the JS mobile compatibility class");
 runMobileLayoutChecks({ assert, blogPageCss, styleCss });
 expectIncludes(postPageCss, 'html.is-mobile-device-viewport body[data-page="post"] .page-transition-wrapper', "post wrapper clamp should also apply through the JS mobile compatibility class");
+expectIncludes(postPageCss, "Generated mobile compatibility fallback", "post CSS should label the generated mobile fallback block");
 expectIncludes(styleCss, "display: none;", "post mobile dock should be hidden for clean reading");
 expectIncludes(postPageCss, 'body[data-page="post"] .page-transition-wrapper', "post mobile CSS should clamp article layout wrappers to the viewport");
 expectIncludes(postPageJs, "if (element === navBookmark)", "post page should keep the nav bookmark hidden so the floating fab is the sole entry point on every viewport");
 expectIncludes(styleCss, "@media (hover: none) and (pointer: coarse)", "cursor glow should be disabled only for touch-first pointers");
 expectNotIncludes(styleCss, "@media (hover: none), (pointer: coarse)", "cursor glow touch fallback should not use a broad OR media query");
-assert.ok(
-  !/@media\s*\(max-width:\s*768px\)\s*\{/.test(`${styleCss}\n${blogPageCss}\n${postPageCss}`),
-  "primary mobile CSS breakpoints should include the real-mobile pointer/hover gate",
-);
-expectIncludes(styleCss, "@media (max-width: 540px) {", "shared CSS may add narrow fallback refinements behind the mobile compatibility class");
+expectIncludes(styleCss, "@media (max-width: 768px) {\n  html.is-mobile-device-viewport", "shared CSS may add generated fallback refinements behind the mobile compatibility class");
+expectIncludes(styleCss, "@media (max-width: 540px) {\n  html.is-mobile-device-viewport", "shared CSS may add generated narrow fallback refinements behind the mobile compatibility class");
 expectNotIncludes(postPageJs, 'createMediaQueryList("(max-width: 768px)")', "post page should not treat narrow desktop windows as mobile");
 expectIncludes(blogPageCss, "opacity 0.3s ease", "blog cards should use shorter reveal transitions on mobile");
 expectIncludes(blogPageJs, 'window.scrollTo({ top: 0, behavior: "auto" });', "blog pagination should avoid smooth-scroll jank on mobile");
@@ -716,6 +715,8 @@ expectIncludes(packageJson, '"dev": "node scripts/local-server.mjs"', "package s
 expectIncludes(localServerJs, "async function readRequestBody", "local dev server should read request bodies before invoking API handlers");
 expectIncludes(localServerJs, "body,", "local dev server should pass parsed body values to API handlers");
 expectIncludes(packageJson, '"notion:live-check": "node scripts/notion-live-check.mjs"', "package scripts should expose the optional live Notion integration check");
+expectIncludes(packageJson, '"mobile:fallbacks": "node scripts/build-mobile-fallbacks.mjs"', "package scripts should expose the mobile fallback generator");
+expectIncludes(packageJson, '"check": "node scripts/build-mobile-fallbacks.mjs --check && node scripts/inject-site-meta.mjs --check && node scripts/smoke-check.mjs"', "package check should verify generated mobile fallbacks before smoke checks");
 expectIncludes(packageJson, '"visual:check": "node scripts/visual-regression.mjs"', "package scripts should expose the browser visual regression check");
 expectIncludes(packageJson, '"verify:release": "node scripts/release-check.mjs"', "package scripts should expose the strict release check");
 expectIncludes(packageJson, '"license": "MIT"', "package metadata should match the published README license");
