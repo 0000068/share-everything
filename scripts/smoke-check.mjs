@@ -97,6 +97,20 @@ assert.ok(packageVersionMatch, "package.json version should be a full semver ver
 const [, releaseMajor, releaseMinor] = packageVersionMatch;
 const releaseVersion = `v${releaseMajor}.${releaseMinor}`;
 const assetReleaseSuffix = `v${releaseMajor}${releaseMinor}`;
+const fixTodoVersionMatch = /更新时间：[\d-]+（(v\d+\.\d+)[^）]*）/.exec(read("FIX_TODO.md"));
+assert.ok(fixTodoVersionMatch, "FIX_TODO.md 顶部必须包含“更新时间：YYYY-MM-DD（vX.Y...”格式");
+assert.equal(
+  fixTodoVersionMatch[1],
+  releaseVersion,
+  `FIX_TODO.md 顶部版本号 (${fixTodoVersionMatch[1]}) 与 package.json (${releaseVersion}) 不一致`,
+);
+const siteArchVersionMatch = /^> Version: (v\d+\.\d+)/m.exec(read("SITE_ARCHITECTURE.md"));
+assert.ok(siteArchVersionMatch, "SITE_ARCHITECTURE.md 顶部必须含有“> Version: vX.Y”");
+assert.equal(
+  siteArchVersionMatch[1],
+  releaseVersion,
+  `SITE_ARCHITECTURE.md 顶部版本号 (${siteArchVersionMatch[1]}) 与 package.json (${releaseVersion}) 不一致`,
+);
 const configuredSiteOrigin = normalizeConfiguredSiteOrigin(siteConfig.siteUrl);
 const featuredCategoryName = siteConfig.categoryNavigation.featured.name;
 const featuredCategoryHref = `/blog.html?category=${encodeURIComponent(featuredCategoryName)}`;
@@ -168,7 +182,9 @@ const notionContentUrlHelpers = loadCommonJsModule("js/notion-content-url.js");
 const notionArticleRendererHelpers = loadCommonJsModule("js/notion-article-renderer.js");
 const notionContentHelpers = loadCommonJsModule("js/notion-content.js");
 const serverNotionConfigHelpers = loadCommonJsModule("server/notion-config.js");
-const serverCategoryNavigationHelpers = loadCommonJsModule("server/category-navigation.js");
+const serverCategoryNavigationHelpers = loadCommonJsModule("server/category-navigation.js", [
+  "normalizeCategoryGradient",
+]);
 const serverCacheStoreHelpers = loadCommonJsModule("server/cache-store.js");
 const publicContentHelpers = loadCommonJsModule("server/public-content.js");
 const securityPolicyHelpers = loadCommonJsModule("server/security-policy.js");
@@ -754,7 +770,7 @@ expectIncludes(siteArchitectureMd, ".kiro/steering/git-rules.md", "architecture 
 expectIncludes(siteArchitectureMd, "Do not add a catch-all `/api/*` `Cache-Control` header", "architecture docs should warn against API-wide cache headers");
 expectIncludes(siteArchitectureMd, "up to 200 post summaries in memory", "architecture docs should describe the bounded summary memory cache");
 expectIncludes(siteArchitectureMd, "`blog-page.js` owns the `hashchange` flow for `/blog.html#bookmarks`", "architecture docs should document hash-only bookmark routing ownership");
-expectIncludes(siteArchitectureMd, "`scripts/smoke-check.mjs` is the single `npm.cmd run check` entrypoint", "architecture docs should describe the smoke-check entrypoint");
+expectIncludes(siteArchitectureMd, "`scripts/inject-site-meta.mjs --check` and `scripts/smoke-check.mjs` together make up the `npm.cmd run check` entrypoint", "architecture docs should describe the smoke-check entrypoint");
 expectIncludes(siteArchitectureMd, "`image-proxy.mjs` for `/api/image`", "architecture docs should list focused smoke-check modules");
 expectIncludes(siteArchitectureMd, "`visual-regression.mjs` for real-browser screenshot checks", "architecture docs should describe the visual regression script");
 expectIncludes(siteArchitectureMd, "VISUAL_STRICT=1", "architecture docs should document strict visual regression mode");
@@ -903,6 +919,17 @@ assert.equal(
   siteUtilsHarness.window.SiteUtils.resolveProxiedDisplayImageUrl("https://assets.example.com/cover.png"),
   "https://example.com/api/image?src=https%3A%2F%2Fassets.example.com%2Fcover.png",
   "SiteUtils should expose the shared proxied display image resolver",
+);
+const gradientWithCalcPlus = "linear-gradient(135deg, #abc 0%, #def calc(50% + 1px))";
+assert.equal(
+  serverCategoryNavigationHelpers.__test.normalizeCategoryGradient(gradientWithCalcPlus),
+  gradientWithCalcPlus,
+  "server gradient sanitizer should accept calc() expressions containing +",
+);
+assert.equal(
+  siteUtilsHarness.window.SiteUtils.sanitizeCoverBackground(gradientWithCalcPlus),
+  gradientWithCalcPlus,
+  "client gradient sanitizer should accept calc() expressions containing +",
 );
 const siteUtilsFallbackHarness = loadBrowserScript("js/site-utils.js", {
   window: {

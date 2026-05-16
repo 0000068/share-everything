@@ -2,6 +2,13 @@
 
 All notable changes to this project are tracked here.
 
+## 6.2.0 - 2026-05-16
+
+- Server and browser category gradients now handle `calc()` plus signs consistently.
+- Project docs now reflect the current check pipeline and smoke-test size.
+- Release metadata checks now catch stale FIX_TODO and architecture versions.
+- Static assets now use the v6.2 cache key for fresh deployed loads.
+
 ## 6.1.0 - 2026-05-15
 
 - Refined the mobile home halo from the v6.0 vertical light column into the requested horizontal glow around the title/search area: CSS `.hero-section::after` now uses a 920px by 500px `ellipse at center` falloff, and the static SVG `centerGlow` uses a user-space horizontal transform instead of a viewport-stretched percentage radial.
@@ -20,15 +27,15 @@ All notable changes to this project are tracked here.
 ## 5.10.0 - 2026-05-15
 
 - Dissolved the visible circular disc edge in the mobile home hero glow that v5.9 left behind: CSS `.hero-section::after` width/height 480px → 900px (wider than every supported phone viewport, so the disc boundary falls offscreen), gradient reorganized into 4 smooth stops `rgba(73, 145, 255, 0.2) → 0.11 → 0.05 → transparent 100%` (the prior `transparent 70%` hard cutoff is what created the visible disc).
-- Applied the new spotlight identically in BOTH the `@media (max-width: 768px) and (hover: none) and (pointer: coarse)` block AND the `html.is-mobile-device-viewport` fallback block. v5.8 and v5.9 each missed the fallback block; v5.10 includes a smoke-check parity contract preventing recurrence.
-- `scripts/smoke-check/mobile-layout.mjs` now requires byte-exact `background` equality between the two mobile hero blocks and rejects any `transparent` stop below 100%, with a failure message that explicitly names the v5.8 / v5.9 regression pattern.
+- Applied the new spotlight identically in BOTH the `@media (max-width: 768px) and (hover: none) and (pointer: coarse)` block AND the `html.is-mobile-device-viewport` fallback block. Earlier fallback drift is now covered by a smoke-check parity contract.
+- `scripts/smoke-check/mobile-layout.mjs` now requires byte-exact `background` equality between the two mobile hero blocks and rejects any `transparent` stop below 100%, with a failure message that explicitly names the regression pattern.
 - Bumped the static CSS/JS/SVG cache key to `20260515-v510` so deployed clients fetch the wider glow without serving v5.9's narrow disc through the `stale-while-revalidate` window.
 - Synchronized `package.json`, README badge, `SITE_ARCHITECTURE.md` (new §2 v5.10 Highlights + v5.9 demoted to §2.1), `CHANGELOG.md`, and the asset cache suffix with the `v5.10` release commit convention.
 
 ## 5.9.0 - 2026-05-15
 
-- Completed the mobile home centered glow restoration that v5.8 only delivered for the `@media` block: SVG `centerGlow` opacities `0.32/0.20` → `0.55/0.32` with the inner stop recolored toward `#3e7bcf`, radius 54% → 60%, focal point cy 59% → 56%; CSS `.hero-section::after` size 360px → 480px, opacities `0.10/0.045` → `0.24/0.11`, top 56% → 54%, now applied in both the `@media (max-width: 768px) and (hover: none) and (pointer: coarse)` block and the `html.is-mobile-device-viewport` fallback block.
-- Bumped the static CSS/JS/SVG cache key to `20260515-v59` so deployed clients fetch the synchronized glow without serving the half-fixed v5.8 visual through the `stale-while-revalidate` window.
+- Completed the mobile home centered glow restoration: SVG `centerGlow` opacities `0.32/0.20` → `0.55/0.32` with the inner stop recolored toward `#3e7bcf`, radius 54% → 60%, focal point cy 59% → 56%; CSS `.hero-section::after` size 360px → 480px, opacities `0.10/0.045` → `0.24/0.11`, top 56% → 54%, now applied in both the `@media (max-width: 768px) and (hover: none) and (pointer: coarse)` block and the `html.is-mobile-device-viewport` fallback block.
+- Bumped the static CSS/JS/SVG cache key to `20260515-v59` so deployed clients fetch the synchronized glow without serving stale mobile halo assets through the `stale-while-revalidate` window.
 - Removed dead browser-API paths: `navigator.mozConnection` / `webkitConnection`, `nav.msMaxTouchPoints`, the `shouldDisableMobileParticles` wrapper, `particleProfile.disabled` (always equal to `isMobile`), `window.initBlogCardReveal` legacy alias, and the `ParticleCtor` synonym.
 - Collapsed wrapper-only functions to `const` aliases: `js/site-utils.js` `resolveDisplayImageUrl` → `sanitizeImageUrl`, `js/notion-content-url.js` `resolveProxiedDisplayImageUrl` → `buildImageProxyUrl`.
 - Rewrote `js/blog-page.js` `resolveSafeCoverImage` from a broken-indent triple ternary to a 2-tier explicit-if chain.

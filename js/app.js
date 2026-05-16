@@ -1,13 +1,13 @@
-import "./font-loader.js?v=20260515-halo-v61";
-import "./notion-content-shared.js?v=20260515-halo-v61";
-import "./runtime-core.js?v=20260515-halo-v61";
-import "./site-utils.js?v=20260515-halo-v61";
-import "./common.js?v=20260515-halo-v61";
-import "./ui-effects.js?v=20260515-halo-v61";
-import "./seo-meta.js?v=20260515-halo-v61";
-import "./spa-router.js?v=20260515-halo-v61";
+import "./font-loader.js?v=20260516-v62";
+import "./notion-content-shared.js?v=20260516-v62";
+import "./runtime-core.js?v=20260516-v62";
+import "./site-utils.js?v=20260516-v62";
+import "./common.js?v=20260516-v62";
+import "./ui-effects.js?v=20260516-v62";
+import "./seo-meta.js?v=20260516-v62";
+import "./spa-router.js?v=20260516-v62";
 
-const ASSET_VERSION = "20260515-halo-v61";
+const ASSET_VERSION = "20260516-v62";
 const versioned = (path) => `${path}?v=${ASSET_VERSION}`;
 window.AppAssetVersion = ASSET_VERSION;
 

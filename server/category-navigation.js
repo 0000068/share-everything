@@ -130,8 +130,8 @@ function normalizeCategoryGradient(value, fallback = DEFAULT_COVER_GRADIENT) {
   if (typeof value !== "string") return fallback;
   const trimmed = value.trim();
   if (!trimmed) return fallback;
-  if (trimmed.includes(";") || /url\s*\(/i.test(trimmed)) return fallback;
-  if (/^(linear-gradient|radial-gradient)\([#0-9a-zA-Z,.\s%()-]+\)$/.test(trimmed)) {
+  if (/url\s*\(/i.test(trimmed)) return fallback;
+  if (/^(linear-gradient|radial-gradient)\([#0-9a-zA-Z,.\s%()+-]+\)$/.test(trimmed)) {
     return trimmed;
   }
   return fallback;

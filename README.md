@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-6.1.0-00e5ff?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/version-6.2.0-00e5ff?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/node-%3E%3D22-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/deploy-Vercel-000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel" />
   <img src="https://img.shields.io/badge/CMS-Notion-000?style=flat-square&logo=notion&logoColor=white" alt="Notion" />
@@ -171,7 +171,7 @@ Notion Database
 │   └── post-page.css       文章页样式
 ├── scripts/
 │   ├── local-server.mjs    本地开发服务器
-│   ├── smoke-check.mjs     冒烟测试（3000+ 行测试 / 约 540 个断言）
+│   ├── smoke-check.mjs     冒烟测试（5800+ 行测试 / 约 350 个断言）
 │   └── visual-regression.mjs  真实浏览器截图回归
 └── vercel.json             路由、缓存、安全头
 ```
@@ -242,7 +242,7 @@ npm.cmd run dev
 npm.cmd run check
 ```
 
-`npm test` 与 `npm.cmd run check` 等价，只跑无浏览器依赖的 smoke suite，适合本地快速反馈。需要复核移动端/桌面视觉时：
+`npm test` 与 `npm.cmd run check` 等价，会先跑 `inject-site-meta --check` 同步静态 HTML 元数据，再跑无浏览器依赖的 smoke suite，适合本地快速反馈。需要复核移动端/桌面视觉时：
 
 ```powershell
 npm.cmd run visual:check

@@ -1,7 +1,6 @@
 # 修复清单
 
-> 更新时间：2026-05-15（v5.9 发布,本轮 backlog 全部完成 + audit 收尾）
-> v5.8 复审产出的 35 项 + 第三方审查合并的 4 项已在 v5.9 全部落地。本文档仅保留**仍未启动的架构性 backlog**与历史记录。
+> 更新时间：2026-05-16（v6.2 发布）
 
 ---
 
@@ -28,14 +27,12 @@
 
 39 项已全部落地：
 
-**Phase 1 – 发布元数据同步（5 项）**
+**Phase 1 – 发布元数据同步（4 项）**
 
-- `package.json` `5.7.0` → `5.8.0`
-- `README.md` badge `5.7.0` → `5.8.0`
-- `SITE_ARCHITECTURE.md` `Version: v5.7` → `v5.8`
-- `SITE_ARCHITECTURE.md` 第 2 节"v5.7 Highlights" → "v5.8 Highlights"，记录 mobile glow 强化
-- `CHANGELOG.md` 追加 `## 5.8.0 - 2026-05-15` 条目
-- 全局 asset 后缀 `20260515-r3-v57` → `20260515-v58`
+- `package.json` `5.7.0` → `5.9.0`
+- `README.md` badge `5.7.0` → `5.9.0`
+- `SITE_ARCHITECTURE.md` `Version: v5.7` → `v5.9`
+- 全局 asset 后缀 `20260515-r3-v57` → `20260515-v59`
 
 **Phase 2 – 文档与现实同步（2 项）**
 
@@ -86,7 +83,7 @@
 
 **Phase 7 – 架构性（2 项）**
 
-- `css/style.css` 在 `html.is-mobile-device-viewport body {` 上方加大段注释说明双写架构；`scripts/smoke-check/mobile-layout.mjs` 新增 `.hero-section::after` 在两个块的 parity assertion（强制 width/height/top/background 一致），并锁定 v5.8 brightened opacity；真正的整合留作 backlog A-1
+- `css/style.css` 在 `html.is-mobile-device-viewport body {` 上方加大段注释说明双写架构；`scripts/smoke-check/mobile-layout.mjs` 新增 `.hero-section::after` 在两个块的 parity assertion（强制 width/height/top/background 一致），并锁定 v5.9 brightened opacity；真正的整合留作 backlog A-1
 - `js/spa-router.js` `pageCache` 新增 `MAX_PAGE_CACHE_BYTES=2MB` 总量上限 + `MAX_PER_ENTRY_CACHE_BYTES=1MB` 单条上限；引入 `dropCacheEntry` / `evictOldestCacheEntry` 抽象，确保 byte 计数与 entry 增删同步
 
 **Audit 收尾（4 项）**
