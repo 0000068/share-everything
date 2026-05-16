@@ -34,9 +34,10 @@ function buildScriptSource(scriptNonce = "") {
   return nonce ? `${DEFAULT_SCRIPT_SOURCE} 'nonce-${nonce}'` : DEFAULT_SCRIPT_SOURCE;
 }
 
-// SSR pages: nonce goes through the response header set by applyHtmlSecurityHeaders.
-// Static HTML <meta http-equiv="CSP"> intentionally lacks nonce because static
-// pages have no inline scripts, only external modules, so 'self' is sufficient.
+// Static and SSR pages currently use external modules plus inert JSON data
+// blocks, so 'self' is sufficient. CSP nonces are still supported here for a
+// future executable inline script, but JSON-LD/application-json data blocks do
+// not need them.
 // CSP3: frame-ancestors is ignored when delivered via <meta>, so vercel.json
 // must set it via HTTP header.
 function buildContentSecurityPolicy({ scriptNonce = "", includeFrameAncestors = true } = {}) {

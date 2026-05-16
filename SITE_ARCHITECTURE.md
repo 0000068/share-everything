@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v6.8
+> Version: v6.9
 > Updated: 2026-05-16
 
 ## 1. Overview
@@ -33,7 +33,16 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v6.8 Highlights
+## 2. Version v6.9 Highlights
+
+v6.9 closes the final audit-polish items around inert script data blocks, selector escaping, and local API parity.
+
+- SSR article JSON-LD and initial JSON payload scripts no longer receive CSP nonces because those script types are HTML data blocks, not executable scripts.
+- `runtime-core.js` syncs structured data without propagating nonce attributes.
+- `js/bookmark.js` has a complete `CSS.escape` fallback for older browser engines, and `scripts/local-server.mjs` now forwards parsed request bodies to API handlers.
+- Static CSS/JS/SVG entry URLs use the `20260516-v69` cache key so deployed browsers fetch the refreshed build promptly.
+
+## 2.1 Version v6.8 Highlights
 
 v6.8 expands shared category color sanitization to carefully support modern CSS Color Level 4 values.
 
@@ -362,7 +371,7 @@ Client-side `notion-api.js` keeps a short bounded in-memory post-list response c
 
 - Global Vercel headers keep frame protection through `frame-ancestors 'none'` and `X-Frame-Options: DENY`, and also emit HSTS, Referrer-Policy, and Permissions-Policy.
 - Static pages use CSP meta tags generated from `server/security-policy.js`.
-- SSR article pages generate request-scoped nonces for CSP, JSON-LD, and initial post data.
+- SSR article pages send CSP through response headers; JSON-LD and initial post data remain inert script data blocks without nonce attributes.
 - `connect-src` remains same-origin so browser data requests continue through semantic API routes.
 - `/api/image` only accepts `https:` upstream URLs, rejects localhost/private literal hosts and private DNS results, pins the validated DNS answer to the actual HTTPS request through a custom lookup, validates every redirect hop manually, enforces image content types, limits image size, applies a timeout, and sends `X-Content-Type-Options: nosniff`.
 - Embed iframes intentionally use a permissive sandbox subset (`allow-scripts`, `allow-same-origin`, popups, forms, and presentation) so trusted providers such as YouTube, Bilibili, Vimeo, Figma, Loom, and CodePen can render; this is a deliberate usability tradeoff, while page-level `frame-src`, same-origin API boundaries, and `frame-ancestors 'none'` still constrain where embeds can load and how this site can be framed.

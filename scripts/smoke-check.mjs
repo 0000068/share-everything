@@ -713,6 +713,8 @@ expectIncludes(apiImageJs, 'readPositiveEnvNumber("IMAGE_PROXY_TIMEOUT_MS", 10_0
 expectIncludes(apiImageJs, 'readPositiveEnvNumber("IMAGE_PROXY_MAX_BYTES", 8 * 1024 * 1024)', "image proxy size limit should be configurable while keeping its default");
 expectIncludes(apiImageJs, 'readNonNegativeEnvInteger("IMAGE_PROXY_MAX_REDIRECTS", 4)', "image proxy redirect limit should be configurable while keeping its default");
 expectIncludes(packageJson, '"dev": "node scripts/local-server.mjs"', "package scripts should expose the local API-aware dev server");
+expectIncludes(localServerJs, "async function readRequestBody", "local dev server should read request bodies before invoking API handlers");
+expectIncludes(localServerJs, "body,", "local dev server should pass parsed body values to API handlers");
 expectIncludes(packageJson, '"notion:live-check": "node scripts/notion-live-check.mjs"', "package scripts should expose the optional live Notion integration check");
 expectIncludes(packageJson, '"visual:check": "node scripts/visual-regression.mjs"', "package scripts should expose the browser visual regression check");
 expectIncludes(packageJson, '"verify:release": "node scripts/release-check.mjs"', "package scripts should expose the strict release check");
@@ -1092,12 +1094,11 @@ assert.equal(
 );
 
 expectIncludes(runtimeCoreJs, 'application/ld+json', "runtime-core.js should own structured data script management");
-expectIncludes(runtimeCoreJs, "readStructuredDataNonce", "runtime-core.js should preserve a request nonce on JSON-LD nodes when one is available");
-expectIncludes(runtimeCoreJs, "if (nonce)", "runtime-core.js should not require a nonce before restoring SPA JSON-LD");
+expectNotIncludes(runtimeCoreJs, "readStructuredDataNonce", "runtime-core.js should treat JSON-LD as a CSP-inert data block");
+expectNotIncludes(runtimeCoreJs, 'setAttribute("nonce"', "runtime-core.js should not add decorative nonces to JSON-LD data blocks");
 expectIncludes(runtimeCoreJs, "syncStructuredDataFromDocument", "runtime-core.js should preserve fetched SSR JSON-LD during SPA swaps");
 expectIncludes(runtimeCoreJs, "syncFromDocument", "runtime-core.js should expose structured-data document syncing");
-expectIncludes(runtimeCoreJs, "document.head?.querySelector", "runtime-core.js should only trust nonce-bearing scripts already present in the active document head");
-expectIncludes(runtimeCoreJs, 'script.setAttribute("nonce", nonce)', "runtime-core.js should preserve CSP nonce protection for runtime JSON-LD updates");
+expectIncludes(runtimeCoreJs, "document.head?.appendChild(script)", "runtime-core.js should append missing JSON-LD data-block scripts");
 expectIncludes(runtimeCoreJs, "page-progress", "runtime-core.js should wire the shared page progress bar");
 expectIncludes(runtimeCoreJs, "focusSpaContent", "runtime-core.js should expose SPA focus management");
 expectIncludes(runtimeCoreJs, "cleanupTemporaryFocus", "runtime-core.js should clean up temporary SPA focus tabindex attributes");
@@ -1107,6 +1108,8 @@ expectIncludes(runtimeCoreJs, "function start(pageId = getPageIdFromUrl(window.l
 expectNotIncludes(runtimeCoreJs, "if (pageId === getPageIdFromUrl(window.location.href))", "PageRuntime.register should not initialize pages during module import");
 expectIncludes(appJs, "window.PageRuntime?.start?.();", "app.js should start the current page after all page modules register");
 expectIncludes(bookmarkJs, "parseSerializedTags", "bookmark fallback should recover serialized tags");
+expectIncludes(bookmarkJs, "codeUnit >= 0x0001", "bookmark selector fallback should escape control characters when CSS.escape is unavailable");
+expectIncludes(bookmarkJs, "codeUnit.toString(16)", "bookmark selector fallback should use CSS-compatible hexadecimal escapes");
 expectIncludes(bookmarkJs, "createBookmarkEntry", "bookmark manager should centralize bookmark record creation");
 expectIncludes(bookmarkJs, "buildCardBookmarkSource", "bookmark manager should centralize DOM snapshot extraction");
 expectIncludes(bookmarkJs, "hydrateMissingMetadata", "bookmark manager should hydrate legacy metadata");
@@ -1806,9 +1809,9 @@ expectIncludes(apiPostJs, "insertBeforeEndTag", "article HTML route should centr
 expectNotIncludes(apiPostJs, "result !== html", "article HTML route should track replacement matches explicitly instead of comparing final strings");
 expectIncludes(apiPostJs, "resolveShareImageUrl(post.coverImage, defaultShareImageUrl, siteOrigin)", "article HTML route should resolve og:image against the site origin consistently");
 expectIncludes(apiPostJs, "../server/security-policy", "article HTML route should reuse the shared security policy builder");
-expectIncludes(apiPostJs, "createCspNonce", "article HTML route should use per-request nonces for inline JSON data");
-expectIncludes(apiPostJs, "applyHtmlSecurityHeaders", "article HTML route should emit nonce-aware CSP headers from the SSR function");
-expectNotIncludes(apiPostJs, "replaceContentSecurityPolicyMeta", "article HTML route should leave template CSP meta static while response headers carry the nonce");
+expectNotIncludes(apiPostJs, "createCspNonce", "article HTML route should not add nonces to inert JSON data blocks");
+expectIncludes(apiPostJs, "applyHtmlSecurityHeaders", "article HTML route should emit CSP headers from the SSR function");
+expectNotIncludes(apiPostJs, "replaceContentSecurityPolicyMeta", "article HTML route should leave template CSP meta static while response headers carry CSP");
 expectIncludes(postHtml, "<!--SSR_HEAD_META_START-->", "post template should mark the SSR-owned head metadata block explicitly");
 expectIncludes(postHtml, "<!--SSR_HEAD_META_END-->", "post template should keep a closing marker for the SSR-owned head metadata block");
 expectIncludes(postHtml, '<div id="postContent"', "post template should keep the postContent placeholder div for SSR replacement and client hydration");
@@ -1839,11 +1842,9 @@ expectIncludes(replacedPostContent, 'id="postContent" style="display: block;"', 
 expectIncludes(replacedPostContent, "Rendered body", "post content replacement should preserve SSR article body markup");
 const injectedInitialPostData = await apiPostHelpers.injectInitialPostData("<main></main>", {
   title: replacementSentinel,
-}, {
-  scriptNonce: nonceSentinel,
 });
 expectIncludes(injectedInitialPostData, replacementSentinel, "initial post data injection should preserve replacement tokens literally");
-expectIncludes(injectedInitialPostData, `nonce="${nonceSentinel}"`, "initial post data injection should carry the request CSP nonce");
+expectNotIncludes(injectedInitialPostData, "nonce=", "initial post data injection should not add decorative nonces to inert JSON data blocks");
 const initialPostPayload = apiPostHelpers.buildInitialPostPayload({
   id: "post-1",
   title: "Payload title",
@@ -1865,18 +1866,16 @@ assert.ok(
 
 const structuredDataHtml = await apiPostHelpers.upsertStructuredDataScript("<head></head>", "post-article", {
   headline: replacementSentinel,
-}, {
-  scriptNonce: nonceSentinel,
 });
 expectIncludes(structuredDataHtml, replacementSentinel, "structured data injection should preserve replacement tokens literally");
-expectIncludes(structuredDataHtml, `nonce="${nonceSentinel}"`, "structured data injection should carry the request CSP nonce");
+expectNotIncludes(structuredDataHtml, "nonce=", "structured data injection should not add decorative nonces to JSON-LD data blocks");
 const nonceContentSecurityPolicy = securityPolicyHelpers.buildContentSecurityPolicy({
   scriptNonce: nonceSentinel,
 });
 expectIncludes(
   nonceContentSecurityPolicy,
   `script-src 'self' 'nonce-${nonceSentinel}'`,
-  "article HTML route should allow inline JSON scripts only through the request nonce",
+  "security policy helper should still support nonces for future executable inline scripts",
 );
 expectIncludes(
   nonceContentSecurityPolicy,

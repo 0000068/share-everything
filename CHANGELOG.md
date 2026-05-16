@@ -2,6 +2,14 @@
 
 All notable changes to this project are tracked here.
 
+## 6.9.0 - 2026-05-16
+
+- JSON-LD and initial JSON data-block scripts no longer carry decorative CSP nonces.
+- Runtime structured-data syncing now treats JSON-LD as inert data blocks instead of nonce-bearing executable scripts.
+- Bookmark selector escaping now has a spec-compatible fallback for older browsers without `CSS.escape`.
+- The local API dev server now forwards parsed request bodies to handlers.
+- Static assets now use the v6.9 cache key for fresh deployed loads.
+
 ## 6.8.0 - 2026-05-16
 
 - Shared CSS color sanitization now accepts conservative CSS Color Level 4 functions.

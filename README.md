@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-6.8.0-00e5ff?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/version-6.9.0-00e5ff?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/node-%3E%3D22-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/deploy-Vercel-000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel" />
   <img src="https://img.shields.io/badge/CMS-Notion-000?style=flat-square&logo=notion&logoColor=white" alt="Notion" />
@@ -37,7 +37,7 @@
 - ✏️ **在 Notion 里写文章**，放进配置好的公开数据库就上线
 - ⚡ **零构建步骤**，没有 React/Vue/Next.js，纯 HTML + CSS + JS
 - 🖥️ **SSR + SPA 混合**，首屏服务端渲染，后续导航丝滑无刷新
-- 🔒 **面向公开部署的安全基线**，CSP nonce、SSRF 防护、XSS 白名单过滤
+- 🔒 **面向公开部署的安全基线**，CSP 响应头、SSRF 防护、XSS 白名单过滤
 - 📱 **极致移动端体验**，首页极轻粒子，列表和文章页移动端静态背景优先阅读
 
 ---
@@ -73,13 +73,13 @@
 
 ### 🔒 安全
 
-- 动态 CSP nonce 注入（SSR 页面）
+- SSR 页面通过响应头发送 CSP；JSON-LD / JSON 初始数据保持为非执行 data block
 - SSRF 多层防线（协议 / 本地域名 / 私网 IP / DNS 私网解析 / 已校验 IP 绑定 / 重定向逐跳校验 / 大小 / Content-Type）
 - XSS 防护（HTML 转义 + URL 协议白名单 + CSS 值白名单）
 - 旧 API 代理永久禁用 (410 Gone)
 - 错误信息脱敏，仅调试模式暴露详情
 - `frame-ancestors 'none'` + `X-Frame-Options: DENY` + HSTS / Referrer-Policy / Permissions-Policy
-- 静态 HTML 的 CSP meta 用于静态 fallback；SSR 文章页会由 `api/post.js` 基于模板重写 CSP/OG/canonical，并通过响应 header 承载 `frame-ancestors`
+- 静态 HTML 的 CSP meta 用于静态 fallback；SSR 文章页由 `api/post.js` 重写 OG/canonical，并通过响应 header 承载完整 CSP 与 `frame-ancestors`
 - `scripts/smoke-check.mjs` 中关于 `shouldReduceMotion` / `prefers-reduced-motion` 的反向断言是动效常开设计守卫，不要作为无障碍修复顺手移除
 
 ### ♿ 无障碍

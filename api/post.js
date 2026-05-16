@@ -20,10 +20,7 @@ const {
   readQueryString,
 } = require("../server/public-content");
 const { escapeHtmlAttribute } = require("../server/html-escape");
-const {
-  applyHtmlSecurityHeaders,
-  createCspNonce,
-} = require("../server/security-policy");
+const { applyHtmlSecurityHeaders } = require("../server/security-policy");
 
 let templatePromise = null;
 let parse5Promise = null;
@@ -173,13 +170,9 @@ function replaceElement(html, node, markup, label) {
   return applyPatches(html, [{ ...range, markup }]);
 }
 
-function buildNonceAttribute(scriptNonce = "") {
-  return scriptNonce ? ` nonce="${escapeHtmlAttribute(scriptNonce)}"` : "";
-}
-
-async function upsertStructuredDataScript(html, key, payload, { scriptNonce = "" } = {}) {
+async function upsertStructuredDataScript(html, key, payload) {
   const marker = `data-structured-data="${escapeHtmlAttribute(key)}"`;
-  const scriptTag = `    <script type="application/ld+json"${buildNonceAttribute(scriptNonce)} ${marker}>${serializeJsonForScript(payload)}</script>`;
+  const scriptTag = `    <script type="application/ld+json" ${marker}>${serializeJsonForScript(payload)}</script>`;
   const doc = await parseTemplate(html);
   const existing = findElement(
     doc,
@@ -198,8 +191,8 @@ async function upsertStructuredDataScript(html, key, payload, { scriptNonce = ""
   return head ? insertBeforeEndTag(html, head, scriptTag, "  ") : `${html}\n${scriptTag}`;
 }
 
-async function injectInitialPostData(html, payload, { scriptNonce = "" } = {}) {
-  const scriptTag = `    <script id="initialPostData" type="application/json"${buildNonceAttribute(scriptNonce)}>${serializeJsonForScript(payload)}</script>`;
+async function injectInitialPostData(html, payload) {
+  const scriptTag = `    <script id="initialPostData" type="application/json">${serializeJsonForScript(payload)}</script>`;
   const doc = await parseTemplate(html);
   const main = findElementByTag(doc, "main");
   if (!main) {
@@ -444,7 +437,6 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const scriptNonce = createCspNonce();
     const post = await fetchPublicPost(routeId);
     const postUrl = buildPostUrl(post.id);
     const pageTitle = formatPostTitle(post.title, siteName);
@@ -468,12 +460,12 @@ module.exports = async function handler(req, res) {
       renderedContent,
       baseOrigin: siteOrigin,
     });
-    html = await injectInitialPostData(html, buildInitialPostPayload(post), { scriptNonce });
-    html = await upsertStructuredDataScript(html, "post-article", articleStructuredData, { scriptNonce });
+    html = await injectInitialPostData(html, buildInitialPostPayload(post));
+    html = await upsertStructuredDataScript(html, "post-article", articleStructuredData);
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");
-    applyHtmlSecurityHeaders(res, { scriptNonce });
+    applyHtmlSecurityHeaders(res);
     return res.status(200).send(html);
   } catch (error) {
     const status = getPublicPostErrorStatus(error);

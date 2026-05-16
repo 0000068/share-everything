@@ -135,11 +135,37 @@ function createApiResponse(res) {
   };
 }
 
+async function readRequestBody(req) {
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  if (chunks.length === 0) return undefined;
+
+  const rawBody = Buffer.concat(chunks);
+  if (rawBody.length === 0) return undefined;
+
+  const textBody = rawBody.toString("utf8");
+  const contentType = String(req.headers["content-type"] || "");
+  if (contentType.includes("application/json")) {
+    try {
+      return JSON.parse(textBody);
+    } catch {
+      return textBody;
+    }
+  }
+  return textBody;
+}
+
 async function invokeApiHandler(handler, req, res, query = {}) {
+  const body = req.method === "GET" || req.method === "HEAD"
+    ? undefined
+    : await readRequestBody(req);
   await handler({
     method: req.method,
     headers: req.headers,
     query,
+    body,
   }, createApiResponse(res));
 }
 
