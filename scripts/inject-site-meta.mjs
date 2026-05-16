@@ -1,5 +1,15 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { escapeHtmlAttribute } from "./lib/html-escape.mjs";
+import {
+  findElement,
+  findElementById,
+  findElements,
+  findLinkByRel,
+  findMetaByName,
+  findMetaByProperty,
+  parseHtml,
+  setAttribute,
+} from "./lib/html-rewriter.mjs";
 
 const pages = [
   {
@@ -7,19 +17,19 @@ const pages = [
     pathname: "/",
     title: ({ siteName }) => siteName,
     ogTitle: ({ siteName }) => siteName,
-    description: ({ siteName }) => `${siteName} — \u63a2\u7d22\u3001\u8bb0\u5f55\u3001\u5206\u4eab`,
+    description: ({ siteName }) => `${siteName} — 探索、记录、分享`,
     heroTitle: true,
   },
   {
     file: "blog.html",
     pathname: "/blog.html",
-    title: ({ siteName }) => `\u603b\u89c8 — ${siteName}`,
-    ogTitle: ({ siteName }) => `\u603b\u89c8 — ${siteName}`,
+    title: ({ siteName }) => `总览 — ${siteName}`,
+    ogTitle: ({ siteName }) => `总览 — ${siteName}`,
   },
   {
     file: "post.html",
     pathname: "/post.html",
-    title: ({ siteName }) => `\u6587\u7ae0 — ${siteName}`,
+    title: ({ siteName }) => `文章 — ${siteName}`,
     ogTitle: ({ siteName }) => siteName,
   },
 ];
@@ -44,7 +54,6 @@ function normalizeSiteOrigin(value) {
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("site.config.json siteUrl must use http or https");
   }
-
   url.pathname = "/";
   url.search = "";
   url.hash = "";
@@ -77,104 +86,153 @@ function readShortSiteName(siteName) {
   return siteName === defaultSiteName ? "Share" : siteName.slice(0, 12);
 }
 
-function escapeRegExp(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function replaceRequired(source, pattern, replacement, label) {
-  if (!pattern.test(source)) {
-    throw new Error(`Unable to update ${label}`);
-  }
-
-  pattern.lastIndex = 0;
-  return source.replace(pattern, replacement);
-}
-
-function replaceRequiredWith(source, pattern, replacer, label) {
-  if (!pattern.test(source)) {
-    throw new Error(`Unable to update ${label}`);
-  }
-
-  pattern.lastIndex = 0;
-  return source.replace(pattern, replacer);
-}
-
 function resolveTemplate(value, context) {
   return typeof value === "function" ? value(context) : value;
 }
 
-function upsertApplicationName(source, siteName) {
-  const markup = `<meta name="application-name" content="${escapeHtmlAttribute(siteName)}" />`;
-  const existingPattern = /<meta\s+name="application-name"\s+content="[^"]*"\s*\/?>/;
-  if (existingPattern.test(source)) {
-    return source.replace(existingPattern, () => markup);
-  }
-
-  return replaceRequiredWith(
-    source,
-    /(<meta\s+name="theme-color"\s+content="[^"]*"\s*\/?>)/,
-    (_match, anchor) => `${anchor}\n    ${markup}`,
-    "application-name",
-  );
+function requireNode(node, label) {
+  if (!node?.sourceCodeLocation) throw new Error(`Unable to update ${label}`);
+  return node;
 }
 
-function upsertNamedMeta(source, { name, content, insertAfterName, label }) {
-  const markup = `<meta name="${name}" content="${escapeHtmlAttribute(content)}" />`;
-  const existingPattern = new RegExp(`<meta\\s+name="${escapeRegExp(name)}"\\s+content="[^"]*"\\s*\\/?>`);
-  if (existingPattern.test(source)) {
-    return source.replace(existingPattern, () => markup);
-  }
-
-  return replaceRequiredWith(
-    source,
-    new RegExp(`(<meta\\s+name="${escapeRegExp(insertAfterName)}"\\s+content="[^"]*"\\s*\\/?>)`),
-    (_match, anchor) => `${anchor}\n    ${markup}`,
-    label,
-  );
+function attrValue(node, name) {
+  return node.attrs?.find((attr) => attr.name === name)?.value || "";
 }
 
-function upsertManifestLink(source) {
-  const markup = `<link rel="manifest" href="${manifestPath}" />`;
-  const existingPattern = /<link\s+rel="manifest"\s+href="[^"]*"\s*\/?>/;
-  if (existingPattern.test(source)) {
-    return source.replace(existingPattern, () => markup);
-  }
-
-  return replaceRequiredWith(
-    source,
-    /(<link\s+rel="icon"\s+type="image\/png"(?:\s+sizes="[^"]*")?\s+href="[^"]*"\s*\/?>)/,
-    (_match, anchor) => `${anchor}\n    ${markup}`,
-    "web app manifest link",
-  );
+function renderAttributes(node) {
+  return (node.attrs || [])
+    .map((attr) => ` ${attr.name}="${escapeHtmlAttribute(attr.value)}"`)
+    .join("");
 }
 
-function upsertStandaloneMetadata(source, siteName) {
-  let nextSource = upsertApplicationName(source, siteName);
-  nextSource = upsertNamedMeta(nextSource, {
+function renderStartTag(node) {
+  return `<${node.tagName}${renderAttributes(node)}>`;
+}
+
+function renderVoidTag(node) {
+  return `<${node.tagName}${renderAttributes(node)} />`;
+}
+
+function replaceNode(ranges, node, markup) {
+  ranges.push({
+    start: node.sourceCodeLocation.startOffset,
+    end: node.sourceCodeLocation.endOffset,
+    markup,
+  });
+}
+
+function replaceStartTag(ranges, node, markup = renderStartTag(node)) {
+  ranges.push({
+    start: node.sourceCodeLocation.startTag.startOffset,
+    end: node.sourceCodeLocation.startTag.endOffset,
+    markup,
+  });
+}
+
+function replaceInner(ranges, node, markup) {
+  ranges.push({
+    start: node.sourceCodeLocation.startTag.endOffset,
+    end: node.sourceCodeLocation.endTag.startOffset,
+    markup,
+  });
+}
+
+function insertAfter(ranges, node, markup) {
+  ranges.push({
+    start: node.sourceCodeLocation.endOffset,
+    end: node.sourceCodeLocation.endOffset,
+    markup,
+  });
+}
+
+function applyRanges(source, ranges) {
+  return ranges
+    .sort((a, b) => b.start - a.start)
+    .reduce((nextSource, { start, end, markup }) => (
+      `${nextSource.slice(0, start)}${markup}${nextSource.slice(end)}`
+    ), source);
+}
+
+function upsertNamedMeta(doc, ranges, { name, content, insertAfterName, label }) {
+  const node = findMetaByName(doc, name);
+  if (node) {
+    setAttribute(node, "name", name);
+    setAttribute(node, "content", content);
+    replaceNode(ranges, requireNode(node, label), renderVoidTag(node));
+    return node;
+  }
+
+  const anchor = requireNode(findMetaByName(doc, insertAfterName), label);
+  insertAfter(ranges, anchor, `\n    <meta name="${name}" content="${escapeHtmlAttribute(content)}" />`);
+  return anchor;
+}
+
+function upsertApplicationName(doc, ranges, siteName) {
+  const node = findMetaByName(doc, "application-name");
+  if (node) {
+    setAttribute(node, "content", siteName);
+    replaceNode(ranges, requireNode(node, "application-name"), renderVoidTag(node));
+    return node;
+  }
+
+  const anchor = requireNode(findMetaByName(doc, "theme-color"), "application-name");
+  insertAfter(ranges, anchor, `\n    <meta name="application-name" content="${escapeHtmlAttribute(siteName)}" />`);
+  return anchor;
+}
+
+function upsertLinkNode(doc, ranges, { rel, href, attrs = {}, insertAfterRel, label }) {
+  const node = findLinkByRel(doc, rel);
+  if (node) {
+    setAttribute(node, "rel", rel);
+    setAttribute(node, "href", href);
+    for (const [name, value] of Object.entries(attrs)) {
+      setAttribute(node, name, value);
+    }
+    replaceNode(ranges, requireNode(node, label), renderVoidTag(node));
+    return node;
+  }
+
+  const attrMarkup = Object.entries(attrs)
+    .map(([name, value]) => ` ${name}="${escapeHtmlAttribute(value)}"`)
+    .join("");
+  const anchor = requireNode(findLinkByRel(doc, insertAfterRel), label);
+  insertAfter(ranges, anchor, `\n    <link rel="${rel}"${attrMarkup} href="${escapeHtmlAttribute(href)}" />`);
+  return anchor;
+}
+
+function upsertStandaloneMetadata(doc, ranges, siteName) {
+  const applicationName = upsertApplicationName(doc, ranges, siteName);
+  upsertNamedMeta(doc, ranges, {
     name: "mobile-web-app-capable",
     content: "yes",
     insertAfterName: "application-name",
     label: "mobile web app capable",
   });
-  nextSource = upsertNamedMeta(nextSource, {
+  upsertNamedMeta(doc, ranges, {
     name: "apple-mobile-web-app-capable",
     content: "yes",
     insertAfterName: "mobile-web-app-capable",
     label: "apple mobile web app capable",
   });
-  nextSource = upsertNamedMeta(nextSource, {
+  upsertNamedMeta(doc, ranges, {
     name: "apple-mobile-web-app-status-bar-style",
     content: "black-translucent",
     insertAfterName: "apple-mobile-web-app-capable",
     label: "apple mobile status bar style",
   });
-  nextSource = upsertNamedMeta(nextSource, {
+  upsertNamedMeta(doc, ranges, {
     name: "apple-mobile-web-app-title",
     content: siteName,
     insertAfterName: "apple-mobile-web-app-status-bar-style",
     label: "apple mobile web app title",
   });
-  return upsertManifestLink(nextSource);
+  upsertLinkNode(doc, ranges, {
+    rel: "manifest",
+    href: manifestPath,
+    insertAfterRel: "icon",
+    label: "web app manifest link",
+  });
+  return applicationName;
 }
 
 function buildWebManifest(siteName) {
@@ -199,116 +257,88 @@ function buildWebManifest(siteName) {
   }, null, 2)}\n`;
 }
 
-function updateHeroTitle(source, siteName) {
-  return replaceRequiredWith(
-    source,
-    /(<h1\b[^>]*\bclass="hero-title"[^>]*>)[\s\S]*?(<\/h1>)/,
-    (_match, prefix, suffix) => `${prefix}${escapeHtmlAttribute(siteName)}${suffix}`,
-    "hero title",
-  );
+function updateHeroTitle(doc, ranges, siteName) {
+  const node = requireNode(findElement(doc, (candidate) => candidate.tagName === "h1" && attrValue(candidate, "class").split(/\s+/).includes("hero-title")), "hero title");
+  replaceInner(ranges, node, escapeHtmlAttribute(siteName));
 }
 
-function updatePageMeta(source, { canonicalUrl, ogImageUrl, page, siteName }) {
+function updateMetaProperty(doc, ranges, property, content) {
+  const node = requireNode(findMetaByProperty(doc, property), property);
+  setAttribute(node, "content", content);
+  replaceNode(ranges, node, renderVoidTag(node));
+}
+
+function updateMetaName(doc, ranges, name, content) {
+  const node = requireNode(findMetaByName(doc, name), name);
+  setAttribute(node, "content", content);
+  replaceNode(ranges, node, renderVoidTag(node));
+}
+
+function updatePageMeta(doc, ranges, { canonicalUrl, ogImageUrl, page, siteName }) {
   const title = resolveTemplate(page.title, { siteName });
   const ogTitle = resolveTemplate(page.ogTitle, { siteName });
   const description = resolveTemplate(page.description, { siteName });
-  let nextSource = source;
-  nextSource = upsertStandaloneMetadata(nextSource, siteName);
-  nextSource = replaceRequired(
-    nextSource,
-    /<title>[\s\S]*?<\/title>/,
-    `<title>${escapeHtmlAttribute(title)}</title>`,
-    "title",
-  );
+  upsertStandaloneMetadata(doc, ranges, siteName);
+  replaceInner(ranges, requireNode(findElement(doc, (node) => node.tagName === "title"), "title"), escapeHtmlAttribute(title));
   if (typeof description === "string" && description) {
-    nextSource = replaceRequired(
-      nextSource,
-      /<meta\s+name="description"\s+content="[^"]*"\s*\/?>/,
-      `<meta name="description" content="${escapeHtmlAttribute(description)}" />`,
-      "description",
-    );
+    updateMetaName(doc, ranges, "description", description);
   }
-  nextSource = replaceRequired(
-    nextSource,
-    /<meta\s+property="og:title"\s+content="[^"]*"\s*\/?>/,
-    `<meta property="og:title" content="${escapeHtmlAttribute(ogTitle)}" />`,
-    "og:title",
-  );
-  nextSource = replaceRequired(
-    nextSource,
-    /<meta\s+property="og:url"\s+content="[^"]*"\s*\/?>/,
-    `<meta property="og:url" content="${escapeHtmlAttribute(canonicalUrl)}" />`,
-    "og:url",
-  );
-  nextSource = replaceRequired(
-    nextSource,
-    /<meta\s+property="og:image"\s+content="[^"]*"\s*\/?>/,
-    `<meta property="og:image" content="${escapeHtmlAttribute(ogImageUrl)}" />`,
-    "og:image",
-  );
-  nextSource = replaceRequired(
-    nextSource,
-    /<meta\s+property="og:image:alt"\s+content="[^"]*"\s*\/?>/,
-    `<meta property="og:image:alt" content="${escapeHtmlAttribute(siteName)}" />`,
-    "og:image:alt",
-  );
-  nextSource = replaceRequired(
-    nextSource,
-    /<link\s+rel="canonical"\s+href="[^"]*"\s*\/?>/,
-    `<link rel="canonical" href="${escapeHtmlAttribute(canonicalUrl)}" />`,
-    "canonical",
-  );
-  nextSource = replaceRequired(
-    nextSource,
-    /<link\s+rel="icon"\s+type="image\/png"(?:\s+sizes="[^"]*")?\s+href="[^"]*"\s*\/?>/,
-    `<link rel="icon" type="image/png" href="${faviconPath}" />`,
-    "favicon",
-  );
+  updateMetaProperty(doc, ranges, "og:title", ogTitle);
+  updateMetaProperty(doc, ranges, "og:url", canonicalUrl);
+  updateMetaProperty(doc, ranges, "og:image", ogImageUrl);
+  updateMetaProperty(doc, ranges, "og:image:alt", siteName);
+  upsertLinkNode(doc, ranges, {
+    rel: "canonical",
+    href: canonicalUrl,
+    label: "canonical",
+  });
+  upsertLinkNode(doc, ranges, {
+    rel: "icon",
+    href: faviconPath,
+    attrs: { type: "image/png" },
+    label: "favicon",
+  });
   if (page.heroTitle) {
-    nextSource = updateHeroTitle(nextSource, siteName);
+    updateHeroTitle(doc, ranges, siteName);
   }
-  return nextSource;
 }
 
-function buildModulePreloadMarkup(assetVersion) {
-  return modulePreloadPaths
+function updateModulePreloads(source, doc, ranges, assetVersion) {
+  const nodes = findElements(doc, (node) => (
+    node.tagName === "link" && attrValue(node, "rel") === "modulepreload"
+  ));
+  const markup = modulePreloadPaths
     .map((filename) => `    <link rel="modulepreload" href="/js/${filename}?v=${escapeHtmlAttribute(assetVersion)}" />`)
     .join("\n");
+
+  if (nodes.length > 0) {
+    const first = requireNode(nodes[0], "modulepreload hints");
+    const last = requireNode(nodes.at(-1), "modulepreload hints");
+    const lineStart = source.lastIndexOf("\n", first.sourceCodeLocation.startOffset) + 1;
+    ranges.push({
+      start: lineStart,
+      end: last.sourceCodeLocation.endOffset,
+      markup,
+    });
+    return;
+  }
+
+  const head = requireNode(findElement(doc, (node) => node.tagName === "head"), "modulepreload hints");
+  ranges.push({
+    start: head.sourceCodeLocation.endTag.startOffset,
+    end: head.sourceCodeLocation.endTag.startOffset,
+    markup: `${markup}\n  `,
+  });
 }
 
-function updateModulePreloads(source, assetVersion) {
-  const withoutPreloads = source.replace(
-    /^[ \t]*<link\s+rel="modulepreload"\s+href="\/js\/[^"]+"\s*\/?>\r?\n?/gm,
-    "",
-  );
-  return replaceRequired(
-    withoutPreloads,
-    /\n\s*<\/head>/,
-    `\n${buildModulePreloadMarkup(assetVersion)}\n  </head>`,
-    "modulepreload hints",
-  );
-}
-
-function updateFeaturedCta(source, featuredName) {
+function updateFeaturedCta(doc, ranges, featuredName) {
+  const cta = requireNode(findElementById(doc, "ctaStart"), "featured CTA");
   const featuredHref = `/blog.html?category=${encodeURIComponent(featuredName)}`;
-  let nextSource = replaceRequiredWith(
-    source,
-    /(<a[^>]*\bid="ctaStart"[^>]*\bhref=")[^"]*(")/,
-    (_match, prefix, suffix) => `${prefix}${escapeHtmlAttribute(featuredHref)}${suffix}`,
-    "featured CTA href",
-  );
-  nextSource = replaceRequiredWith(
-    nextSource,
-    /(<a[^>]*\bid="ctaStart"[^>]*\baria-label=")[^"]*(")/,
-    (_match, prefix, suffix) => `${prefix}${escapeHtmlAttribute(featuredName)}${suffix}`,
-    "featured CTA aria-label",
-  );
-  return replaceRequiredWith(
-    nextSource,
-    /(<a[^>]*\bid="ctaStart"[^>]*>[\s\S]*?<span class="btn-tooltip">)[\s\S]*?(<\/span>)/,
-    (_match, prefix, suffix) => `${prefix}${escapeHtmlAttribute(featuredName)}${suffix}`,
-    "featured CTA tooltip",
-  );
+  setAttribute(cta, "href", featuredHref);
+  setAttribute(cta, "aria-label", featuredName);
+  replaceStartTag(ranges, cta);
+  const tooltip = requireNode(findElement(cta, (node) => node.tagName === "span" && attrValue(node, "class").split(/\s+/).includes("btn-tooltip")), "featured CTA tooltip");
+  replaceInner(ranges, tooltip, escapeHtmlAttribute(featuredName));
 }
 
 const config = JSON.parse(await readFile("site.config.json", "utf8"));
@@ -323,12 +353,14 @@ for (const page of pages) {
   const source = await readFile(page.file, "utf8");
   const canonicalUrl = `${siteOrigin}${page.pathname}`;
   const ogImageUrl = `${siteOrigin}${ogImagePath}`;
-  let nextSource = updatePageMeta(source, { canonicalUrl, ogImageUrl, page, siteName });
-  nextSource = updateModulePreloads(nextSource, assetVersion);
-
+  const doc = parseHtml(source);
+  const ranges = [];
+  updatePageMeta(doc, ranges, { canonicalUrl, ogImageUrl, page, siteName });
+  updateModulePreloads(source, doc, ranges, assetVersion);
   if (page.file === "index.html") {
-    nextSource = updateFeaturedCta(nextSource, featuredName);
+    updateFeaturedCta(doc, ranges, featuredName);
   }
+  const nextSource = applyRanges(source, ranges);
 
   if (nextSource !== source) {
     changedFiles.push(page.file);

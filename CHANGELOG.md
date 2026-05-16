@@ -2,6 +2,13 @@
 
 All notable changes to this project are tracked here.
 
+## 6.6.0 - 2026-05-16
+
+- Static metadata injection now uses DOM-based parsing instead of regex rewrites.
+- HTML output stays stable while metadata, icons, and preload hints remain synced.
+- The metadata tool keeps manifest generation in the same release check path.
+- Static assets now use the v6.6 cache key for fresh deployed loads.
+
 ## 6.5.0 - 2026-05-16
 
 - SSR article pages now carry nonce-aware CSP only through response headers.

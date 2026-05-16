@@ -59,6 +59,7 @@ import {
   "js/ui-effects.js",
   "scripts/inject-site-meta.mjs",
   "scripts/lib/html-escape.mjs",
+  "scripts/lib/html-rewriter.mjs",
   "scripts/lib/pixel-diff.mjs",
   "scripts/release-check.mjs",
   "scripts/visual-baselines/approve.mjs",

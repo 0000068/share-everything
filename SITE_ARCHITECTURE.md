@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v6.5
+> Version: v6.6
 > Updated: 2026-05-16
 
 ## 1. Overview
@@ -33,7 +33,16 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v6.5 Highlights
+## 2. Version v6.6 Highlights
+
+v6.6 migrates static metadata injection to a parse5-backed DOM workflow while keeping committed HTML formatting stable.
+
+- `scripts/inject-site-meta.mjs` now locates HTML nodes through parse5 instead of regex templates.
+- The rewriter updates only metadata, manifest, CTA, and modulepreload ranges to avoid broad page rewrites.
+- Manifest generation remains part of the same check path so standalone metadata stays synchronized.
+- Static CSS/JS/SVG entry URLs use the `20260516-v66` cache key so deployed browsers fetch the refreshed build promptly.
+
+## 2.1 Version v6.5 Highlights
 
 v6.5 makes SSR CSP delivery single-source: response headers carry nonce-bearing policy, while static meta stays as a fallback-only policy.
 
