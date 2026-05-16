@@ -212,7 +212,6 @@ const {
   "buildInitialPostPayload",
   "upsertStructuredDataScript",
   "injectInitialPostData",
-  "replaceContentSecurityPolicyMeta",
   "replacePostContent",
   "replaceHeadMeta",
   "replaceEmptyStateContent",
@@ -1803,7 +1802,7 @@ expectIncludes(apiPostJs, "resolveShareImageUrl(post.coverImage, defaultShareIma
 expectIncludes(apiPostJs, "../server/security-policy", "article HTML route should reuse the shared security policy builder");
 expectIncludes(apiPostJs, "createCspNonce", "article HTML route should use per-request nonces for inline JSON data");
 expectIncludes(apiPostJs, "applyHtmlSecurityHeaders", "article HTML route should emit nonce-aware CSP headers from the SSR function");
-expectIncludes(apiPostJs, "replaceContentSecurityPolicyMeta", "article HTML route should keep template CSP meta in sync with the response nonce");
+expectNotIncludes(apiPostJs, "replaceContentSecurityPolicyMeta", "article HTML route should leave template CSP meta static while response headers carry the nonce");
 expectIncludes(postHtml, "<!--SSR_HEAD_META_START-->", "post template should mark the SSR-owned head metadata block explicitly");
 expectIncludes(postHtml, "<!--SSR_HEAD_META_END-->", "post template should keep a closing marker for the SSR-owned head metadata block");
 expectIncludes(postHtml, '<div id="postContent"', "post template should keep the postContent placeholder div for SSR replacement and client hydration");
@@ -1888,48 +1887,28 @@ expectNotIncludes(
   "script-src-elem 'self' 'unsafe-inline'",
   "article HTML route nonce CSP should not allow arbitrary inline script elements",
 );
-const replacedCspMeta = apiPostHelpers.replaceContentSecurityPolicyMeta(
-  '<head><meta http-equiv="Content-Security-Policy" content="old" /></head>',
-  { scriptNonce: nonceSentinel },
+const nonceHeaderFallbackRes = createApiResponseRecorder();
+await apiPostHandler({ method: "GET", query: {} }, nonceHeaderFallbackRes);
+expectIncludes(
+  nonceHeaderFallbackRes.getHeader("content-security-policy"),
+  "script-src 'self'",
+  "article HTML route should send CSP through the HTTP response header",
 );
-expectIncludes(replacedCspMeta, `nonce-${nonceSentinel}`, "article HTML route should mirror the request nonce into the CSP meta tag");
-expectNotIncludes(replacedCspMeta, "frame-ancestors", "article HTML route should avoid frame-ancestors in meta CSP where browsers ignore it");
-const reorderedCspMeta = apiPostHelpers.replaceContentSecurityPolicyMeta(
-  "<head><meta content='old' data-test='1' http-equiv='content-security-policy'></head>",
-  { scriptNonce: nonceSentinel },
+expectIncludes(
+  nonceHeaderFallbackRes.textBody,
+  '<meta http-equiv="Content-Security-Policy"',
+  "article HTML route should keep the static template CSP meta tag in the body",
 );
-expectIncludes(reorderedCspMeta, `nonce-${nonceSentinel}`, "article HTML route should replace CSP meta tags regardless of attribute order or quote style");
-expectNotIncludes(reorderedCspMeta, "content='old'", "article HTML route should not leave an old CSP meta policy behind when attributes are reordered");
 assert.equal(
-  (reorderedCspMeta.match(/http-equiv="Content-Security-Policy"/g) || []).length,
+  (nonceHeaderFallbackRes.textBody.match(/http-equiv="Content-Security-Policy"/g) || []).length,
   1,
-  "article HTML route should emit one canonical CSP meta tag after replacing a reordered template tag",
+  "article HTML route should preserve exactly one static CSP meta tag",
 );
-const duplicateCspWarnings = [];
-const originalDuplicateCspConsoleWarn = console.warn;
-console.warn = (...args) => {
-  duplicateCspWarnings.push(args.join(" "));
-};
-let dedupedCspMeta = "";
-try {
-  dedupedCspMeta = apiPostHelpers.replaceContentSecurityPolicyMeta(
-    "<head><meta http-equiv=Content-Security-Policy content=old><meta content=\"legacy\" http-equiv=\"Content-Security-Policy\"></head>",
-    { scriptNonce: nonceSentinel },
-  );
-} finally {
-  console.warn = originalDuplicateCspConsoleWarn;
-}
-assert.equal(
-  (dedupedCspMeta.match(/http-equiv="Content-Security-Policy"/g) || []).length,
-  1,
-  "article HTML route should collapse duplicate CSP meta tags to avoid intersecting policies",
+expectNotIncludes(
+  nonceHeaderFallbackRes.textBody.match(/<meta http-equiv="Content-Security-Policy"[^>]*>/)?.[0] || "",
+  "nonce-",
+  "article HTML route should not mirror response nonces into the CSP meta tag",
 );
-assert.ok(
-  duplicateCspWarnings.some((message) => message.includes("Found 2 CSP meta tags")),
-  "article HTML route should warn when duplicate CSP meta tags are removed",
-);
-expectNotIncludes(dedupedCspMeta, "content=old", "article HTML route should remove duplicate unquoted CSP meta policies");
-expectNotIncludes(dedupedCspMeta, 'content="legacy"', "article HTML route should remove duplicate quoted CSP meta policies");
 
 const replacedHeadMeta = apiPostHelpers.replaceHeadMeta(`<!doctype html><html><head>
 <!--SSR_HEAD_META_START-->

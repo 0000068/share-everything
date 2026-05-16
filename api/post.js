@@ -22,7 +22,6 @@ const {
 const { escapeHtmlAttribute } = require("../server/html-escape");
 const {
   applyHtmlSecurityHeaders,
-  buildContentSecurityPolicy,
   createCspNonce,
 } = require("../server/security-policy");
 
@@ -35,8 +34,6 @@ const POST_CONTENT_PATTERN = /<div\b(?=[^>]*\bid=["']postContent["'])[^>]*>\s*<\
 const HEAD_META_BLOCK_START = "<!--SSR_HEAD_META_START-->";
 const HEAD_META_BLOCK_END = "<!--SSR_HEAD_META_END-->";
 const HEAD_META_INSERTION_ANCHOR = /<meta\s+property="og:image:alt"\s+content="[^"]*"\s*\/?>/;
-const META_TAG_PATTERN = /<meta\b[^>]*>/gi;
-const HTTP_EQUIV_ATTRIBUTE_PATTERN = /\bhttp-equiv\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/i;
 
 function formatFallbackTitle(title, siteName) {
   return `${title} - ${siteName}`;
@@ -102,44 +99,6 @@ function upsertHeadMarkup(html, pattern, markup) {
     return markup;
   });
   if (didMatch) {
-    return result;
-  }
-
-  return insertMarkupAfter(html, HEAD_META_INSERTION_ANCHOR, markup);
-}
-
-function isContentSecurityPolicyMetaTag(metaTag) {
-  const match = String(metaTag || "").match(HTTP_EQUIV_ATTRIBUTE_PATTERN);
-  const httpEquiv = (match?.[1] ?? match?.[2] ?? match?.[3] ?? "").trim().toLowerCase();
-  return httpEquiv === "content-security-policy";
-}
-
-function replaceContentSecurityPolicyMeta(html, options = {}) {
-  const markup = `<meta http-equiv="Content-Security-Policy" content="${escapeHtmlAttribute(
-    buildContentSecurityPolicy({
-      ...options,
-      includeFrameAncestors: false,
-    }),
-  )}" />`;
-  let cspMetaCount = 0;
-  const result = html.replace(META_TAG_PATTERN, (metaTag) => {
-    if (!isContentSecurityPolicyMetaTag(metaTag)) {
-      return metaTag;
-    }
-
-    cspMetaCount += 1;
-    if (cspMetaCount > 1) {
-      return "";
-    }
-
-    return markup;
-  });
-
-  if (cspMetaCount > 1) {
-    console.warn(`SSR: Found ${cspMetaCount} CSP meta tags in post.html; removed duplicates after the first.`);
-  }
-
-  if (cspMetaCount > 0) {
     return result;
   }
 
@@ -324,7 +283,7 @@ function renderFallbackPage(html, fallback, { url, canonicalUrl, image, imageAlt
   });
   nextHtml = replaceMarkup(nextHtml, /<div\s+id="postSkeleton"(?=[\s>])/, '<div id="postSkeleton" style="display: none;"', "fallback:postSkeleton");
   nextHtml = replaceMarkup(nextHtml, /id="postEmpty"\s+style="display:\s*none;?"/, 'id="postEmpty" style="display: flex;"', "fallback:postEmpty");
-  return replaceContentSecurityPolicyMeta(nextHtml);
+  return nextHtml;
 }
 
 module.exports = async function handler(req, res) {
@@ -373,8 +332,6 @@ module.exports = async function handler(req, res) {
       robots: "index, follow",
       ogType: "article",
     });
-    html = replaceContentSecurityPolicyMeta(html, { scriptNonce });
-
     html = replaceMarkup(html, /<div\s+id="postSkeleton"(?=[\s>])/, '<div id="postSkeleton" style="display: none;"', "postSkeleton");
     html = replacePostContent(html, post, {
       renderedContent,

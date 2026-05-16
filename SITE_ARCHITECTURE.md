@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v6.4
+> Version: v6.5
 > Updated: 2026-05-16
 
 ## 1. Overview
@@ -33,7 +33,16 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v6.4 Highlights
+## 2. Version v6.5 Highlights
+
+v6.5 makes SSR CSP delivery single-source: response headers carry nonce-bearing policy, while static meta stays as a fallback-only policy.
+
+- Article SSR no longer rewrites the template CSP meta tag per request.
+- Nonce-aware CSP is emitted through the HTTP response header for SSR paths.
+- Security policy comments document the static-meta and `frame-ancestors` split.
+- Static CSS/JS/SVG entry URLs use the `20260516-v65` cache key so deployed browsers fetch the refreshed build promptly.
+
+## 2.1 Version v6.4 Highlights
 
 v6.4 turns visual regression into a golden-image workflow so mobile and desktop rendering changes are caught at the screenshot level.
 

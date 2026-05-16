@@ -2,6 +2,13 @@
 
 All notable changes to this project are tracked here.
 
+## 6.5.0 - 2026-05-16
+
+- SSR article pages now carry nonce-aware CSP only through response headers.
+- Static CSP meta remains stable for fallback pages without nonce churn.
+- Security policy comments now document why frame ancestors must stay in headers.
+- Static assets now use the v6.5 cache key for fresh deployed loads.
+
 ## 6.4.0 - 2026-05-16
 
 - Visual checks now compare screenshots against committed golden baselines.
