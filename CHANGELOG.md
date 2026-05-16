@@ -2,6 +2,13 @@
 
 All notable changes to this project are tracked here.
 
+## 7.3.0 - 2026-05-16
+
+- Reworked the mobile home starfield with denser fine stars and a stronger center glow.
+- Tightened the mobile overview search, category filters, card details, and bottom dock for a lighter mobile UI.
+- Updated mobile layout smoke contracts for the compact visual scale.
+- Static assets now use the v7.3 cache key for fresh deployed loads.
+
 ## 7.2.0 - 2026-05-16
 
 - Mobile fallback CSS generator now skips `@keyframes` step selectors so future keyframe blocks inside touch media queries do not produce invalid CSS.

@@ -193,8 +193,8 @@ function expectBlogCardMobileContract(assert, source, label, bookmarkColumnWidth
   }, label);
 
   expectDeclarations(assert, source, ".card-bookmark-btn", {
-    "width": "26px",
-    "height": "26px",
+    "width": "21px",
+    "height": "21px",
   }, label);
 }
 
@@ -209,7 +209,7 @@ function expectBookmarkHitAreaContract(assert, source, label) {
   expectDeclarations(assert, source, ".card-bookmark-btn::after", {
     "content": "\"\"",
     "position": "absolute",
-    "inset": "-9px",
+    "inset": "-11px",
   }, label);
 }
 
@@ -263,15 +263,15 @@ export function runMobileLayoutChecks(context) {
     "letter-spacing": "0",
   }, "narrow real-mobile home");
 
-  expectBlogCardMobileContract(assert, realMobileBlog, "real-mobile blog cards", "30px");
-  expectTouchTargetContract(assert, realMobileBlog, ".filter-btn,\n  .page-btn,\n  .empty-state-action", "real-mobile touch targets");
+  expectBlogCardMobileContract(assert, realMobileBlog, "real-mobile blog cards", "26px");
+  expectTouchTargetContract(assert, realMobileBlog, ".page-btn,\n  .empty-state-action", "real-mobile touch targets");
   expectBookmarkHitAreaContract(assert, realMobileBlog, "real-mobile bookmark hit area");
   expectDeclarations(assert, narrowMobileBlog, ".blog-card-body", {
-    "grid-template-columns": "minmax(0, 1fr) 28px",
+    "grid-template-columns": "minmax(0, 1fr) 24px",
   }, "narrow real-mobile blog cards");
   expectDeclarations(assert, narrowMobileBlog, ".blog-card-category", {
     "display": "inline-flex",
-    "min-height": "21px",
+    "min-height": "17px",
     "white-space": "nowrap",
   }, "narrow real-mobile blog cards");
   expectDeclarations(assert, narrowMobileBlog, ".blog-card-meta", {
@@ -280,7 +280,7 @@ export function runMobileLayoutChecks(context) {
     "gap": "0",
   }, "narrow real-mobile blog cards");
   expectDeclarations(assert, narrowMobileBlog, ".card-bookmark-btn", {
-    "width": "26px",
-    "height": "26px",
+    "width": "21px",
+    "height": "21px",
   }, "narrow real-mobile blog cards");
 }

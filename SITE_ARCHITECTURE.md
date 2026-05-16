@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v7.2
+> Version: v7.3
 > Updated: 2026-05-16
 
 ## 1. Overview
@@ -33,7 +33,17 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v7.2 Highlights
+## 2. Version v7.3 Highlights
+
+v7.3 focuses on the mobile visual system after the v7.0–v7.2 hardening work.
+
+- `assets/mobile-home-starry-bg.svg` now carries a denser fine-star field plus layered center glows so the mobile home hero has more depth without re-enabling animated particles.
+- `css/style.css` tightens the mobile overview bottom dock into a lighter single-layer glass control and keeps the mobile home cache key aligned with the release.
+- `css/blog-page.css` scales down the mobile overview search bar, category chips, card body details, and bookmark controls for a more balanced mobile rhythm.
+- Mobile smoke and visual regression contracts now lock the compact bookmark/control sizing.
+- Static CSS/JS/SVG entry URLs use the `20260516-v73` cache key so deployed browsers fetch the refreshed build promptly.
+
+## 2.1 Version v7.2 Highlights
 
 v7.2 closes three small but real defense / clarity gaps left after v7.0–v7.1.
 
@@ -42,7 +52,7 @@ v7.2 closes three small but real defense / clarity gaps left after v7.0–v7.1.
 - `js/bookmark.js` renames `BOOKMARK_METADATA_VERSION` to `BOOKMARK_METADATA_HYDRATION_GENERATION` and documents that the constant is a "force refresh on read" trigger, not a real schema version (there is no migration logic). The stored `metadataVersion` field is left untouched for backward compatibility with existing entries in users' localStorage.
 - Static CSS/JS/SVG entry URLs use the `20260516-v72` cache key so deployed browsers fetch the refreshed build promptly.
 
-## 2.1 Version v7.1 Highlights
+## 2.2 Version v7.1 Highlights
 
 v7.1 reduces SSR article-template work by parsing `post.html` once per render path and applying accumulated DOM patches in one pass.
 
@@ -51,7 +61,7 @@ v7.1 reduces SSR article-template work by parsing `post.html` once per render pa
 - The string-input helper wrappers stay testable for smoke checks, while the live success path uses the editor directly.
 - Static CSS/JS/SVG entry URLs use the `20260516-v71` cache key so deployed browsers fetch the refreshed build promptly.
 
-## 2.1 Version v7.0 Highlights
+## 2.3 Version v7.0 Highlights
 
 v7.0 removes the hand-maintained mobile fallback CSS debt by deriving compatibility rules from the real touch media queries.
 

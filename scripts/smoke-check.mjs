@@ -767,7 +767,7 @@ expectIncludes(visualRegressionJs, "Emulation.setDeviceMetricsOverride", "visual
 expectIncludes(visualRegressionJs, "is-mobile-device-viewport", "visual regression should verify the mobile compatibility class");
 expectIncludes(visualRegressionJs, "desktop particles should remain animated", "visual regression should guard desktop particle animation");
 expectIncludes(visualRegressionJs, "mobile home particles should be disabled", "visual regression should guard mobile home particle removal");
-expectIncludes(visualRegressionJs, "mobile blog bookmark button should compute to 26px width", "visual regression should guard mobile card bookmark sizing");
+expectIncludes(visualRegressionJs, "mobile blog bookmark button should compute to 21px width", "visual regression should guard mobile card bookmark sizing");
 expectIncludes(visualRegressionJs, "mobile post top dock should stay hidden", "visual regression should guard mobile article dock visibility");
 expectIncludes(readmeMd, `badge/version-${packageMetadata.version}`, "README badge should match package version");
 expectNotIncludes(readmeMd, "badge/version-4.7.0", "README badge should not keep stale release metadata");

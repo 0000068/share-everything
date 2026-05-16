@@ -1,6 +1,6 @@
 # 修复清单
 
-> 更新时间：2026-05-16（v7.2 发布）
+> 更新时间：2026-05-16（v7.3 发布）
 
 ---
 
@@ -19,6 +19,12 @@
 ---
 
 ## 三、历史完成记录
+
+### v7.3 mobile visual redesign (2026-05-16)
+
+- Reworked the mobile home starfield with denser fine stars and a broader center glow.
+- Tightened the mobile overview search, category filters, card details, and bottom dock so the page reads as a native mobile layout instead of enlarged desktop chrome.
+- Updated the mobile visual contracts and cache key for the v7.3 release.
 
 ### v7.2 defense-in-depth + naming (2026-05-16)
 

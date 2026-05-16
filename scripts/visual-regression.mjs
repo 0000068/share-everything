@@ -926,8 +926,8 @@ async function checkMobileBlog(client, viewport) {
   assert.ok(metrics.categoryRect.right <= metrics.cardRect.right + 1, "mobile blog category should stay inside the card");
   assert.ok(metrics.buttonRect.width <= 28, "mobile blog bookmark button should stay visually small");
   assert.ok(metrics.buttonRect.height <= 28, "mobile blog bookmark button should stay visually small");
-  assert.equal(metrics.buttonWidth, "26px", "mobile blog bookmark button should compute to 26px width");
-  assert.equal(metrics.buttonHeight, "26px", "mobile blog bookmark button should compute to 26px height");
+  assert.equal(metrics.buttonWidth, "21px", "mobile blog bookmark button should compute to 21px width");
+  assert.equal(metrics.buttonHeight, "21px", "mobile blog bookmark button should compute to 21px height");
   const titleCenter = (metrics.titleRect.top + metrics.titleRect.bottom) / 2;
   const buttonCenter = (metrics.buttonRect.top + metrics.buttonRect.bottom) / 2;
   assert.ok(Math.abs(titleCenter - buttonCenter) <= 14, "mobile blog title and bookmark should stay on the same visual row");
