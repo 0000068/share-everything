@@ -281,38 +281,6 @@ export function runMobileLayoutChecks(context) {
     "letter-spacing": "0",
   }, "narrow mobile fallback home");
 
-  // Hero glow is intentionally a wide, soft horizontal ellipse centered on the
-  // title/search area. It must not collapse back into the vertical light column
-  // that happens when a phone viewport crops the middle of an oversized circle,
-  // and the outer falloff must stay subtle enough to avoid a visible oval edge.
-  // Both blocks MUST match: prior releases regressed by updating only the
-  // @media block and leaving the is-mobile-device-viewport fallback stale.
-  const heroGlowContract = {
-    "width": "920px",
-    "height": "500px",
-    "top": "57%",
-    "border-radius": "50%",
-  };
-  expectDeclarations(assert, realMobileStyle, ".hero-section::after", heroGlowContract, "real-mobile hero glow");
-  expectDeclarations(assert, mobileFallbackStyle, "html.is-mobile-device-viewport .hero-section::after", heroGlowContract, "mobile fallback hero glow");
-  const heroGlowBackgroundRealMobile = readRuleDeclarations(realMobileStyle, ".hero-section::after").get("background") || "";
-  const heroGlowBackgroundMobileFallback = readRuleDeclarations(mobileFallbackStyle, "html.is-mobile-device-viewport .hero-section::after").get("background") || "";
-  assert.equal(
-    heroGlowBackgroundRealMobile,
-    heroGlowBackgroundMobileFallback,
-    "mobile hero glow background must match between the media query and the is-mobile-device-viewport fallback (the v5.8 / v5.9 release each missed the fallback block — do not regress)",
-  );
-  assert.match(
-    heroGlowBackgroundRealMobile,
-    /radial-gradient\(\s*ellipse at center,\s*rgba\(73,\s*145,\s*255,\s*0\.08\)/,
-    "mobile hero glow should stay a horizontal ellipse instead of a cropped vertical circle",
-  );
-  assert.match(
-    heroGlowBackgroundRealMobile,
-    /transparent\s+100%/,
-    "mobile hero glow gradient must fade to transparent at 100% so no disc edge is visible inside the viewport",
-  );
-
   expectBlogCardMobileContract(assert, realMobileBlog, "real-mobile blog cards", "30px");
   expectBlogCardMobileContract(assert, mobileFallbackBlog, "mobile fallback blog cards", "28px");
   expectTouchTargetContract(assert, realMobileBlog, ".filter-btn,\n  .page-btn,\n  .empty-state-action", "real-mobile touch targets");

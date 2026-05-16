@@ -2,6 +2,13 @@
 
 All notable changes to this project are tracked here.
 
+## 6.4.0 - 2026-05-16
+
+- Visual checks now compare screenshots against committed golden baselines.
+- Reviewers can approve intentional visual changes with a dedicated command.
+- Mobile halo coverage now lives in real screenshot diffing instead of CSS text checks.
+- Static assets now use the v6.4 cache key for fresh deployed loads.
+
 ## 6.3.0 - 2026-05-16
 
 - Metadata escaping now behaves consistently across server rendering and tooling.

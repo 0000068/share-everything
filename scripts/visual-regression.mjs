@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { diffPng } from "./lib/pixel-diff.mjs";
 
 const rootDir = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
 const host = "127.0.0.1";
@@ -365,6 +366,35 @@ function isVisualRegressionFailure(error) {
 
 function isStrictVisualMode() {
   return process.env.VISUAL_STRICT === "1";
+}
+
+function shouldSkipVisualDiff() {
+  return process.env.VISUAL_SKIP_DIFF === "1";
+}
+
+function compareWithBaseline(name, bytes) {
+  if (shouldSkipVisualDiff()) {
+    return null;
+  }
+
+  const baselinePath = path.join(rootDir, "scripts/visual-baselines", `${name}.png`);
+  if (!fs.existsSync(baselinePath)) {
+    return null;
+  }
+
+  const baselineBytes = fs.readFileSync(baselinePath);
+  const diff = diffPng(bytes, baselineBytes, { threshold: 0.05 });
+  const diffPath = path.join(outputDir, `${name}.diff.png`);
+  fs.writeFileSync(diffPath, diff.diffBuffer);
+  const maxDiffRatio = isStrictVisualMode() ? 0.005 : 0.01;
+  if (diff.diffRatio > maxDiffRatio) {
+    throw markVisualRegressionFailure(new Error(
+      `${name} pixel diff ratio ${diff.diffRatio.toFixed(4)} exceeded ${maxDiffRatio}. ` +
+      `Diff image: ${diffPath}`,
+    ));
+  }
+
+  return diff;
 }
 
 class NativeDevToolsWebSocket {
@@ -758,6 +788,7 @@ async function captureScreenshot(client, name) {
   const bytes = Buffer.from(result.data, "base64");
   assert.ok(bytes.length > 10_000, `${name} screenshot should not be blank`);
   fs.writeFileSync(path.join(outputDir, `${name}.png`), bytes);
+  compareWithBaseline(name, bytes);
   return bytes.length;
 }
 

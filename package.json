@@ -1,6 +1,6 @@
 {
   "name": "share-everything",
-  "version": "6.3.0",
+  "version": "6.4.0",
   "type": "commonjs",
   "private": false,
   "license": "MIT",
@@ -21,6 +21,7 @@
     "notion:live-check": "node scripts/notion-live-check.mjs",
     "test": "npm run check",
     "verify": "npm run verify:release",
+    "visual:approve": "node scripts/visual-baselines/approve.mjs",
     "visual:check": "node scripts/visual-regression.mjs",
     "verify:release": "node scripts/release-check.mjs"
   }

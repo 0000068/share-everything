@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v6.3
+> Version: v6.4
 > Updated: 2026-05-16
 
 ## 1. Overview
@@ -33,7 +33,16 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v6.3 Highlights
+## 2. Version v6.4 Highlights
+
+v6.4 turns visual regression into a golden-image workflow so mobile and desktop rendering changes are caught at the screenshot level.
+
+- Visual checks now compare captured PNGs against committed baselines with a small pixel-diff threshold.
+- `npm.cmd run visual:approve` refreshes baselines only when an intentional design change needs approval.
+- Mobile halo coverage moved from brittle CSS byte checks to full-page screenshot comparison.
+- Static CSS/JS/SVG entry URLs use the `20260516-v64` cache key so deployed browsers fetch the refreshed build promptly.
+
+## 2.1 Version v6.3 Highlights
 
 v6.3 consolidates HTML attribute escaping for server-side rendering and release tooling while making browser module dependency failures easier to diagnose.
 
