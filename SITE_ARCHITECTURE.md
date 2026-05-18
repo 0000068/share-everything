@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v7.4
+> Version: v7.5
 > Updated: 2026-05-16
 
 ## 1. Overview
@@ -33,7 +33,17 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v7.4 Highlights
+## 2. Version v7.5 Highlights
+
+v7.5 simplifies the mobile overview bottom dock and tightens the card grid aspect, both strictly mobile-scoped — no desktop CSS changed.
+
+- `css/style.css` `body[data-page="blog"] .top-actions` is stripped of its container tray (gradient backplate, drop shadow, double border all removed). Each `.action-btn` is now a standalone `返回列表`-style pill: soft white gradient (`rgba(255,255,255,0.07)` → `rgba(255,255,255,0.035)`), thin cyan border (`rgba(137,224,255,0.16)`), single inset highlight, no outer shadow.
+- `body[data-page="blog"] .action-btn.active` switches from cyan-saturated highlight to a slightly brighter neutral pill so the active state matches the surrounding pills' visual weight.
+- `css/blog-page.css` `.blog-card` mobile aspect-ratio drops from `1 / 1` to `1 / 0.86` so the 2-column card grid takes ~14% less vertical space; `grid-template-rows` rebalanced to `0.6fr / 0.4fr` for the cover-vs-body split.
+- Both the `@media` block and the `html.is-mobile-device-viewport` fallback receive both changes via `mobile:fallbacks` derivation.
+- Static CSS/JS/SVG entry URLs use the `20260516-v75` cache key so deployed browsers fetch the refreshed mobile UI promptly.
+
+## 2.1 Version v7.4 Highlights
 
 v7.4 retunes the mobile home center glow to a softer, more cyan-tinted halo that wraps the title area without over-saturating it. Strictly mobile-scoped — desktop hero rendering is untouched.
 

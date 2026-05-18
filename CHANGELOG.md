@@ -2,6 +2,14 @@
 
 All notable changes to this project are tracked here.
 
+## 7.5.0 - 2026-05-18
+
+- Redesigned the mobile overview bottom dock to match the lightweight `返回列表` pill style: removed the heavy outer tray, gradient backplate, and stacked drop shadows; each nav button is now an independent soft-white pill with a thin cyan border and a single inset highlight.
+- Slightly flattened the mobile overview card aspect ratio (`1 / 1` → `1 / 0.86`) so the 2-column card grid takes 14% less vertical space and feels more balanced against the page header.
+- Strictly mobile-scoped change: only `body[data-page="blog"]` rules inside the mobile media query and the `.is-mobile-device-viewport` fallback were modified, plus mobile blog card aspect-ratio; desktop CSS is unchanged.
+- Refreshed mobile and desktop visual baselines (desktop baseline drift is title-gradient animation timing noise — no desktop CSS changed).
+- Static assets now use the v7.5 cache key for fresh deployed loads.
+
 ## 7.4.0 - 2026-05-16
 
 - Retuned the mobile home center glow toward a softer cyan halo that wraps the title area instead of dominating it.
