@@ -2,6 +2,14 @@
 
 All notable changes to this project are tracked here.
 
+## 7.7.0 - 2026-05-18
+
+- Mobile overview card aspect-ratio dialed back from v7.6's `1 / 1.12` (too tall) to `1 / 1.04` — only ~4% taller than wide, balanced without leaning aggressive portrait.
+- Mobile overview bottom dock is now taller and rounder: container padding 4px → 6px, button min-height 34px → 42px, button padding 7×12 → 10×14, icon 14px → 15px, font-size 0.74rem → 0.78rem. Container picks up a soft outer drop shadow for visual lift.
+- Narrow-mobile (≤540px) dock proportionally bumped too: button min-height 30px → 38px.
+- Strictly mobile-scoped change: only `body[data-page="blog"]` rules and mobile `.blog-card` aspect-ratio modified; desktop CSS untouched.
+- Static assets now use the v7.7 cache key for fresh deployed loads.
+
 ## 7.6.0 - 2026-05-18
 
 - Refined v7.5 based on real-device feedback: mobile overview cards switched from near-square (`1 / 0.86`) to a proper portrait aspect (`1 / 1.12`) so the cover image gets vertical room while the body stays compact.

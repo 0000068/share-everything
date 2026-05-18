@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v7.6
+> Version: v7.7
 > Updated: 2026-05-16
 
 ## 1. Overview
@@ -33,7 +33,18 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v7.6 Highlights
+## 2. Version v7.7 Highlights
+
+v7.7 dials back v7.6 based on real-device feedback: card aspect less aggressive portrait, dock taller and rounder.
+
+- `css/blog-page.css` `.blog-card` mobile aspect-ratio drops from `1 / 1.12` to `1 / 1.04` so cards are only ~4% taller than wide. `grid-template-rows` reverts to `0.58fr / 0.42fr`, `contain-intrinsic-size` updated to `164×171`.
+- `css/style.css` `body[data-page="blog"] .top-actions` container: padding 4px → 6px, gap 4px → 5px, gains a soft outer drop shadow (`0 6px 20px rgba(0,0,0,0.18)`) for lift.
+- `body[data-page="blog"] .action-btn` inside the dock: min-height 34px → 42px, padding 7×12 → 10×14, font-size 0.74rem → 0.78rem, icon 14 → 15px. The bar feels substantial without being heavy.
+- Narrow-mobile (≤540px) bumped proportionally: button min-height 30px → 38px, padding 6×9 → 8×12.
+- Strictly mobile-scoped change: no desktop CSS modified.
+- Static CSS/JS/SVG entry URLs use the `20260516-v77` cache key.
+
+## 2.1 Version v7.6 Highlights
 
 v7.6 refines v7.5 based on real-device feedback: mobile cards become properly portrait, and the bottom dock regains a unified container without going back to v7.4's heavy styling.
 
