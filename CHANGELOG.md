@@ -2,6 +2,14 @@
 
 All notable changes to this project are tracked here.
 
+## 7.6.0 - 2026-05-18
+
+- Refined v7.5 based on real-device feedback: mobile overview cards switched from near-square (`1 / 0.86`) to a proper portrait aspect (`1 / 1.12`) so the cover image gets vertical room while the body stays compact.
+- Mobile overview bottom dock reintroduces a slim unified container (segmented-control feel) instead of three free-floating pills: subtle white gradient backplate (`rgba(255,255,255,0.05→0.02)`), thin cyan-tinted border (`rgba(137,224,255,0.14)`), 4px padding, pill border-radius.
+- Individual nav buttons inside the dock are now transparent by default with a soft white-tint active state — the unified container provides visual cohesion while individual buttons stay quiet.
+- Strictly mobile-scoped change: only `body[data-page="blog"]` rules and mobile `.blog-card` aspect-ratio were modified; desktop CSS is unchanged.
+- Static assets now use the v7.6 cache key for fresh deployed loads.
+
 ## 7.5.0 - 2026-05-18
 
 - Redesigned the mobile overview bottom dock to match the lightweight `返回列表` pill style: removed the heavy outer tray, gradient backplate, and stacked drop shadows; each nav button is now an independent soft-white pill with a thin cyan border and a single inset highlight.

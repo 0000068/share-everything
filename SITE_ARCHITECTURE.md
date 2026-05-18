@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v7.5
+> Version: v7.6
 > Updated: 2026-05-16
 
 ## 1. Overview
@@ -33,7 +33,17 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v7.5 Highlights
+## 2. Version v7.6 Highlights
+
+v7.6 refines v7.5 based on real-device feedback: mobile cards become properly portrait, and the bottom dock regains a unified container without going back to v7.4's heavy styling.
+
+- `css/blog-page.css` `.blog-card` mobile aspect-ratio shifts from the near-square `1 / 0.86` (v7.5) to portrait `1 / 1.12` so the 2-column card grid gives the cover image meaningful vertical room. `grid-template-rows` rebalanced to `0.62fr / 0.38fr`, `contain-intrinsic-size` updated to `164×184`.
+- `css/style.css` `body[data-page="blog"] .top-actions` reintroduces a slim unified container (4px padding, pill `border-radius`, soft white gradient `rgba(255,255,255,0.05→0.02)`, thin cyan border `rgba(137,224,255,0.14)`, single inset highlight). Buttons inside become transparent by default with a soft white-tint active state — the container provides visual cohesion while individual buttons stay quiet.
+- Both `@media (max-width: 768px) and (hover: none) and (pointer: coarse)` block and the `html.is-mobile-device-viewport` fallback receive the change via `mobile:fallbacks` derivation. Narrow-mobile (`max-width: 540px`) inherits the unified container with a tighter `padding: 3px` and smaller pill sizing.
+- Strictly mobile-scoped change: no desktop CSS modified.
+- Static CSS/JS/SVG entry URLs use the `20260516-v76` cache key so deployed browsers fetch the refreshed mobile UI promptly.
+
+## 2.1 Version v7.5 Highlights
 
 v7.5 simplifies the mobile overview bottom dock and tightens the card grid aspect, both strictly mobile-scoped — no desktop CSS changed.
 
