@@ -1,13 +1,13 @@
-import "./font-loader.js?v=20260516-v73";
-import "./notion-content-shared.js?v=20260516-v73";
-import "./runtime-core.js?v=20260516-v73";
-import "./site-utils.js?v=20260516-v73";
-import "./common.js?v=20260516-v73";
-import "./ui-effects.js?v=20260516-v73";
-import "./seo-meta.js?v=20260516-v73";
-import "./spa-router.js?v=20260516-v73";
+import "./font-loader.js?v=20260516-v74";
+import "./notion-content-shared.js?v=20260516-v74";
+import "./runtime-core.js?v=20260516-v74";
+import "./site-utils.js?v=20260516-v74";
+import "./common.js?v=20260516-v74";
+import "./ui-effects.js?v=20260516-v74";
+import "./seo-meta.js?v=20260516-v74";
+import "./spa-router.js?v=20260516-v74";
 
-const ASSET_VERSION = "20260516-v73";
+const ASSET_VERSION = "20260516-v74";
 const versioned = (path) => `${path}?v=${ASSET_VERSION}`;
 window.AppAssetVersion = ASSET_VERSION;
 

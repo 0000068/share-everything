@@ -2,6 +2,14 @@
 
 All notable changes to this project are tracked here.
 
+## 7.4.0 - 2026-05-16
+
+- Retuned the mobile home center glow toward a softer cyan halo that wraps the title area instead of dominating it.
+- Both the mobile starry SVG glow gradients and the CSS hero halo now use lower opacity teal-tinted stops, and the halo is lifted upward so the title sits at its visual center.
+- Strictly mobile-scoped change: the only modified CSS rules are the two mobile `.hero-section::after` blocks; desktop hero rendering is unchanged.
+- Refreshed only the mobile home visual baseline; the desktop baseline is intentionally preserved from v7.3.
+- Static assets now use the v7.4 cache key for fresh deployed loads.
+
 ## 7.3.0 - 2026-05-16
 
 - Reworked the mobile home starfield with denser fine stars and a stronger center glow.

@@ -675,7 +675,7 @@ body.has-cursor-glow .cursor-glow {
 
   .ambient-background {
     background-color: #0b1021;
-    background-image: url("/assets/mobile-home-starry-bg.svg?v=20260516-v73");
+    background-image: url("/assets/mobile-home-starry-bg.svg?v=20260516-v74");
     background-position: center top;
     background-repeat: no-repeat;
     background-size: cover;
@@ -733,18 +733,18 @@ body.has-cursor-glow .cursor-glow {
     left: 50%;
     top: 55%;
     transform: translate(-50%, -50%);
-    width: 1040px;
-    height: 620px;
+    width: 980px;
+    height: 600px;
     border-radius: 50%;
     background: radial-gradient(
       ellipse at center,
-      rgba(88, 176, 255, 0.28) 0%,
-      rgba(73, 145, 255, 0.19) 22%,
-      rgba(50, 103, 189, 0.09) 52%,
-      rgba(24, 238, 255, 0.025) 78%,
+      rgba(72, 168, 210, 0.20) 0%,
+      rgba(58, 138, 196, 0.14) 24%,
+      rgba(40, 90, 160, 0.07) 54%,
+      rgba(28, 180, 210, 0.02) 80%,
       transparent 100%
     );
-    opacity: 0.94;
+    opacity: 0.92;
     pointer-events: none;
     z-index: -1;
   }
@@ -1090,7 +1090,7 @@ body.has-cursor-glow .cursor-glow {
 
   html.is-mobile-device-viewport .ambient-background {
     background-color: #0b1021;
-    background-image: url("/assets/mobile-home-starry-bg.svg?v=20260516-v73");
+    background-image: url("/assets/mobile-home-starry-bg.svg?v=20260516-v74");
     background-position: center top;
     background-repeat: no-repeat;
     background-size: cover;
@@ -1148,18 +1148,18 @@ body.has-cursor-glow .cursor-glow {
     left: 50%;
     top: 55%;
     transform: translate(-50%, -50%);
-    width: 1040px;
-    height: 620px;
+    width: 980px;
+    height: 600px;
     border-radius: 50%;
     background: radial-gradient(
       ellipse at center,
-      rgba(88, 176, 255, 0.28) 0%,
-      rgba(73, 145, 255, 0.19) 22%,
-      rgba(50, 103, 189, 0.09) 52%,
-      rgba(24, 238, 255, 0.025) 78%,
+      rgba(72, 168, 210, 0.20) 0%,
+      rgba(58, 138, 196, 0.14) 24%,
+      rgba(40, 90, 160, 0.07) 54%,
+      rgba(28, 180, 210, 0.02) 80%,
       transparent 100%
     );
-    opacity: 0.94;
+    opacity: 0.92;
     pointer-events: none;
     z-index: -1;
   }

@@ -1,14 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice">
   <defs>
-    <radialGradient id="centerGlow" cx="195" cy="486" r="350" gradientUnits="userSpaceOnUse" gradientTransform="translate(195 486) scale(1.38 .62) translate(-195 -486)">
-      <stop offset="0" stop-color="#4d9cff" stop-opacity=".42"/>
-      <stop offset=".28" stop-color="#3267bd" stop-opacity=".25"/>
-      <stop offset=".6" stop-color="#17346e" stop-opacity=".1"/>
+    <radialGradient id="centerGlow" cx="195" cy="490" r="360" gradientUnits="userSpaceOnUse" gradientTransform="translate(195 490) scale(1.38 .64) translate(-195 -490)">
+      <stop offset="0" stop-color="#46a4d4" stop-opacity=".30"/>
+      <stop offset=".28" stop-color="#326cb0" stop-opacity=".18"/>
+      <stop offset=".6" stop-color="#173470" stop-opacity=".08"/>
       <stop offset=".9" stop-color="#101529" stop-opacity="0"/>
     </radialGradient>
-    <radialGradient id="titleGlow" cx="195" cy="510" r="250" gradientUnits="userSpaceOnUse" gradientTransform="translate(195 510) scale(1.55 .66) translate(-195 -510)">
-      <stop offset="0" stop-color="#54a8ff" stop-opacity=".25"/>
-      <stop offset=".46" stop-color="#285ca8" stop-opacity=".12"/>
+    <radialGradient id="titleGlow" cx="195" cy="455" r="260" gradientUnits="userSpaceOnUse" gradientTransform="translate(195 455) scale(1.56 .72) translate(-195 -455)">
+      <stop offset="0" stop-color="#54b8d8" stop-opacity=".18"/>
+      <stop offset=".46" stop-color="#2a64ac" stop-opacity=".09"/>
       <stop offset="1" stop-color="#101529" stop-opacity="0"/>
     </radialGradient>
     <radialGradient id="lowerViolet" cx="94%" cy="88%" r="42%">

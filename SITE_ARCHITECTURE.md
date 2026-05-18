@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v7.3
+> Version: v7.4
 > Updated: 2026-05-16
 
 ## 1. Overview
@@ -33,7 +33,17 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v7.3 Highlights
+## 2. Version v7.4 Highlights
+
+v7.4 retunes the mobile home center glow to a softer, more cyan-tinted halo that wraps the title area without over-saturating it. Strictly mobile-scoped — desktop hero rendering is untouched.
+
+- `assets/mobile-home-starry-bg.svg` shifts the `centerGlow` and `titleGlow` colors toward teal (`#46a4d4` / `#54b8d8`) at reduced opacity stops, and lifts both gradients upward so they envelop the title area rather than sitting under the search box.
+- `css/style.css` mobile `.hero-section::after` adopts the same softer cyan stops (peak `rgba(72, 168, 210, 0.20)` instead of the prior brighter pure blue) and a slightly smaller 980×600 footprint to keep the halo contained.
+- Both the `@media (max-width: 768px) and (hover: none) and (pointer: coarse)` block and the `html.is-mobile-device-viewport` fallback receive the change — no desktop `.hero-section::after` exists, so PC rendering is identical to v7.3.
+- The mobile home visual baseline is refreshed (`scripts/visual-baselines/mobile-home.png`). The desktop baseline is intentionally not regenerated since the desktop view did not change.
+- Static CSS/JS/SVG entry URLs use the `20260516-v74` cache key so deployed browsers fetch the refreshed glow promptly.
+
+## 2.1 Version v7.3 Highlights
 
 v7.3 focuses on the mobile visual system after the v7.0–v7.2 hardening work.
 
