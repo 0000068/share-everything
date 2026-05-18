@@ -499,18 +499,18 @@
 
   .blog-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-    max-width: 500px;
+    gap: 11px;
+    max-width: 460px;
     align-items: stretch;
   }
 
   .blog-card {
     display: grid;
-    grid-template-rows: minmax(0, 0.58fr) minmax(0, 0.42fr);
-    aspect-ratio: 1 / 1.04;
+    grid-template-rows: minmax(0, 0.66fr) minmax(0, 0.34fr);
+    aspect-ratio: 1 / 0.94;
     content-visibility: auto;
-    contain-intrinsic-size: 164px 171px;
-    border-radius: 15px;
+    contain-intrinsic-size: 150px 141px;
+    border-radius: 14px;
     background: rgba(255, 255, 255, 0.055);
     border-color: rgba(255, 255, 255, 0.09);
     backdrop-filter: none;
@@ -550,14 +550,14 @@
 
   .blog-card-body {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 26px;
+    grid-template-columns: minmax(0, 1fr) 24px;
     grid-template-rows: auto minmax(0, 1fr);
-    column-gap: 6px;
-    row-gap: 4px;
+    column-gap: 5px;
+    row-gap: 2px;
     align-items: start;
     min-height: 0;
     position: relative;
-    padding: 7px 8px;
+    padding: 6px 8px;
   }
 
   .blog-card-category {
@@ -861,18 +861,18 @@
 
   html.is-mobile-device-viewport .blog-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-    max-width: 500px;
+    gap: 11px;
+    max-width: 460px;
     align-items: stretch;
   }
 
   html.is-mobile-device-viewport .blog-card {
     display: grid;
-    grid-template-rows: minmax(0, 0.58fr) minmax(0, 0.42fr);
-    aspect-ratio: 1 / 1.04;
+    grid-template-rows: minmax(0, 0.66fr) minmax(0, 0.34fr);
+    aspect-ratio: 1 / 0.94;
     content-visibility: auto;
-    contain-intrinsic-size: 164px 171px;
-    border-radius: 15px;
+    contain-intrinsic-size: 150px 141px;
+    border-radius: 14px;
     background: rgba(255, 255, 255, 0.055);
     border-color: rgba(255, 255, 255, 0.09);
     backdrop-filter: none;
@@ -912,14 +912,14 @@
 
   html.is-mobile-device-viewport .blog-card-body {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 26px;
+    grid-template-columns: minmax(0, 1fr) 24px;
     grid-template-rows: auto minmax(0, 1fr);
-    column-gap: 6px;
-    row-gap: 4px;
+    column-gap: 5px;
+    row-gap: 2px;
     align-items: start;
     min-height: 0;
     position: relative;
-    padding: 7px 8px;
+    padding: 6px 8px;
   }
 
   html.is-mobile-device-viewport .blog-card-category {

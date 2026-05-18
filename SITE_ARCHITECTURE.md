@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v7.7
+> Version: v7.8
 > Updated: 2026-05-16
 
 ## 1. Overview
@@ -33,7 +33,17 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v7.7 Highlights
+## 2. Version v7.8 Highlights
+
+v7.8 rebalances mobile overview cards based on real-device feedback. Dock kept exactly at v7.7 (user said previous was good).
+
+- `css/blog-page.css` `.blog-card` mobile aspect-ratio `1 / 1.04` → `1 / 0.94` so cards are 6% wider than tall (mild landscape). `grid-template-rows` `0.58fr / 0.42fr` → `0.66fr / 0.34fr` so the cover image clearly dominates. `contain-intrinsic-size` updated to `150×141`, `border-radius` `15px → 14px`.
+- `.blog-grid` `max-width` `500px → 460px` and `gap` `10px → 11px` so the 2-column grid feels less heavy.
+- `.blog-card-body` mobile padding tightened: `7×8 → 6×8`, `row-gap 4 → 2`, `column-gap 6 → 5`, bookmark column `26px → 24px`. The category chip + title row collapses into a compact single block.
+- Strictly mobile-scoped change: no desktop CSS modified.
+- Static CSS/JS/SVG entry URLs use the `20260516-v78` cache key.
+
+## 2.1 Version v7.7 Highlights
 
 v7.7 dials back v7.6 based on real-device feedback: card aspect less aggressive portrait, dock taller and rounder.
 

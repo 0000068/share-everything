@@ -2,6 +2,15 @@
 
 All notable changes to this project are tracked here.
 
+## 7.8.0 - 2026-05-18
+
+- Mobile overview card aspect rebalanced to mild landscape (`1 / 0.94`) so the cover image gets clear horizontal dominance without the card feeling tall.
+- Card cover/body split shifted to `0.66fr / 0.34fr` (cover ~66%) so the cover image looks like a proper poster instead of a squashed strip.
+- Card grid max-width shrunk `500px → 460px` and gap `10px → 11px` so the 2-column grid feels less overwhelming.
+- Card body padding tightened (7×8 → 6×8, row-gap 4 → 2, column-gap 6 → 5, bookmark column 26px → 24px) so the category chip + title row reads as a single compact line.
+- Dock kept exactly at v7.7 styling (user feedback: previous dock was good).
+- Static assets now use the v7.8 cache key.
+
 ## 7.7.0 - 2026-05-18
 
 - Mobile overview card aspect-ratio dialed back from v7.6's `1 / 1.12` (too tall) to `1 / 1.04` — only ~4% taller than wide, balanced without leaning aggressive portrait.

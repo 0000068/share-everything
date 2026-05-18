@@ -263,7 +263,7 @@ export function runMobileLayoutChecks(context) {
     "letter-spacing": "0",
   }, "narrow real-mobile home");
 
-  expectBlogCardMobileContract(assert, realMobileBlog, "real-mobile blog cards", "26px");
+  expectBlogCardMobileContract(assert, realMobileBlog, "real-mobile blog cards", "24px");
   expectTouchTargetContract(assert, realMobileBlog, ".page-btn,\n  .empty-state-action", "real-mobile touch targets");
   expectBookmarkHitAreaContract(assert, realMobileBlog, "real-mobile bookmark hit area");
   expectDeclarations(assert, narrowMobileBlog, ".blog-card-body", {
