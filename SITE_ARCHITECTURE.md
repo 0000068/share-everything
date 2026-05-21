@@ -1,7 +1,7 @@
 # Share Everything Site Architecture
 
-> Version: v7.8
-> Updated: 2026-05-16
+> Version: v7.9
+> Updated: 2026-05-21
 
 ## 1. Overview
 
@@ -33,15 +33,32 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v7.8 Highlights
+## 2. Version v7.9 Highlights
 
-v7.8 rebalances mobile overview cards based on real-device feedback. Dock kept exactly at v7.7 (user said previous was good).
+v7.9 is a code-quality pass that fixes one production behavior gap and hardens several internal invariants. No visual changes.
+
+- **Cover image proxy restored**: `js/site-utils.js` now resolves `window.NotionContent` at call time instead of capturing `NotionContentShared` at IIFE init. Blog card covers route through `/api/image?src=...` as the architecture has always described, instead of falling through to the local-only fallback that returned raw Notion S3 URLs.
+- **Bookmark hydration merge**: `js/bookmark.js` `hydrateMissingMetadata` collects hydrated entries into a `Map<id, entry>`, then re-reads localStorage before save and merges by id. A concurrent `toggle()` during the hydration await window no longer overwrites the user's change with the pre-hydration snapshot.
+- **Storage event idempotency**: `js/bookmark.js` compares the cross-tab `storage` payload against the previous bookmark snapshot key and skips the `bookmarks:updated` dispatch when the set hasn't changed.
+- **postSummary cache unified**: `js/notion-api.js` merges the parallel `postSummaryMemoryCache` + `postSummaryTimestampCache` Maps into a single `Map<id, {summary, timestamp}>`. The two-Map drift invariant is no longer load-bearing on manual sync.
+- **JSON timeout coverage**: `js/notion-api.js` `requestJsonWithTimeout` now `return await response.json()` so the abort signal still applies during body parse instead of clearing the timeout before parse begins.
+- **SSR patch overlap detection**: `api/post.js` `applyPatches` throws on overlapping ranges instead of silently corrupting the template. Pure same-offset insertions still coexist.
+- **OpenGraph share image path centralized**: `js/notion-content-shared.js` exports `DEFAULT_SHARE_IMAGE_PATH`. `api/post.js`, `server/render-service.js`, `js/spa-router.js`, `js/seo-meta.js`, `js/post-page.js`, `js/notion-content.js`, and `scripts/inject-site-meta.mjs` all read from the constant. Smoke check asserts the constant equals `/og-image.jpg?v=4`.
+- **SPA stylesheet filter precision**: `js/spa-router.js` excludes `/css/style.css` by pathname instead of `[href*="style.css"]` substring so future filenames containing the substring (e.g. `mobile-style.css`) are still picked up on navigation.
+- **Local dev denylist**: `scripts/local-server.mjs` denies `node_modules` static serving alongside `api`, `server`, `scripts`.
+- **CSS rule shadowing removed**: `css/style.css` splits the touch-media `.hero-search input` + `.blog-search input` shared block so per-selector overrides do not shadow the shared declarations. `npm.cmd run mobile:fallbacks` regenerated the `html.is-mobile-device-viewport` mirror.
+- **Tags defensive normalization**: `js/notion-content.js` `mapNotionPage` runs Notion multi_select names through `normalizePostTags` so any nullish or empty entries are filtered before downstream rendering.
+- Static CSS/JS/SVG entry URLs use the `20260521-v79` cache key.
+
+## 2.1 Version v7.8 Highlights
+
+v7.8 rebalanced mobile overview cards based on real-device feedback. Dock kept exactly at v7.7 (user said previous was good).
 
 - `css/blog-page.css` `.blog-card` mobile aspect-ratio `1 / 1.04` → `1 / 0.94` so cards are 6% wider than tall (mild landscape). `grid-template-rows` `0.58fr / 0.42fr` → `0.66fr / 0.34fr` so the cover image clearly dominates. `contain-intrinsic-size` updated to `150×141`, `border-radius` `15px → 14px`.
 - `.blog-grid` `max-width` `500px → 460px` and `gap` `10px → 11px` so the 2-column grid feels less heavy.
 - `.blog-card-body` mobile padding tightened: `7×8 → 6×8`, `row-gap 4 → 2`, `column-gap 6 → 5`, bookmark column `26px → 24px`. The category chip + title row collapses into a compact single block.
 - Strictly mobile-scoped change: no desktop CSS modified.
-- Static CSS/JS/SVG entry URLs use the `20260516-v78` cache key.
+- Static CSS/JS/SVG entry URLs used the `20260516-v78` cache key.
 
 ## 2.1 Version v7.7 Highlights
 

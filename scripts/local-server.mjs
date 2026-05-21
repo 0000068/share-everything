@@ -44,7 +44,7 @@ const apiHandlerSpecifiers = new Map([
   ["/api/sitemap", "../api/sitemap.js"],
 ]);
 const apiHandlers = new Map();
-const deniedStaticRootSegments = new Set(["api", "server", "scripts"]);
+const deniedStaticRootSegments = new Set(["api", "node_modules", "server", "scripts"]);
 
 function createHttpError(statusCode, message) {
   const error = new Error(message);

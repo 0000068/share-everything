@@ -257,8 +257,11 @@
       }
 
       metadataHydrationPromise = (async () => {
-        let nextBookmarks = bookmarks;
-        let didHydrate = false;
+        // Collect hydrated entries by id so we can merge them onto whatever
+        // localStorage looks like at save time. A concurrent toggle() during
+        // the network await window would otherwise be overwritten by an
+        // unconditional save(snapshot-from-T0).
+        const hydratedById = new Map();
 
         for (const bookmark of pendingHydration) {
           let source = window.NotionAPI?.getPostSummary?.(bookmark.id) || null;
@@ -285,19 +288,26 @@
             continue;
           }
 
-          nextBookmarks = nextBookmarks.map((entry) => (
-            entry.id === hydratedBookmark.id ? hydratedBookmark : entry
-          ));
-          didHydrate = true;
+          hydratedById.set(hydratedBookmark.id, hydratedBookmark);
         }
 
-        if (didHydrate) {
-          if (!save(nextBookmarks)) {
-            return false;
-          }
+        if (hydratedById.size === 0) {
+          return false;
         }
 
-        return didHydrate;
+        // Drop the in-memory cache so getAll() re-parses the latest localStorage
+        // value — picks up any toggle() that landed during hydration.
+        bookmarksCache = null;
+        const currentBookmarks = getAll();
+        const merged = currentBookmarks.map((entry) => (
+          hydratedById.get(entry.id) || entry
+        ));
+
+        if (!save(merged)) {
+          return false;
+        }
+
+        return true;
       })().finally(() => {
         metadataHydrationPromise = null;
       });
@@ -316,6 +326,12 @@
       }
     }
 
+    function bookmarkSnapshotKey(entries) {
+      return (entries || [])
+        .map((entry) => `${entry.id} ${entry.timestamp}`)
+        .join("");
+    }
+
     function scheduleStorageBookmarksUpdated() {
       clearTimeout(storageSyncTimer);
       storageSyncTimer = setTimeout(() => {
@@ -327,7 +343,12 @@
     window.addEventListener("storage", (event) => {
       if (event.key !== BOOKMARK_KEY) return;
 
+      const previousKey = bookmarkSnapshotKey(bookmarksCache);
       refreshBookmarksFromSerializedValue(event.newValue);
+      // Cross-tab storage events fire for any setItem with the same key, even
+      // when the serialized value is byte-identical. Skip the dispatch if the
+      // bookmark set hasn't actually changed — avoids spurious re-renders.
+      if (previousKey === bookmarkSnapshotKey(bookmarksCache)) return;
       scheduleStorageBookmarksUpdated();
     });
 

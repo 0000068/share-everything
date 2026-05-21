@@ -12,6 +12,7 @@ const {
   renderPostContent,
   resolveShareImageUrl,
 } = require("../server/notion-server");
+const { DEFAULT_SHARE_IMAGE_PATH } = require("../js/notion-content-shared");
 const {
   applyPublicErrorHeaders,
   getPublicPostErrorStatus,
@@ -140,12 +141,26 @@ function endTagStart(node) {
 }
 
 function applyPatches(html, patches) {
-  return patches
+  const sorted = patches
     .filter((patch) => Number.isInteger(patch.start) && Number.isInteger(patch.end))
-    .sort((a, b) => b.start - a.start)
-    .reduce((nextHtml, patch) => (
-      `${nextHtml.slice(0, patch.start)}${patch.markup}${nextHtml.slice(patch.end)}`
-    ), html);
+    .sort((a, b) => b.start - a.start);
+
+  // Detect overlapping ranges. Patches are applied right-to-left against
+  // the original offsets, so a lower-start patch whose end reaches into a
+  // higher-start patch's range would silently corrupt the template. Throw
+  // loudly instead so future SSR edits surface the conflict immediately.
+  // Pure same-offset insertions (start === end) are allowed to coexist.
+  for (let i = 0; i < sorted.length - 1; i += 1) {
+    if (sorted[i + 1].end > sorted[i].start) {
+      throw new Error(
+        `applyPatches: overlapping ranges [${sorted[i + 1].start},${sorted[i + 1].end}) and [${sorted[i].start},${sorted[i].end})`,
+      );
+    }
+  }
+
+  return sorted.reduce((nextHtml, patch) => (
+    `${nextHtml.slice(0, patch.start)}${patch.markup}${nextHtml.slice(patch.end)}`
+  ), html);
 }
 
 function isTemplateEditor(value) {
@@ -469,7 +484,7 @@ module.exports = async function handler(req, res) {
   const routeId = readQueryString(req.query.id);
   const siteOrigin = getSiteOrigin();
   const siteName = getSiteName();
-  const defaultShareImageUrl = `${siteOrigin}/og-image.jpg?v=4`;
+  const defaultShareImageUrl = `${siteOrigin}${DEFAULT_SHARE_IMAGE_PATH}`;
 
   let html = await getTemplate();
 

@@ -1,6 +1,9 @@
 (() => {
   const siteUtils = window.SiteUtils || {};
-  const DEFAULT_OG_IMAGE_URL = new URL("og-image.jpg?v=4", window.location.origin).href;
+  const DEFAULT_OG_IMAGE_URL = new URL(
+    (window.NotionContentShared?.DEFAULT_SHARE_IMAGE_PATH || "/og-image.jpg?v=4"),
+    window.location.origin,
+  ).href;
   const DEFAULT_OG_IMAGE_ALT =
     typeof siteUtils.getSiteName === "function" ? siteUtils.getSiteName() : "Site";
 

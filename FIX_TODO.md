@@ -1,6 +1,6 @@
 # 修复清单
 
-> 更新时间：2026-05-18（v7.8 发布）
+> 更新时间：2026-05-21（v7.9 发布）
 
 ---
 
@@ -19,6 +19,42 @@
 ---
 
 ## 三、历史完成记录
+
+### v7.9 code quality pass (2026-05-21)
+
+代码质量与正确性回归：1 个真实 bug 修复 + 5 项内部不变量加强 + 4 项可维护性清理。
+
+**Bug 修复（生产可见）**
+
+- `js/site-utils.js` 的 `sharedContent` 不再于 IIFE 顶部捕获 `window.NotionContentShared`，改为在每次调用 `sanitizeImageUrl` / `resolveProxiedDisplayImageUrl` / `resolveShareImageUrl` / `isLikelyEphemeralAssetUrl` 时 lazy 读取 `window.NotionContent`。生产环境下 NotionContent 通过 `loadPostRenderingChain()` 动态 import，capture 时尚未存在，导致 `if (typeof sharedContent.X === "function")` 永远 false、blog 卡片封面绕过 `/api/image` 直连 Notion S3。改完后封面图正确走代理。
+
+**内部不变量加强（无外部行为变化）**
+
+- `js/bookmark.js` `hydrateMissingMetadata` 把已 hydrated 的条目放进 `Map<id, entry>`，hydration 结束后重新读取 localStorage 并按 id 合并。避免在 hydration 异步等待期间用户 `toggle()` 的修改被旧快照覆盖。
+- `js/bookmark.js` `storage` 事件用 `bookmarkSnapshotKey` 对比新旧值，相同则跳过 `bookmarks:updated` dispatch，避免跨 tab 等价写入触发无意义 re-render。
+- `js/notion-api.js` 把 `postSummaryMemoryCache` + `postSummaryTimestampCache` 两个并行 Map 合并成单 `Map<id, {summary, timestamp}>`，消除需要手动同步的 invariant。
+- `js/notion-api.js` `requestJsonWithTimeout` 改 `return await response.json()`，让 timeout / AbortController 覆盖到 JSON 解析阶段。
+- `api/post.js` `applyPatches` 加入相邻 patch 重叠检测，发生重叠时立刻 throw 明确错误，而不是静默产出错乱 HTML。纯同位置插入（`start === end`）仍然允许并存。
+
+**可维护性清理**
+
+- 新增 `js/notion-content-shared.js` `DEFAULT_SHARE_IMAGE_PATH = "/og-image.jpg?v=4"`，作为 og-image 路径的单一来源；`api/post.js` / `server/render-service.js` / `js/spa-router.js` / `js/seo-meta.js` / `js/post-page.js` / `js/notion-content.js` / `scripts/inject-site-meta.mjs` / `scripts/smoke-check.mjs` 全部读取该常量。未来 cache-bust 仅需改一处。
+- `js/spa-router.js` SPA 导航时按 `URL.pathname === "/css/style.css"` 精确匹配全局样式表，替代脆弱的 `[href*="style.css"]` 子串匹配。
+- `scripts/local-server.mjs` denylist 加入 `node_modules`，本地 dev server 不再意外暴露依赖目录。
+- `css/style.css` 触摸媒体查询里的 `.hero-search input` / `.blog-search input` 共用块拆开，消除被立刻覆盖的 4 个 declaration；`npm.cmd run mobile:fallbacks` 同步重生 `html.is-mobile-device-viewport` 镜像。
+- `js/notion-content.js` `mapNotionPage` 通过 `normalizePostTags` 过滤 Notion `multi_select` 里 nullish / 空 tag 名。
+
+**Smoke check 配套**
+
+- `'new Set(["api", "node_modules", "server", "scripts"])'` denylist 字面量同步。
+- `'if (!save(merged))'` 跟随 bookmark hydration 变量重命名。
+- `defaultShareImagePath = SHARED_DEFAULT_SHARE_IMAGE_PATH` 改为从 `js/notion-content-shared.js` `createRequire` 读取，保留显式 equality assertion 防止常量被误改。
+
+**资产版本**
+
+- `package.json` `7.8.0` → `7.9.0`
+- ASSET_VERSION `20260516-v78` → `20260521-v79`
+- 32 处 HTML `?v=` 引用同步
 
 ### v7.3 mobile visual redesign (2026-05-16)
 

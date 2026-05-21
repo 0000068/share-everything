@@ -10,6 +10,10 @@
   const ALL_CATEGORY = "\u5168\u90e8";
   const BOOKMARK_CATEGORY = "\u6536\u85cf";
   const DEFAULT_SITE_NAME = "Share Everything";
+  // Single source of truth for the OpenGraph share image path. Bump the v= query
+  // string to cache-bust; consumers (HTML files via inject-site-meta.mjs, SSR
+  // helpers, and runtime JS) read this constant instead of hardcoding the path.
+  const DEFAULT_SHARE_IMAGE_PATH = "/og-image.jpg?v=4";
   const FEATURED_CATEGORY_DEFINITIONS = Object.freeze([
     Object.freeze({
       name: "\u7cbe\u9009",
@@ -81,6 +85,7 @@
     CATEGORY_GRADIENTS,
     DEFAULT_CATEGORY_COLOR,
     DEFAULT_COVER_GRADIENT,
+    DEFAULT_SHARE_IMAGE_PATH,
     DEFAULT_SITE_NAME,
     FEATURED_CATEGORY_DEFINITIONS,
     REMOTE_BLOG_CATEGORIES,

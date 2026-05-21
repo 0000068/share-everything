@@ -1,11 +1,20 @@
 (() => {
-  const sharedContent = window.NotionContent || window.NotionContentShared || {};
+  // NotionContentShared is loaded synchronously before site-utils via app.js;
+  // its URL helpers (resolveDisplayImageUrl, resolveProxiedDisplayImageUrl,
+  // etc.) live in NotionContent which is dynamic-imported later inside
+  // loadPostRenderingChain(). Look them up at call time so blog cards and
+  // bookmarks actually route through /api/image instead of falling through
+  // to the local-only fallback that returns raw Notion S3 URLs.
+  const sharedConstants = window.NotionContentShared || {};
+  function getNotionContent() {
+    return window.NotionContent || sharedConstants;
+  }
   const BLOG_RETURN_URL_STORAGE_KEY = "spa:last-blog-url";
   const BOOKMARK_HASH_PREFIX = "#bookmarks";
   const MOBILE_DEVICE_QUERY = "(max-width: 768px) and (hover: none) and (pointer: coarse)";
   const MOBILE_DEVICE_CLASS = "is-mobile-device-viewport";
   const MOBILE_DEVICE_WIDTH = 768;
-  const DEFAULT_SITE_NAME = sharedContent.DEFAULT_SITE_NAME || "Site";
+  const DEFAULT_SITE_NAME = sharedConstants.DEFAULT_SITE_NAME || "Site";
 
   function readMetaContent(selector) {
     if (typeof document !== "object" || !document || typeof document.querySelector !== "function") {
@@ -84,8 +93,9 @@
   }
 
   function sanitizeImageUrl(candidate) {
-    if (typeof sharedContent.resolveDisplayImageUrl === "function") {
-      return sharedContent.resolveDisplayImageUrl(candidate, window.location.origin);
+    const notionContent = getNotionContent();
+    if (typeof notionContent.resolveDisplayImageUrl === "function") {
+      return notionContent.resolveDisplayImageUrl(candidate, window.location.origin);
     }
 
     if (!candidate || typeof candidate !== "string") return null;
@@ -105,8 +115,9 @@
   const resolveDisplayImageUrl = sanitizeImageUrl;
 
   function resolveProxiedDisplayImageUrl(candidate) {
-    if (typeof sharedContent.resolveProxiedDisplayImageUrl === "function") {
-      return sharedContent.resolveProxiedDisplayImageUrl(candidate, window.location.origin);
+    const notionContent = getNotionContent();
+    if (typeof notionContent.resolveProxiedDisplayImageUrl === "function") {
+      return notionContent.resolveProxiedDisplayImageUrl(candidate, window.location.origin);
     }
 
     return sanitizeImageUrl(candidate);
@@ -123,8 +134,9 @@
   }
 
   function isLikelyEphemeralAssetUrl(candidate) {
-    if (typeof sharedContent.isLikelyEphemeralAssetUrl === "function") {
-      return sharedContent.isLikelyEphemeralAssetUrl(candidate, window.location.origin);
+    const notionContent = getNotionContent();
+    if (typeof notionContent.isLikelyEphemeralAssetUrl === "function") {
+      return notionContent.isLikelyEphemeralAssetUrl(candidate, window.location.origin);
     }
 
     if (!candidate || typeof candidate !== "string") return false;
@@ -148,8 +160,9 @@
   }
 
   function resolveShareImageUrl(candidate, fallback = null) {
-    if (typeof sharedContent.resolveShareImageUrl === "function") {
-      return sharedContent.resolveShareImageUrl(candidate, fallback, window.location.origin);
+    const notionContent = getNotionContent();
+    if (typeof notionContent.resolveShareImageUrl === "function") {
+      return notionContent.resolveShareImageUrl(candidate, fallback, window.location.origin);
     }
 
     const safeUrl = sanitizeImageUrl(candidate);

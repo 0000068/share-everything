@@ -2,6 +2,7 @@ const {
   buildArticleStructuredData: buildSharedArticleStructuredData,
   renderBlocks,
 } = require("../js/notion-content");
+const { DEFAULT_SHARE_IMAGE_PATH } = require("../js/notion-content-shared");
 const { getSiteOrigin } = require("./notion-client");
 const { getSiteName } = require("./notion-config");
 
@@ -24,7 +25,7 @@ function buildArticleStructuredData(post) {
 
   return buildSharedArticleStructuredData(post, {
     canonicalUrl: buildPostUrl(post.id),
-    defaultShareImageUrl: `${siteOrigin}/og-image.jpg?v=4`,
+    defaultShareImageUrl: `${siteOrigin}${DEFAULT_SHARE_IMAGE_PATH}`,
     siteName: getSiteName(),
     baseOrigin: siteOrigin,
   });

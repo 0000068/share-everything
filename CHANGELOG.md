@@ -2,6 +2,20 @@
 
 All notable changes to this project are tracked here.
 
+## 7.9.0 - 2026-05-21
+
+- Restored blog card cover proxying through `/api/image?src=...` by switching `js/site-utils.js` to lazy `window.NotionContent` lookup; the previous IIFE-time capture only ever saw `NotionContentShared`, which has no URL helpers, so the proxy branch was unreachable in production.
+- Fixed a bookmark hydration race: `js/bookmark.js` now collects hydrated entries into a `Map<id, entry>`, re-reads localStorage before save, and merges by id so a concurrent `toggle()` during the network await window is no longer overwritten by the pre-hydration snapshot.
+- `js/bookmark.js` cross-tab `storage` event compares the new bookmark snapshot key against the previous one and skips the `bookmarks:updated` dispatch when the set hasn't changed.
+- `js/notion-api.js` merged the parallel `postSummaryMemoryCache` + `postSummaryTimestampCache` maps into a single `Map<id, {summary, timestamp}>` and now `return await response.json()` so the timeout signal covers JSON parse.
+- `api/post.js` `applyPatches` now throws on overlapping ranges instead of silently corrupting the SSR template; pure same-offset insertions still coexist.
+- Centralized the OpenGraph share image path: `js/notion-content-shared.js` exports `DEFAULT_SHARE_IMAGE_PATH = "/og-image.jpg?v=4"` and `api/post.js`, `server/render-service.js`, `js/spa-router.js`, `js/seo-meta.js`, `js/post-page.js`, `js/notion-content.js`, `scripts/inject-site-meta.mjs`, and `scripts/smoke-check.mjs` all read from the constant.
+- `js/spa-router.js` SPA navigation excludes the global stylesheet by exact `URL.pathname === "/css/style.css"` match instead of the fragile `[href*="style.css"]` substring filter.
+- `scripts/local-server.mjs` adds `node_modules` to the static-serve denylist so the dev server no longer exposes dependency files.
+- `css/style.css` split the touch-media `.hero-search input` + `.blog-search input` shared block to eliminate immediately-overridden declarations; `npm.cmd run mobile:fallbacks` regenerated the mirror inside `html.is-mobile-device-viewport`.
+- `js/notion-content.js` `mapNotionPage` filters Notion multi_select tag names through `normalizePostTags` so nullish or empty entries are dropped before rendering.
+- Static assets now use the v7.9 cache key.
+
 ## 7.8.0 - 2026-05-18
 
 - Mobile overview card aspect rebalanced to mild landscape (`1 / 0.94`) so the cover image gets clear horizontal dominance without the card feeling tall.

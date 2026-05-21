@@ -756,10 +756,6 @@ body.has-cursor-glow .cursor-glow {
 
   .hero-search input,
   .blog-search input {
-    min-height: 54px;
-    padding: 16px 50px 16px 20px;
-    border-radius: 22px;
-    font-size: 0.95rem;
     background: rgba(255, 255, 255, 0.06);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.06),
@@ -771,6 +767,13 @@ body.has-cursor-glow .cursor-glow {
     padding: 8px 34px 8px 16px;
     border-radius: 999px;
     font-size: 0.72rem;
+  }
+
+  .blog-search input {
+    min-height: 54px;
+    padding: 16px 50px 16px 20px;
+    border-radius: 22px;
+    font-size: 0.95rem;
   }
 
   .hero-search .search-icon {
@@ -1169,10 +1172,6 @@ body.has-cursor-glow .cursor-glow {
 
   html.is-mobile-device-viewport .hero-search input,
   html.is-mobile-device-viewport .blog-search input {
-    min-height: 54px;
-    padding: 16px 50px 16px 20px;
-    border-radius: 22px;
-    font-size: 0.95rem;
     background: rgba(255, 255, 255, 0.06);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.06),
@@ -1184,6 +1183,13 @@ body.has-cursor-glow .cursor-glow {
     padding: 8px 34px 8px 16px;
     border-radius: 999px;
     font-size: 0.72rem;
+  }
+
+  html.is-mobile-device-viewport .blog-search input {
+    min-height: 54px;
+    padding: 16px 50px 16px 20px;
+    border-radius: 22px;
+    font-size: 0.95rem;
   }
 
   html.is-mobile-device-viewport .hero-search .search-icon {

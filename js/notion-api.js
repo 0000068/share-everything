@@ -37,8 +37,11 @@
     const categoryPresentationCache = new Map();
     const pendingRequests = new Map();
     const postsResponseCache = new Map();
+    // postSummaryMemoryCache: Map<pageId, { summary, timestamp }>. The summary
+    // and timestamp travel together so the LRU eviction and "exists" check stay
+    // on a single source of truth — previous two-parallel-Maps design required
+    // manual sync that was easy to break.
     const postSummaryMemoryCache = new Map();
-    const postSummaryTimestampCache = new Map();
     let lastPostSummaryCacheSweepAt = 0;
     let lastPostSummaryQuotaSweepAt = 0;
     const escapeHtml = sharedContent.escapeHtml;
@@ -395,16 +398,14 @@
     function rememberPostSummaryInMemory(summary, timestamp = Date.now()) {
       if (!summary?.id) return null;
 
+      // Re-insert to move the entry to the most-recently-used position.
       postSummaryMemoryCache.delete(summary.id);
-      postSummaryTimestampCache.delete(summary.id);
-      postSummaryMemoryCache.set(summary.id, summary);
-      postSummaryTimestampCache.set(summary.id, timestamp);
+      postSummaryMemoryCache.set(summary.id, { summary, timestamp });
 
       while (postSummaryMemoryCache.size > POST_SUMMARY_MEMORY_CACHE_LIMIT) {
         const oldestId = postSummaryMemoryCache.keys().next().value;
         if (!oldestId) break;
         postSummaryMemoryCache.delete(oldestId);
-        postSummaryTimestampCache.delete(oldestId);
       }
 
       return summary;
@@ -437,19 +438,15 @@
     function getPostSummarySnapshot(pageId) {
       if (!pageId) return null;
 
-      if (postSummaryMemoryCache.has(pageId) && postSummaryTimestampCache.has(pageId)) {
-        const summary = postSummaryMemoryCache.get(pageId);
-        const timestamp = postSummaryTimestampCache.get(pageId);
-        rememberPostSummaryInMemory(summary, timestamp);
+      const memoryEntry = postSummaryMemoryCache.get(pageId);
+      if (memoryEntry) {
+        rememberPostSummaryInMemory(memoryEntry.summary, memoryEntry.timestamp);
         return {
-          summary,
-          timestamp,
-          age: Date.now() - timestamp,
+          summary: memoryEntry.summary,
+          timestamp: memoryEntry.timestamp,
+          age: Date.now() - memoryEntry.timestamp,
         };
       }
-
-      postSummaryMemoryCache.delete(pageId);
-      postSummaryTimestampCache.delete(pageId);
 
       const cached = readSessionCache(getPostSummaryCacheKey(pageId));
       if (!cached) return null;
@@ -538,7 +535,9 @@
           });
         }
 
-        return response.json();
+        // Awaited so the timeout (cleared in finally) still covers JSON parse;
+        // a hung body stream after fetch resolves would otherwise skip abort.
+        return await response.json();
       } catch (error) {
         if (error?.name === "AbortError") {
           throw createRequestError("Notion API request timed out", {

@@ -17,7 +17,10 @@
   const focusSpaContent = typeof window.focusSpaContent === "function"
     ? window.focusSpaContent
     : () => null;
-  const DEFAULT_OG_IMAGE_URL = new URL("og-image.jpg?v=4", window.location.origin).href;
+  const DEFAULT_OG_IMAGE_URL = new URL(
+    (window.NotionContentShared?.DEFAULT_SHARE_IMAGE_PATH || "/og-image.jpg?v=4"),
+    window.location.origin,
+  ).href;
   const DEFAULT_OG_IMAGE_ALT =
     typeof siteUtils.getSiteName === "function" ? siteUtils.getSiteName() : "Site";
   const connectionInfo = navigator.connection || null;
@@ -408,14 +411,22 @@
           return;
         }
 
-        const extStylesheets = doc.querySelectorAll(
-          'link[rel="stylesheet"][href]:not([href*="style.css"])',
-        );
+        // /css/style.css is the global stylesheet already loaded on every
+        // page; skip it by pathname so future filenames containing the
+        // substring "style.css" (e.g. mobile-style.css) are still picked up.
+        const extStylesheets = Array.from(
+          doc.querySelectorAll('link[rel="stylesheet"][href]'),
+        ).filter((link) => {
+          const styleHref = link.getAttribute("href");
+          if (!styleHref) return false;
+          try {
+            return new URL(styleHref, window.location.href).pathname !== "/css/style.css";
+          } catch (error) {
+            return false;
+          }
+        });
         await Promise.all(
-          Array.from(extStylesheets, (link) => {
-            const styleHref = link.getAttribute("href");
-            return styleHref ? ensureStylesheet(styleHref) : null;
-          }),
+          extStylesheets.map((link) => ensureStylesheet(link.getAttribute("href"))),
         );
         if (currentToken !== navigationToken) return;
 

@@ -1,4 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { escapeHtmlAttribute } from "./lib/html-escape.mjs";
 import {
   findElement,
@@ -10,6 +11,9 @@ import {
   parseHtml,
   setAttribute,
 } from "./lib/html-rewriter.mjs";
+
+const localRequire = createRequire(import.meta.url);
+const { DEFAULT_SHARE_IMAGE_PATH } = localRequire("../js/notion-content-shared.js");
 
 const pages = [
   {
@@ -44,7 +48,7 @@ const modulePreloadPaths = [
   "spa-router.js",
 ];
 const checkOnly = process.argv.includes("--check");
-const ogImagePath = "/og-image.jpg?v=4";
+const ogImagePath = DEFAULT_SHARE_IMAGE_PATH;
 const faviconPath = "/favicon.png?v=4";
 const manifestPath = "/manifest.webmanifest";
 const defaultSiteName = "Share Everything";

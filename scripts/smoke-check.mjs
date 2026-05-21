@@ -11,7 +11,12 @@ import { runServerModuleChecks } from "./smoke-check/server-modules.mjs";
 import * as parse5ForSmokeCheck from "parse5";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
+
+const smokeRequire = createRequire(import.meta.url);
+const { DEFAULT_SHARE_IMAGE_PATH: SHARED_DEFAULT_SHARE_IMAGE_PATH } =
+  smokeRequire("../js/notion-content-shared.js");
 import {
   assert,
   Buffer,
@@ -248,7 +253,12 @@ assert.ok(
   `asset version should end with -${assetReleaseSuffix} for package ${packageMetadata.version}`,
 );
 const assetVersion = `v=${assetVersionValue}`;
-const defaultShareImagePath = "/og-image.jpg?v=4";
+const defaultShareImagePath = SHARED_DEFAULT_SHARE_IMAGE_PATH;
+assert.equal(
+  defaultShareImagePath,
+  "/og-image.jpg?v=4",
+  "DEFAULT_SHARE_IMAGE_PATH in notion-content-shared.js should remain in sync with the og-image asset on disk",
+);
 const productionDomainPattern = /0000068\.xyz/;
 const allowedProductionDomainFiles = new Set([
   "FIX_TODO.md",
@@ -758,7 +768,7 @@ expectIncludes(localServerJs, '["/api/robots", "../api/robots.js"]', "local serv
 expectIncludes(localServerJs, "function getApiHandler", "local server should lazy-load API handlers by route");
 expectNotIncludes(localServerJs, '["/api/post", require("../api/post.js")]', "local server should not eager-load every API handler at startup");
 expectIncludes(localServerJs, "function isDeniedStaticPath", "local server should centralize static denylist checks");
-expectIncludes(localServerJs, 'new Set(["api", "server", "scripts"])', "local server should deny source directories from static serving");
+expectIncludes(localServerJs, 'new Set(["api", "node_modules", "server", "scripts"])', "local server should deny source directories from static serving");
 expectIncludes(localServerJs, 'segment.startsWith(".")', "local server should deny dotfiles including .env and .git paths");
 expectIncludes(localServerJs, 'url.pathname === "/robots.txt"', "local server should map robots.txt to the dynamic handler");
 expectIncludes(localServerJs, "VISUAL_REGRESSION_STATIC_TEMPLATES", "local server should expose static templates only for visual regression");
@@ -1132,7 +1142,7 @@ expectIncludes(bookmarkJs, "coverPlaceholder?.dataset?.coverGradient", "bookmark
 expectIncludes(bookmarkJs, "coverPlaceholder?.dataset?.coverEmoji", "bookmark DOM fallback should preserve card emojis");
 expectIncludes(bookmarkJs, "return false;", "bookmark save should fail explicitly when persistence is unavailable");
 expectIncludes(bookmarkJs, "if (!save(bookmarks)) return null;", "bookmark toggles should abort when persistence fails");
-expectIncludes(bookmarkJs, "if (!save(nextBookmarks))", "bookmark hydration should fail cleanly when persistence is unavailable");
+expectIncludes(bookmarkJs, "if (!save(merged))", "bookmark hydration should fail cleanly when persistence is unavailable");
 expectIncludes(bookmarkJs, "return null;", "bookmark toggleById should signal persistence failures");
 expectIncludes(bookmarkJs, 'new window.CustomEvent("bookmarks:updated"', "bookmark manager should broadcast storage-driven bookmark updates");
 expectIncludes(bookmarkJs, 'if (typeof window.CustomEvent !== "function") return;', "bookmark manager should require real CustomEvent support instead of dispatching plain objects");

@@ -57,6 +57,7 @@
     CATEGORY_GRADIENTS,
     DEFAULT_CATEGORY_COLOR,
     DEFAULT_COVER_GRADIENT,
+    DEFAULT_SHARE_IMAGE_PATH,
     FEATURED_CATEGORY_DEFINITIONS,
     REMOTE_BLOG_CATEGORIES,
     SUPPORTED_BLOG_CATEGORIES,
@@ -107,6 +108,7 @@
     { path: "sharedContent.CATEGORY_GRADIENTS", value: CATEGORY_GRADIENTS, kind: "truthy" },
     { path: "sharedContent.DEFAULT_CATEGORY_COLOR", value: DEFAULT_CATEGORY_COLOR, kind: "truthy" },
     { path: "sharedContent.DEFAULT_COVER_GRADIENT", value: DEFAULT_COVER_GRADIENT, kind: "truthy" },
+    { path: "sharedContent.DEFAULT_SHARE_IMAGE_PATH", value: DEFAULT_SHARE_IMAGE_PATH, kind: "string" },
     { path: "sharedContent.FEATURED_CATEGORY_DEFINITIONS", value: FEATURED_CATEGORY_DEFINITIONS, kind: "truthy" },
     { path: "sharedContent.REMOTE_BLOG_CATEGORIES", value: REMOTE_BLOG_CATEGORIES, kind: "truthy" },
     { path: "sharedContent.SUPPORTED_BLOG_CATEGORIES", value: SUPPORTED_BLOG_CATEGORIES, kind: "truthy" },
@@ -813,7 +815,7 @@
     const title = richTextToPlain(titleProperty?.title) || "Untitled";
     const excerpt = richTextToPlain(excerptProperty?.rich_text);
     const readTime = richTextToPlain(readTimeProperty?.rich_text);
-    const tags = tagsProperty?.multi_select?.map((tag) => tag.name) || [];
+    const tags = normalizePostTags(tagsProperty?.multi_select?.map((tag) => tag?.name));
     const mappedPage = {
       id: page.id,
       title,
@@ -1224,7 +1226,7 @@
     const resolvedDefaultShareImageUrl = resolveDisplayImageUrl(
       defaultShareImageUrl,
       resolvedBaseOrigin,
-    ) || new URL("og-image.jpg?v=4", resolvedBaseOrigin).href;
+    ) || new URL(DEFAULT_SHARE_IMAGE_PATH, resolvedBaseOrigin).href;
     const resolvedImageUrl = resolveShareImageUrl(
       typeof imageUrl === "string" && imageUrl.trim() ? imageUrl.trim() : post?.coverImage,
       resolvedDefaultShareImageUrl,

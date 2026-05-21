@@ -7,7 +7,10 @@
     const buildArticleStructuredData = typeof sharedContent.buildArticleStructuredData === "function"
       ? sharedContent.buildArticleStructuredData
       : null;
-    const defaultShareImageUrl = new URL("og-image.jpg?v=4", window.location.origin).href;
+    const defaultShareImageUrl = new URL(
+      (window.NotionContentShared?.DEFAULT_SHARE_IMAGE_PATH || "/og-image.jpg?v=4"),
+      window.location.origin,
+    ).href;
     const siteName =
       typeof siteUtils.getSiteName === "function" ? siteUtils.getSiteName() : "Site";
     const skeletonEl = document.getElementById("postSkeleton");
