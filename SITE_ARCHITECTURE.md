@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v8.0
+> Version: v8.1
 > Updated: 2026-05-28
 
 ## 1. Overview
@@ -33,9 +33,20 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v8.0 Highlights
+## 2. Version v8.1 Highlights
 
-v8.0 marks the migration to a new GitHub account / repo. No code or visual changes beyond the asset cache key bump.
+v8.1 is a project-infrastructure release: source-of-truth GitHub repo migrated from `aihkibq-ux/Share-everything` to `0000068/share-everything`, with corresponding CI hardening. Runtime, API, and rendering code are byte-identical to v7.9; user-observable production behaviour did not change.
+
+- **GitHub source migrated**. The previous account was suspended by GitHub; the move re-anchored the Vercel project's Git source through the dashboard's reconnect flow. Environment variables (`NOTION_TOKEN`, `NOTION_DATABASE_ID`), custom domains (`0000068.xyz`, `www.0000068.xyz`), and the `share-everything-sigma.vercel.app` alias all persisted. Production downtime: zero.
+- **CI install step added**. `.github/workflows/release-check.yml` now runs `npm ci` before the smoke gate, with `actions/setup-node@v4` caching `npm`. Previously the workflow had no install step, so `import postcss from "postcss"` in `scripts/build-mobile-fallbacks.mjs` failed `ERR_MODULE_NOT_FOUND` on every clean runner — including v7.9's, which had a retroactively-red CI history no one had noticed under the prior account.
+- **CI strict gate scoped to smoke check**. Workflow runs `npm run check` instead of `npm run verify:release`. `scripts/visual-baselines/*.png` were captured on Windows; Linux runner font rasterisation produces a ~4.5% pixel diff regardless of content. `npm run verify:release` (smoke + visual:check) remains the local contract; `scripts/release-check.mjs` is unchanged. Tracked as `FIX_TODO.md` B-3.
+- **Visual cleanup hardened**: `scripts/visual-regression.mjs` `fs.rmSync` calls now pass `maxRetries: 10, retryDelay: 200` so transient ENOTEMPTY during Chrome user-data-dir teardown no longer fails the cleanup phase. Discovered while testing CI fixes; affects every non-Windows host running `npm run visual:check`.
+- **Engines invariant preserved**. `package.json` `"engines": { "node": ">=22" }` stays per the contract asserted by `scripts/smoke-check.mjs`. An early exploration locked it to `"22.x"` to silence a Vercel build warning; the smoke gate forced a revert. Vercel project's Node.js Version setting moved 24.x → 22.x to remove the override warning without touching the contract.
+- Static CSS/JS/SVG entry URLs use the `20260528-v81` cache key.
+
+## 2.1 Version v7.9 Highlights
+
+v7.9 is a code-quality pass that fixes one production behavior gap and hardens several internal invariants. No visual changes.
 
 - **Cover image proxy restored**: `js/site-utils.js` now resolves `window.NotionContent` at call time instead of capturing `NotionContentShared` at IIFE init. Blog card covers route through `/api/image?src=...` as the architecture has always described, instead of falling through to the local-only fallback that returned raw Notion S3 URLs.
 - **Bookmark hydration merge**: `js/bookmark.js` `hydrateMissingMetadata` collects hydrated entries into a `Map<id, entry>`, then re-reads localStorage before save and merges by id. A concurrent `toggle()` during the hydration await window no longer overwrites the user's change with the pre-hydration snapshot.
@@ -48,7 +59,7 @@ v8.0 marks the migration to a new GitHub account / repo. No code or visual chang
 - **Local dev denylist**: `scripts/local-server.mjs` denies `node_modules` static serving alongside `api`, `server`, `scripts`.
 - **CSS rule shadowing removed**: `css/style.css` splits the touch-media `.hero-search input` + `.blog-search input` shared block so per-selector overrides do not shadow the shared declarations. `npm.cmd run mobile:fallbacks` regenerated the `html.is-mobile-device-viewport` mirror.
 - **Tags defensive normalization**: `js/notion-content.js` `mapNotionPage` runs Notion multi_select names through `normalizePostTags` so any nullish or empty entries are filtered before downstream rendering.
-- Static CSS/JS/SVG entry URLs use the `20260528-v80` cache key.
+- Static CSS/JS/SVG entry URLs used the `20260521-v79` cache key.
 
 ## 2.1 Version v7.8 Highlights
 

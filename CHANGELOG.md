@@ -2,6 +2,19 @@
 
 All notable changes to this project are tracked here.
 
+## 8.1.0 - 2026-05-28
+
+Project-infrastructure release. Source-of-truth GitHub repo migrated from `aihkibq-ux/Share-everything` to `0000068/share-everything`. Runtime, API, and rendering code are byte-identical to v7.9.
+
+- Repo migration. Previous account was suspended by GitHub; the move re-anchored the Vercel project's Git source via the dashboard's reconnect flow. `NOTION_TOKEN`, `NOTION_DATABASE_ID`, the custom domain (apex + `www` subdomain), and the `share-everything-sigma.vercel.app` alias persisted across the switch. Local `git remote` and `user.email` updated to the new account's GitHub noreply address. Vercel Node.js Version setting realigned 24.x → 22.x to remove the `package.json`/project-settings override warning.
+- `.github/workflows/release-check.yml` now runs `npm ci` before the smoke gate, with `actions/setup-node@v4` caching `npm`. Previously the workflow had no install step; `import postcss from "postcss"` failed `ERR_MODULE_NOT_FOUND` on every runner, including v7.9's (a latent failure no one had noticed under the prior account).
+- `.github/workflows/release-check.yml` runs `npm run check` instead of `npm run verify:release`. `scripts/visual-baselines/*.png` were captured on Windows; Linux runner font rasterisation produces a ~4.5% pixel diff that exceeds the 0.005 threshold regardless of content. `npm run verify:release` (smoke + visual:check) remains the local contract; `scripts/release-check.mjs` is unchanged. Tracked as `FIX_TODO.md` B-3.
+- `scripts/visual-regression.mjs` `fs.rmSync` calls now pass `maxRetries: 10, retryDelay: 200` so transient ENOTEMPTY during Chrome user-data-dir teardown no longer fails cleanup. Discovered while testing CI fixes; affects every non-Windows host running visual:check.
+- `package.json` `"engines": { "node": ">=22" }` stays per the contract enforced by `scripts/smoke-check.mjs`. Earlier exploration locked it to `"22.x"` to silence a Vercel build warning; the contract assertion required reverting.
+- Pre-v8.0 deployments in Vercel still reference the suspended `aihkibq-ux/Share-everything` repo, so Instant Rollback / Redeploy on those entries fails. Tracked as `FIX_TODO.md` B-4. Day-to-day workflow unaffected.
+- Static CSS/JS/SVG entry URLs use the `20260528-v81` cache key.
+- `package.json` version, README badge, `FIX_TODO.md` heading, and `SITE_ARCHITECTURE.md` `> Version` synced to 8.1.0; smoke check version invariants now stable.
+
 ## 7.9.0 - 2026-05-21
 
 - Restored blog card cover proxying through `/api/image?src=...` by switching `js/site-utils.js` to lazy `window.NotionContent` lookup; the previous IIFE-time capture only ever saw `NotionContentShared`, which has no URL helpers, so the proxy branch was unreachable in production.

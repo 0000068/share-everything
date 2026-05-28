@@ -1,6 +1,6 @@
 # 修复清单
 
-> 更新时间：2026-05-28（v8.0 发布）
+> 更新时间：2026-05-28（v8.1 发布）
 
 ---
 
@@ -15,6 +15,8 @@
 | ID | 简述 | 触发条件 |
 |---|---|---|
 | `B-2` | **菜单 active 状态 i18n-safe 校验**。`js/blog-page.js:506-516` 使用 `button.dataset.nav === "bookmarks"` / `"overview"` 区分激活按钮（之前是中文文本匹配，已重构）。当前 data 值是英文 key，i18n 安全。**触发再审**：站点引入运行时多语言切换时确认 data-nav 仍是 stable key。 |
+| `B-3` | **Visual regression CI gate 跨平台 baseline 缺口**。`scripts/visual-baselines/*.png` 是 Windows 本地生成；GitHub Actions Linux runner 跑 visual:check 时 font rasterisation 差异稳定产生 ~4.5% 像素差，与内容无关。`.github/workflows/release-check.yml` 现在只跑 `npm run check`，`npm run verify:release`（含 visual）只作本地 contract。**触发再审**：当出现第二个 contributor / Mac 协作 / 需要 CI 把关视觉回归时。可行修复：用 Docker (`mcr.microsoft.com/playwright`) 或 self-hosted Windows runner 重新生成 Linux baseline 与 Windows baseline 共存；或重写 visual-regression.mjs 走 DOM/computed-style 而不是像素对比。 |
+| `B-4` | **v8.0 之前的 Vercel deployment Redeploy 失败**。旧 deployment 记录里的 Git source 还指向 `aihkibq-ux/Share-everything`（已 404）。Vercel 的 Instant Rollback / Redeploy 对 v7.x 系列会报 "The provided GitHub repository can't be found"。**触发再审**：当 v8.x 出现需要回滚到 v7.x 行为的回归时；目前唯一通路是本地 `git checkout v7.x` 然后强制 push 到 main，让 webhook 触发一次新 deployment。日常无影响。 |
 
 ---
 
