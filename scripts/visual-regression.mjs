@@ -226,7 +226,7 @@ function buildBrowserBaseArgs({ profileDir, viewport, mobile = false } = {}) {
 async function startBrowser(debugPort) {
   const executable = findBrowserExecutable();
   const profileDir = path.join(os.tmpdir(), `share-everything-visual-profile-${debugPort}`);
-  fs.rmSync(profileDir, { recursive: true, force: true });
+  fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   fs.mkdirSync(profileDir, { recursive: true });
 
   const child = spawn(executable, [
@@ -253,14 +253,14 @@ async function startBrowser(debugPort) {
     getOutput: () => output.trim(),
     stop: async () => {
       await stopProcess(child);
-      fs.rmSync(profileDir, { recursive: true, force: true });
+      fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     },
   };
 }
 
 async function runCommandLineScreenshot({ executable, url, outputPath, viewport }) {
   const profileDir = path.join(os.tmpdir(), `share-everything-visual-cli-${Date.now()}-${Math.random().toString(16).slice(2)}`);
-  fs.rmSync(profileDir, { recursive: true, force: true });
+  fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   fs.mkdirSync(profileDir, { recursive: true });
 
   const child = spawn(executable, [
@@ -297,7 +297,7 @@ async function runCommandLineScreenshot({ executable, url, outputPath, viewport 
     });
   });
 
-  fs.rmSync(profileDir, { recursive: true, force: true });
+  fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   if (exitCode !== 0) {
     throw new Error(`Browser screenshot command failed for ${url} with code ${exitCode}\n${output}`);
   }
