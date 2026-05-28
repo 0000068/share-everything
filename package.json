@@ -1,6 +1,6 @@
 {
   "name": "share-everything",
-  "version": "8.0.1",
+  "version": "8.0.2",
   "type": "commonjs",
   "private": false,
   "license": "MIT",
@@ -12,7 +12,7 @@
     "vanilla-js"
   ],
   "engines": {
-    "node": "22.x"
+    "node": ">=22"
   },
   "scripts": {
     "check": "node scripts/build-mobile-fallbacks.mjs --check && node scripts/inject-site-meta.mjs --check && node scripts/smoke-check.mjs",
