@@ -1,6 +1,6 @@
 # 修复清单
 
-> 更新时间：2026-05-28（v8.1 发布）
+> 更新时间：2026-05-29（v8.2 发布）
 
 ---
 
@@ -21,6 +21,25 @@
 ---
 
 ## 三、历史完成记录
+
+### v8.2 安全与正确性硬化（2026-05-29）
+
+全量代码审查触发的一轮硬化：1 个本地测试红灯根因修复 + 3 项防御加固。无运行时渲染或视觉变化。
+
+**测试门禁根因修复（生产可见：本地 `npm run check`）**
+
+- `scripts/smoke-check.mjs` 生产域名扫描改为基于 `git ls-files`（只扫版本控制内文件），并保留文件系统遍历作为 git 不可用时的兜底、其跳过目录集扩展为覆盖 `.gitignore` 里所有顶层目录。此前本地 `npm run check` 因 gitignored 的本地状态（`.claude/settings.local.json`，或写了 `SITE_URL=https://www.0000068.xyz` 的本地 `.env`）命中 “production domain hardcoding” 断言而红灯；现在本地行为与干净 CI checkout 一致，且只校验版本控制内的源码。
+
+**防御加固（无外部行为变化）**
+
+- `vercel.json` 把 `X-Content-Type-Options: nosniff` 从 `/api/(.*)` 提升到全局 `/(.*)` 头块并删除冗余的 `/api` 规则，HTML / 静态资源 / JSON 单一来源获得防嗅探；`SITE_ARCHITECTURE.md` 第 5 节头部说明同步。
+- `js/notion-api.js` 客户端 `REQUEST_TIMEOUT` `8000 → 15000ms`，高于服务端 `NOTION_REQUEST_TIMEOUT_MS`（默认 12000ms）预算，慢但成功的上游响应不再被客户端提前 abort 误报失败。
+- `server/post-service.js` `queryDatabasePages` 用 `Array.isArray` 守卫 `data.results`（与 `server/block-service.js` 对齐），上游返回异常结构时不再在分页中途抛错。
+
+**资产版本**
+
+- `package.json` `8.1.0` → `8.2.0`；ASSET_VERSION `20260528-v81` → `20260529-v82`，4 处活跃 `?v=` 引用（`js/app.js` + 三个 HTML）同步。
+- README badge、`FIX_TODO.md` 顶部、`SITE_ARCHITECTURE.md` `> Version` 与 highlights 同步到 v8.2。
 
 ### v7.9 code quality pass (2026-05-21)
 

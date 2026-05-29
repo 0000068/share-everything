@@ -1,7 +1,7 @@
 # Share Everything Site Architecture
 
-> Version: v8.1
-> Updated: 2026-05-28
+> Version: v8.2
+> Updated: 2026-05-29
 
 ## 1. Overview
 
@@ -33,7 +33,17 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v8.1 Highlights
+## 2. Version v8.2 Highlights
+
+v8.2 is a security and correctness hardening pass surfaced by a full code audit. No runtime rendering or visual changes.
+
+- **Hardcoding guard scans tracked files**. `scripts/smoke-check.mjs` now derives its production-domain scan from `git ls-files` instead of walking the whole working tree, so gitignored local state (`.claude/settings.local.json`, a local `.env` carrying `SITE_URL=https://www.0000068.xyz`, build output) can no longer trip the guard. The filesystem walk stays as a fallback when git is unavailable, with its skip list widened to every gitignored top-level directory. Local `npm run check` now matches a clean CI checkout and only flags version-controlled source.
+- **`nosniff` is global**. `vercel.json` moves `X-Content-Type-Options: nosniff` from the `/api/(.*)` rule into the catch-all `/(.*)` block and removes the now-redundant `/api` rule, so HTML, static assets, and JSON all get MIME-sniffing protection from a single source. `/api/image` still sets it in code.
+- **Client request timeout raised**. `js/notion-api.js` `REQUEST_TIMEOUT` 8000ms → 15000ms, kept above the server-side `NOTION_REQUEST_TIMEOUT_MS` budget (12000ms) so a slow-but-successful upstream response is not aborted client-side and surfaced as a spurious failure; the server caches the result, so a retry stays fast either way.
+- **List query hardened**. `server/post-service.js` `queryDatabasePages` guards `data.results` with `Array.isArray`, matching `server/block-service.js`, so a malformed upstream page payload cannot throw mid-pagination.
+- Static CSS/JS/SVG entry URLs use the `20260529-v82` cache key.
+
+## 2.1 Version v8.1 Highlights
 
 v8.1 is a project-infrastructure release: source-of-truth GitHub repo migrated from `aihkibq-ux/Share-everything` to `0000068/share-everything`, with corresponding CI hardening. Runtime, API, and rendering code are byte-identical to v7.9; user-observable production behaviour did not change.
 
@@ -44,7 +54,7 @@ v8.1 is a project-infrastructure release: source-of-truth GitHub repo migrated f
 - **Engines invariant preserved**. `package.json` `"engines": { "node": ">=22" }` stays per the contract asserted by `scripts/smoke-check.mjs`. An early exploration locked it to `"22.x"` to silence a Vercel build warning; the smoke gate forced a revert. Vercel project's Node.js Version setting moved 24.x → 22.x to remove the override warning without touching the contract.
 - Static CSS/JS/SVG entry URLs use the `20260528-v81` cache key.
 
-## 2.1 Version v7.9 Highlights
+## 2.2 Version v7.9 Highlights
 
 v7.9 is a code-quality pass that fixes one production behavior gap and hardens several internal invariants. No visual changes.
 
@@ -477,7 +487,7 @@ Read-only public APIs reject non-`GET` methods with `405` and `Cache-Control: no
 
 `vercel.json` does not set an API-wide `Cache-Control`; individual handlers own their cache policy so `/api/image` can stay edge-cacheable while data and SSR routes stay non-cacheable. Do not add a catch-all `/api/*` `Cache-Control` header in `vercel.json`.
 
-The global `/(.*)` headers block in `vercel.json` (CSP frame-ancestors, X-Frame-Options, HSTS, Referrer-Policy, Permissions-Policy) applies to API routes as well — Vercel header rules are additive across matching `source` patterns, so the `/api/(.*)` `X-Content-Type-Options: nosniff` rule layers on top of the catch-all rather than replacing it. Do not move these headers under `/api/(.*)`; HTML/static responses also need them.
+The global `/(.*)` headers block in `vercel.json` (CSP frame-ancestors, X-Frame-Options, HSTS, Referrer-Policy, Permissions-Policy, and `X-Content-Type-Options: nosniff`) applies to every route, including API responses — so HTML, static assets, and JSON all get MIME-sniffing and clickjacking protection from a single source. `X-Content-Type-Options: nosniff` lives in this catch-all block (a dedicated `/api/(.*)` rule was removed as redundant once it was global); `/api/image` additionally sets `nosniff` in code. Keep all of these headers in the catch-all block — do not scope them under `/api/(.*)` only, because HTML/static responses need them too.
 
 Static HTML must keep adding a cache-busting query string to changed CSS/JS paths when a mobile layout fix ships, because some Android browsers continue to use stale assets during the `stale-while-revalidate` window.
 

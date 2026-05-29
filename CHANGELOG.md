@@ -2,6 +2,17 @@
 
 All notable changes to this project are tracked here.
 
+## 8.2.0 - 2026-05-29
+
+Security and correctness hardening pass surfaced by a full code audit. No runtime rendering or visual changes.
+
+- `scripts/smoke-check.mjs` production-domain guard now scans the git-tracked file set (`git ls-files`) instead of walking the whole working tree, keeping the filesystem walk as a fallback when git is unavailable and widening its skip list to every gitignored top-level directory. Local `npm run check` was failing because gitignored local state — `.claude/settings.local.json`, and any local `.env` whose `SITE_URL` points at the production domain — tripped the "production domain hardcoding" assertion; the scan now matches a clean CI checkout and only flags version-controlled source.
+- `vercel.json` moves `X-Content-Type-Options: nosniff` from the `/api/(.*)` rule into the catch-all `/(.*)` headers block and removes the now-redundant `/api` rule, so HTML, static assets, and JSON all receive MIME-sniffing protection from a single source. `/api/image` still sets it in code. `SITE_ARCHITECTURE.md` header notes synced.
+- `js/notion-api.js` raises the browser-side `REQUEST_TIMEOUT` from 8000ms to 15000ms so it stays above the server-side Notion request budget (`NOTION_REQUEST_TIMEOUT_MS`, default 12000ms); a slow-but-successful upstream response is no longer aborted client-side and surfaced as a spurious failure.
+- `server/post-service.js` `queryDatabasePages` guards `data.results` with `Array.isArray` (matching `server/block-service.js`) so a malformed upstream query payload cannot throw mid-pagination.
+- Static CSS/JS/SVG entry URLs use the `20260529-v82` cache key.
+- `package.json` version, README badge, `FIX_TODO.md` heading, and `SITE_ARCHITECTURE.md` `> Version` synced to 8.2.0.
+
 ## 8.1.0 - 2026-05-28
 
 Project-infrastructure release. Source-of-truth GitHub repo migrated from `aihkibq-ux/Share-everything` to `0000068/share-everything`. Runtime, API, and rendering code are byte-identical to v7.9.

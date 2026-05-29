@@ -163,7 +163,8 @@ async function queryDatabasePages({ filter, schema = null } = {}) {
       body: JSON.stringify(body),
     });
 
-    pages.push(...data.results);
+    const pageResults = Array.isArray(data?.results) ? data.results : [];
+    pages.push(...pageResults);
     startCursor = data.has_more ? data.next_cursor : null;
   } while (startCursor);
 

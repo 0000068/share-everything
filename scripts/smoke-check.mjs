@@ -10,6 +10,7 @@ import { runRoutingAndVercelChecks } from "./smoke-check/routing-vercel.mjs";
 import { runServerModuleChecks } from "./smoke-check/server-modules.mjs";
 import * as parse5ForSmokeCheck from "parse5";
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -270,7 +271,21 @@ const allowedProductionDomainFiles = new Set([
   "scripts/smoke-check.mjs",
   "site.config.json",
 ]);
-const skippedScanDirectories = new Set([".git", ".vercel", "node_modules"]);
+// Only version-controlled source is in scope for the hardcoding scan. Skip the
+// gitignored top-level directories declared in .gitignore: they hold local-only
+// state (editor/agent config such as `.claude/settings.local.json`, build
+// output, Vercel metadata) that may legitimately reference the production domain
+// and must not fail the guard. Keep this list in sync with .gitignore.
+const skippedScanDirectories = new Set([
+  ".git",
+  ".vercel",
+  ".claude",
+  ".idea",
+  ".vscode",
+  "dist",
+  ".output",
+  "node_modules",
+]);
 const skippedScanExtensions = new Set([".ico", ".jpeg", ".jpg", ".png", ".webp"]);
 
 function toProjectPath(filePath) {
@@ -294,6 +309,37 @@ function listProjectTextFiles(directory = process.cwd()) {
 
     return [toProjectPath(absolutePath)];
   });
+}
+
+// Prefer the git-tracked file set: the hardcoding guard only cares about
+// version-controlled source, and asking git transparently excludes every
+// gitignored path (.env, .claude/, node_modules/, build output, ...) without
+// enumerating them — so a local run matches a clean CI checkout. Returns null
+// when git is unavailable (e.g. a tarball download) so the caller falls back to
+// the filesystem walk, where skippedScanDirectories does the filtering.
+function listGitTrackedTextFiles() {
+  let output;
+  try {
+    output = execFileSync("git", ["ls-files", "-z"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    return null;
+  }
+
+  return output
+    .split("\0")
+    .filter(Boolean)
+    .filter((filePath) => (
+      !skippedScanExtensions.has(path.extname(filePath).toLowerCase())
+      && existsSync(filePath)
+    ));
+}
+
+function listScannableProjectTextFiles() {
+  return listGitTrackedTextFiles() || listProjectTextFiles();
 }
 
 function collectVersionedStaticAssetVersions(htmlSource) {
@@ -330,7 +376,7 @@ function readJpegDimensions(buffer, label) {
   assert.fail(`${label} should include JPEG dimensions`);
 }
 
-const productionDomainFiles = listProjectTextFiles().filter((filePath) => (
+const productionDomainFiles = listScannableProjectTextFiles().filter((filePath) => (
   productionDomainPattern.test(readFileSync(filePath, "utf8"))
 ));
 assert.deepEqual(

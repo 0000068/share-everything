@@ -9,7 +9,11 @@
       postEndpoint: "/api/post-data",
       pageSize: 9,
     };
-    const REQUEST_TIMEOUT = 8000;
+    // Stay above the server-side Notion request budget (NOTION_REQUEST_TIMEOUT_MS,
+    // default 12000ms) so a slow-but-successful upstream response is not aborted
+    // client-side and surfaced as a spurious failure. The server caches the
+    // result on completion, so even if this does fire a retry stays fast.
+    const REQUEST_TIMEOUT = 15000;
     const POST_SUMMARY_CACHE_PREFIX = "notion_post_summary_";
     const POSTS_REQUEST_KEY_PREFIX = "notion_query_posts";
     const POST_REQUEST_KEY_PREFIX = "notion_page_";
