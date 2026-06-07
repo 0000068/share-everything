@@ -18,6 +18,37 @@
   const HISTORY_MODE_PUSH = "push";
   const PRELOAD_COVER_IMAGE_COUNT = 3;
   const MOBILE_PRELOAD_COVER_IMAGE_COUNT = 1;
+  const PUBLIC_CATEGORY_QUERY_MAX_LENGTH = 128;
+  const PUBLIC_SEARCH_QUERY_MAX_LENGTH = 256;
+
+  function normalizeBoundedListingQuery(value, maxLength) {
+    const safeMaxLength = Number.isSafeInteger(Number(maxLength)) && Number(maxLength) > 0
+      ? Number(maxLength)
+      : 0;
+    const trimmed = typeof value === "string" ? value.trim() : "";
+    return safeMaxLength > 0 ? trimmed.slice(0, safeMaxLength) : "";
+  }
+
+  function normalizeListingCategory(value) {
+    return normalizeBoundedListingQuery(value, PUBLIC_CATEGORY_QUERY_MAX_LENGTH);
+  }
+
+  function normalizeListingSearch(value) {
+    return normalizeBoundedListingQuery(value, PUBLIC_SEARCH_QUERY_MAX_LENGTH);
+  }
+
+  function normalizeListingPage(value, fallback = 1) {
+    const normalizedFallback = Number.isSafeInteger(Number(fallback)) && Number(fallback) > 0
+      ? Number(fallback)
+      : 1;
+    const rawValue = String(value ?? "").trim();
+    if (!/^\d+$/.test(rawValue)) {
+      return normalizedFallback;
+    }
+
+    const parsed = Number(rawValue);
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : normalizedFallback;
+  }
 
   function buildBookmarkSearchText(post) {
     return buildSharedPostSearchText(post);
@@ -117,32 +148,32 @@
     const rawPage = params.get("page");
     const bookmarkHashState = parseBookmarkListingHash(window.location.hash);
 
-    if (rawCategory) {
-      currentCategory = rawCategory.trim();
-      if (currentCategory !== rawCategory) {
+    if (rawCategory !== null) {
+      currentCategory = normalizeListingCategory(rawCategory) || defaultCategory;
+      if (currentCategory !== rawCategory || currentCategory === defaultCategory) {
         didNormalizeRoute = true;
       }
     }
-    if (rawSearch) {
-      currentSearch = rawSearch.trim();
-      if (currentSearch !== rawSearch) {
+    if (rawSearch !== null) {
+      currentSearch = normalizeListingSearch(rawSearch);
+      if (currentSearch !== rawSearch || !currentSearch) {
         didNormalizeRoute = true;
       }
     }
-    if (rawPage) {
-      currentPage = Math.max(1, parseInt(rawPage, 10) || 1);
-      if (String(currentPage) !== rawPage) {
+    if (rawPage !== null) {
+      currentPage = normalizeListingPage(rawPage, 1);
+      if (String(currentPage) !== rawPage.trim() || currentPage === 1) {
         didNormalizeRoute = true;
       }
     }
     if (bookmarkHashState.active) {
       currentCategory = BOOKMARK_CATEGORY;
-      currentSearch = bookmarkHashState.search;
-      currentPage = bookmarkHashState.page;
+      currentSearch = normalizeListingSearch(bookmarkHashState.search);
+      currentPage = normalizeListingPage(bookmarkHashState.page, 1);
       if (
-        rawCategory ||
-        rawSearch ||
-        rawPage ||
+        rawCategory !== null ||
+        rawSearch !== null ||
+        rawPage !== null ||
         (window.location.hash || "") !== bookmarkHashState.normalizedHash
       ) {
         didNormalizeRoute = true;
@@ -270,11 +301,6 @@
       return currentCategory === BOOKMARK_CATEGORY;
     }
 
-    function normalizeListingPage(value, fallback = 1) {
-      const parsed = Number.parseInt(String(value ?? ""), 10);
-      return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-    }
-
     function isSameBlogListingPath(url) {
       try {
         const targetUrl = new URL(url, window.location.href);
@@ -305,16 +331,16 @@
       }
 
       return {
-        category: (targetUrl.searchParams.get("category") || ALL_CATEGORY).trim(),
-        search: (targetUrl.searchParams.get("search") || "").trim(),
+        category: normalizeListingCategory(targetUrl.searchParams.get("category") || ALL_CATEGORY),
+        search: normalizeListingSearch(targetUrl.searchParams.get("search") || ""),
         page: normalizeListingPage(targetUrl.searchParams.get("page"), 1),
       };
     }
 
     function applyListingState({ category, search = "", page = 1 } = {}, historyMode = HISTORY_MODE_PUSH) {
-      const rawCategory = typeof category === "string" && category.trim() ? category.trim() : defaultCategory;
+      const rawCategory = normalizeListingCategory(category) || defaultCategory;
       const nextCategory = hasRemoteSource || validCategories.has(rawCategory) ? rawCategory : defaultCategory;
-      const nextSearch = typeof search === "string" ? search.trim() : "";
+      const nextSearch = normalizeListingSearch(search);
       const nextPage = normalizeListingPage(page, 1);
       const didChange =
         currentCategory !== nextCategory ||
@@ -860,7 +886,10 @@
       clearTimeout(searchDebounce);
       searchDebounce = setTimeout(() => {
         searchDebounce = null;
-        currentSearch = searchInput.value.trim();
+        currentSearch = normalizeListingSearch(searchInput.value);
+        if (searchInput.value !== currentSearch) {
+          searchInput.value = currentSearch;
+        }
         currentPage = 1;
         syncListingUrl(HISTORY_MODE_REPLACE);
         updatePageUI();
@@ -980,12 +1009,12 @@
         if (nextBookmarkState.active) {
           const didChange =
             currentCategory !== BOOKMARK_CATEGORY ||
-            currentSearch !== nextBookmarkState.search ||
-            currentPage !== nextBookmarkState.page;
+            currentSearch !== normalizeListingSearch(nextBookmarkState.search) ||
+            currentPage !== normalizeListingPage(nextBookmarkState.page, 1);
 
           currentCategory = BOOKMARK_CATEGORY;
-          currentSearch = nextBookmarkState.search;
-          currentPage = nextBookmarkState.page;
+          currentSearch = normalizeListingSearch(nextBookmarkState.search);
+          currentPage = normalizeListingPage(nextBookmarkState.page, 1);
 
           if ((window.location.hash || "") !== nextBookmarkState.normalizedHash) {
             syncListingUrl(HISTORY_MODE_REPLACE);

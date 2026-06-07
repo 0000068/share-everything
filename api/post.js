@@ -18,7 +18,7 @@ const {
   getPublicPostErrorStatus,
   logServerError,
   rejectUnsupportedReadMethod,
-  readQueryString,
+  readPublicPostId,
 } = require("../server/public-content");
 const { escapeHtmlAttribute } = require("../server/html-escape");
 const { applyHtmlSecurityHeaders, createCspNonce } = require("../server/security-policy");
@@ -481,7 +481,7 @@ module.exports = async function handler(req, res) {
     return undefined;
   }
 
-  const routeId = readQueryString(req.query.id);
+  const routeId = readPublicPostId(req.query.id);
   const siteOrigin = getSiteOrigin();
   const siteName = getSiteName();
   const defaultShareImageUrl = `${siteOrigin}${DEFAULT_SHARE_IMAGE_PATH}`;

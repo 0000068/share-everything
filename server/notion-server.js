@@ -76,6 +76,7 @@ const {
   getPublicPostCacheKey,
   hasPostQueryFilters,
   loadPublicPagesForQuery,
+  normalizePositiveInteger,
   normalizePostQueryFilters,
   queryDatabasePages,
   queryPublicPages,

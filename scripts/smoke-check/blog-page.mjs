@@ -175,6 +175,214 @@ assert.equal(
   "blog page should push overview navigation without falling back to native hash routing",
 );
 blogPageCleanup?.();
+const dirtyQueryRegisteredPages = new Map();
+const dirtyQueryFiltersEl = new FakeElement();
+const dirtyQuerySearchEl = new FakeElement();
+const dirtyQueryGridEl = new FakeElement();
+const dirtyQueryEmptyEl = new FakeElement();
+const dirtyQueryPaginationEl = new FakeElement();
+const dirtyQueryStatusEl = new FakeElement();
+const dirtyQueryTitleEl = new FakeElement();
+const dirtyQueryCategory = "c".repeat(140);
+const dirtyQuerySearch = "s".repeat(300);
+const dirtyQueryLocation = new URL(
+  `https://example.com/blog.html?category=%20${dirtyQueryCategory}%20&search=%20${dirtyQuerySearch}%20&page=2abc`,
+);
+const dirtyQueryHistory = {
+  pushCalls: [],
+  replaceCalls: [],
+  pushState(state, title, nextUrl) {
+    this.pushCalls.push(String(nextUrl));
+    dirtyQueryLocation.href = new URL(String(nextUrl), dirtyQueryLocation.href).href;
+  },
+  replaceState(state, title, nextUrl) {
+    this.replaceCalls.push(String(nextUrl));
+    dirtyQueryLocation.href = new URL(String(nextUrl), dirtyQueryLocation.href).href;
+  },
+};
+const dirtyQueryCalls = [];
+loadBrowserScript("js/blog-page.js", {
+  window: {
+    location: dirtyQueryLocation,
+    history: dirtyQueryHistory,
+    scrollTo: () => {},
+    NotionContent: notionContentHelpers,
+    NotionAPI: {
+      escapeHtml: (value) => String(value ?? ""),
+      getCategoryColor: () => ({ bg: "#000", color: "#fff", border: "#222" }),
+      getCategories: () => [
+        { name: allCategory, emoji: "📚" },
+      ],
+      getPageSize: () => 9,
+      queryPosts: async (query) => {
+        dirtyQueryCalls.push(query);
+        return {
+          results: [],
+          categories: [{ name: allCategory, label: allCategory, emoji: "📚" }],
+          total: 0,
+          totalPages: 1,
+          currentPage: 1,
+        };
+      },
+    },
+    PageRuntime: {
+      register(pageId, pageModule) {
+        dirtyQueryRegisteredPages.set(pageId, pageModule);
+      },
+    },
+    SiteUtils: {
+      rememberBlogReturnUrl: () => {},
+      sanitizeCoverBackground: (value, fallback) => value || fallback,
+      resolveDisplayImageUrl: (value) => value,
+      sanitizeImageUrl: (value) => value,
+      buildPostPath: (postId) => `/posts/${postId}`,
+      buildBookmarkListingUrl: buildBookmarkListingUrlMock,
+      parseBookmarkListingHash: parseBookmarkListingHashMock,
+    },
+    updateSeoMeta: () => {},
+    UIEffects: { initBlogCardReveal: () => null },
+    requestAnimationFrame: () => 1,
+    cancelAnimationFrame: () => {},
+  },
+  document: {
+    getElementById(id) {
+      return {
+        blogFilters: dirtyQueryFiltersEl,
+        blogSearch: dirtyQuerySearchEl,
+        blogGrid: dirtyQueryGridEl,
+        emptyState: dirtyQueryEmptyEl,
+        pagination: dirtyQueryPaginationEl,
+        blogStatus: dirtyQueryStatusEl,
+      }[id] || null;
+    },
+    querySelector(selector) {
+      return selector === ".page-title" ? dirtyQueryTitleEl : null;
+    },
+    querySelectorAll() {
+      return [];
+    },
+    createElement() {
+      return new FakeElement();
+    },
+  },
+});
+const dirtyQueryCleanup = dirtyQueryRegisteredPages.get("blog")?.init?.();
+await Promise.resolve();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(
+  dirtyQueryCalls[0]?.category,
+  dirtyQueryCategory.slice(0, 128),
+  "blog page should cap initial category query state before loading posts",
+);
+assert.equal(
+  dirtyQueryCalls[0]?.search,
+  dirtyQuerySearch.slice(0, 256),
+  "blog page should cap initial search query state before loading posts",
+);
+assert.equal(
+  dirtyQueryCalls[0]?.page,
+  1,
+  "blog page should reject partially numeric initial page values",
+);
+assert.ok(
+  !dirtyQueryHistory.replaceCalls.at(0)?.includes("page="),
+  "blog page should remove invalid page params when normalizing the listing URL",
+);
+dirtyQueryCleanup?.();
+const defaultQueryRegisteredPages = new Map();
+const defaultQueryFiltersEl = new FakeElement();
+const defaultQuerySearchEl = new FakeElement();
+const defaultQueryGridEl = new FakeElement();
+const defaultQueryEmptyEl = new FakeElement();
+const defaultQueryPaginationEl = new FakeElement();
+const defaultQueryStatusEl = new FakeElement();
+const defaultQueryTitleEl = new FakeElement();
+const defaultQueryLocation = new URL(
+  `https://example.com/blog.html?category=${encodeURIComponent(allCategory)}&search=&page=1`,
+);
+const defaultQueryHistory = {
+  pushCalls: [],
+  replaceCalls: [],
+  pushState(state, title, nextUrl) {
+    this.pushCalls.push(String(nextUrl));
+    defaultQueryLocation.href = new URL(String(nextUrl), defaultQueryLocation.href).href;
+  },
+  replaceState(state, title, nextUrl) {
+    this.replaceCalls.push(String(nextUrl));
+    defaultQueryLocation.href = new URL(String(nextUrl), defaultQueryLocation.href).href;
+  },
+};
+loadBrowserScript("js/blog-page.js", {
+  window: {
+    location: defaultQueryLocation,
+    history: defaultQueryHistory,
+    scrollTo: () => {},
+    NotionContent: notionContentHelpers,
+    NotionAPI: {
+      escapeHtml: (value) => String(value ?? ""),
+      getCategoryColor: () => ({ bg: "#000", color: "#fff", border: "#222" }),
+      getCategories: () => [
+        { name: allCategory, emoji: "📚" },
+      ],
+      getPageSize: () => 9,
+      queryPosts: async () => ({
+        results: [],
+        categories: [{ name: allCategory, label: allCategory, emoji: "📚" }],
+        total: 0,
+        totalPages: 1,
+        currentPage: 1,
+      }),
+    },
+    PageRuntime: {
+      register(pageId, pageModule) {
+        defaultQueryRegisteredPages.set(pageId, pageModule);
+      },
+    },
+    SiteUtils: {
+      rememberBlogReturnUrl: () => {},
+      sanitizeCoverBackground: (value, fallback) => value || fallback,
+      resolveDisplayImageUrl: (value) => value,
+      sanitizeImageUrl: (value) => value,
+      buildPostPath: (postId) => `/posts/${postId}`,
+      buildBookmarkListingUrl: buildBookmarkListingUrlMock,
+      parseBookmarkListingHash: parseBookmarkListingHashMock,
+    },
+    updateSeoMeta: () => {},
+    UIEffects: { initBlogCardReveal: () => null },
+    requestAnimationFrame: () => 1,
+    cancelAnimationFrame: () => {},
+  },
+  document: {
+    getElementById(id) {
+      return {
+        blogFilters: defaultQueryFiltersEl,
+        blogSearch: defaultQuerySearchEl,
+        blogGrid: defaultQueryGridEl,
+        emptyState: defaultQueryEmptyEl,
+        pagination: defaultQueryPaginationEl,
+        blogStatus: defaultQueryStatusEl,
+      }[id] || null;
+    },
+    querySelector(selector) {
+      return selector === ".page-title" ? defaultQueryTitleEl : null;
+    },
+    querySelectorAll() {
+      return [];
+    },
+    createElement() {
+      return new FakeElement();
+    },
+  },
+});
+const defaultQueryCleanup = defaultQueryRegisteredPages.get("blog")?.init?.();
+await Promise.resolve();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(
+  defaultQueryHistory.replaceCalls.at(0),
+  "/blog.html",
+  "blog page should remove default category, empty search, and first-page params from canonical listing URLs",
+);
+defaultQueryCleanup?.();
 const paginationRegisteredPages = new Map();
 const paginationFiltersEl = new FakeElement();
 const paginationSearchEl = new FakeElement();
@@ -486,6 +694,90 @@ assert.equal(
   "blog page should normalize legacy bookmark query routes onto the hash-only bookmark view URL",
 );
 legacyBookmarkCleanup?.();
+const emptyBookmarkQueryRegisteredPages = new Map();
+const emptyBookmarkQueryFiltersEl = new FakeElement();
+const emptyBookmarkQuerySearchEl = new FakeElement();
+const emptyBookmarkQueryGridEl = new FakeElement();
+const emptyBookmarkQueryEmptyEl = new FakeElement();
+const emptyBookmarkQueryPaginationEl = new FakeElement();
+const emptyBookmarkQueryStatusEl = new FakeElement();
+const emptyBookmarkQueryTitleEl = new FakeElement();
+const emptyBookmarkQueryLocation = new URL("https://example.com/blog.html?category=&search=&page=#bookmarks");
+const emptyBookmarkQueryHistory = {
+  pushCalls: [],
+  replaceCalls: [],
+  pushState(state, title, nextUrl) {
+    this.pushCalls.push(String(nextUrl));
+    emptyBookmarkQueryLocation.href = new URL(String(nextUrl), emptyBookmarkQueryLocation.href).href;
+  },
+  replaceState(state, title, nextUrl) {
+    this.replaceCalls.push(String(nextUrl));
+    emptyBookmarkQueryLocation.href = new URL(String(nextUrl), emptyBookmarkQueryLocation.href).href;
+  },
+};
+loadBrowserScript("js/blog-page.js", {
+  window: {
+    location: emptyBookmarkQueryLocation,
+    history: emptyBookmarkQueryHistory,
+    scrollTo: () => {},
+    NotionContent: notionContentHelpers,
+    BookmarkManager: {
+      getAll: () => [],
+      isBookmarked: () => false,
+      toggleById: () => null,
+      hasLegacyMetadata: () => false,
+    },
+    PageRuntime: {
+      register(pageId, pageModule) {
+        emptyBookmarkQueryRegisteredPages.set(pageId, pageModule);
+      },
+    },
+    SiteUtils: {
+      rememberBlogReturnUrl: () => {},
+      sanitizeCoverBackground: (value, fallback) => value || fallback,
+      resolveShareImageUrl: (value) => value,
+      resolveDisplayImageUrl: (value) => value,
+      sanitizeImageUrl: (value) => value,
+      buildPostPath: (postId) => `/posts/${postId}`,
+      buildBookmarkListingUrl: buildBookmarkListingUrlMock,
+      parseBookmarkListingHash: parseBookmarkListingHashMock,
+    },
+    updateSeoMeta: () => {},
+    UIEffects: { initBlogCardReveal: () => null },
+    requestAnimationFrame: () => 1,
+    cancelAnimationFrame: () => {},
+  },
+  document: {
+    getElementById(id) {
+      return {
+        blogFilters: emptyBookmarkQueryFiltersEl,
+        blogSearch: emptyBookmarkQuerySearchEl,
+        blogGrid: emptyBookmarkQueryGridEl,
+        emptyState: emptyBookmarkQueryEmptyEl,
+        pagination: emptyBookmarkQueryPaginationEl,
+        blogStatus: emptyBookmarkQueryStatusEl,
+      }[id] || null;
+    },
+    querySelector(selector) {
+      return selector === ".page-title" ? emptyBookmarkQueryTitleEl : null;
+    },
+    querySelectorAll() {
+      return [];
+    },
+    createElement() {
+      return new FakeElement();
+    },
+  },
+});
+const emptyBookmarkQueryCleanup = emptyBookmarkQueryRegisteredPages.get("blog")?.init?.();
+await Promise.resolve();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(
+  emptyBookmarkQueryHistory.replaceCalls.at(0),
+  "/blog.html#bookmarks",
+  "blog page should remove empty query params when normalizing bookmark hash routes",
+);
+emptyBookmarkQueryCleanup?.();
 const bookmarkHashRegisteredPages = new Map();
 const bookmarkHashFiltersEl = new FakeElement();
 const bookmarkHashSearchEl = new FakeElement();

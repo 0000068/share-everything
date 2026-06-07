@@ -340,8 +340,16 @@ async function queryPublicPages(query = {}) {
 }
 
 function normalizePositiveInteger(value, fallback) {
-  const parsed = Number.parseInt(String(value), 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  const normalizedFallback = Number.isSafeInteger(Number(fallback)) && Number(fallback) > 0
+    ? Number(fallback)
+    : 1;
+  const rawValue = String(value ?? "").trim();
+  if (!/^\d+$/.test(rawValue)) {
+    return normalizedFallback;
+  }
+
+  const parsed = Number(rawValue);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : normalizedFallback;
 }
 
 async function queryPublicPosts({

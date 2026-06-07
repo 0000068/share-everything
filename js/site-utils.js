@@ -11,6 +11,7 @@
   }
   const BLOG_RETURN_URL_STORAGE_KEY = "spa:last-blog-url";
   const BOOKMARK_HASH_PREFIX = "#bookmarks";
+  const PUBLIC_SEARCH_QUERY_MAX_LENGTH = 256;
   const MOBILE_DEVICE_QUERY = "(max-width: 768px) and (hover: none) and (pointer: coarse)";
   const MOBILE_DEVICE_CLASS = "is-mobile-device-viewport";
   const MOBILE_DEVICE_WIDTH = 768;
@@ -207,13 +208,25 @@
   }
 
   function normalizePageNumber(value, fallback = 1) {
-    const parsed = Number.parseInt(String(value ?? ""), 10);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+    const normalizedFallback = Number.isSafeInteger(Number(fallback)) && Number(fallback) > 0
+      ? Number(fallback)
+      : 1;
+    const rawValue = String(value ?? "").trim();
+    if (!/^\d+$/.test(rawValue)) {
+      return normalizedFallback;
+    }
+
+    const parsed = Number(rawValue);
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : normalizedFallback;
+  }
+
+  function normalizeBookmarkSearch(value) {
+    return typeof value === "string" ? value.trim().slice(0, PUBLIC_SEARCH_QUERY_MAX_LENGTH) : "";
   }
 
   function buildBookmarkListingHash({ search = "", page = 1 } = {}) {
     const params = new URLSearchParams();
-    const normalizedSearch = typeof search === "string" ? search.trim() : "";
+    const normalizedSearch = normalizeBookmarkSearch(search);
     const normalizedPage = normalizePageNumber(page, 1);
 
     if (normalizedSearch) {
@@ -235,9 +248,13 @@
     return `${resolvedPathname}${buildBookmarkListingHash({ search, page })}`;
   }
 
+  function isBookmarkListingHash(rawHash) {
+    return rawHash === BOOKMARK_HASH_PREFIX || rawHash.startsWith(`${BOOKMARK_HASH_PREFIX}?`);
+  }
+
   function parseBookmarkListingHash(hash = window.location.hash) {
     const rawHash = typeof hash === "string" ? hash.trim() : "";
-    if (!rawHash.startsWith(BOOKMARK_HASH_PREFIX)) {
+    if (!isBookmarkListingHash(rawHash)) {
       return {
         active: false,
         search: "",
@@ -248,7 +265,7 @@
 
     const rawQuery = rawHash.slice(BOOKMARK_HASH_PREFIX.length).replace(/^\?/, "");
     const params = new URLSearchParams(rawQuery);
-    const search = (params.get("search") || "").trim();
+    const search = normalizeBookmarkSearch(params.get("search") || "");
     const page = normalizePageNumber(params.get("page"), 1);
 
     return {

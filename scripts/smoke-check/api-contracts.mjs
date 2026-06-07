@@ -118,4 +118,58 @@ export async function runApiContractChecks(context) {
     "categoryColor",
     "posts-data contract should expose category color fields in the final JSON payload",
   );
+
+  const postDataFetchCalls = [];
+  const postDataHandler = loadCommonJsModule("api/post-data.js", [], {
+    require(specifier) {
+      if (specifier === "../server/notion-server") {
+        return {
+          async fetchPublicPost(postId) {
+            postDataFetchCalls.push(postId);
+            return {
+              id: postId,
+              title: "Contract detail",
+              content: [],
+            };
+          },
+        };
+      }
+
+      if (specifier === "../server/public-content") {
+        return publicContentHelpers;
+      }
+
+      throw new Error(`Unexpected api/post-data.js dependency in contract test: ${specifier}`);
+    },
+  });
+
+  const invalidPostDataResponse = createApiResponseRecorder();
+  await postDataHandler({
+    method: "GET",
+    query: { id: "unsafe/post?debug=1" },
+  }, invalidPostDataResponse);
+
+  assert.equal(
+    invalidPostDataResponse.statusCode,
+    404,
+    "post-data contract should reject path-like ids before contacting the Notion layer",
+  );
+  assert.equal(
+    postDataFetchCalls.length,
+    0,
+    "post-data contract should avoid upstream work for invalid public post ids",
+  );
+
+  const validPostDataResponse = createApiResponseRecorder();
+  await postDataHandler({
+    method: "GET",
+    query: { id: "550e8400-e29b-41d4-a716-446655440000" },
+  }, validPostDataResponse);
+
+  assert.equal(validPostDataResponse.statusCode, 200, "post-data contract should accept canonical Notion page ids");
+  assert.equal(
+    JSON.stringify(postDataFetchCalls),
+    JSON.stringify(["550e8400-e29b-41d4-a716-446655440000"]),
+    "post-data contract should pass validated page ids to the Notion layer unchanged",
+  );
 }

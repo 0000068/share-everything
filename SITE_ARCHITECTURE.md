@@ -1,7 +1,7 @@
 # Share Everything Site Architecture
 
-> Version: v8.2
-> Updated: 2026-05-29
+> Version: v8.3
+> Updated: 2026-06-07
 
 ## 1. Overview
 
@@ -33,7 +33,19 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v8.2 Highlights
+## 2. Version v8.3 Highlights
+
+v8.3 is a public route and listing-state hardening pass surfaced by a full line-by-line audit. It changes URL canonicalization and invalid-input handling, with no visual layout changes.
+
+- **Public post ids are validated before upstream work**. `api/post-data.js` and `api/post.js` now use `readPublicPostId` from `server/public-content.js`, accepting only canonical Notion UUIDs or compact 32-character page ids. Invalid path-like ids return `404` with `Cache-Control: no-store` before any Notion request.
+- **Positive integer parsing is strict**. Public helpers and the Notion service layer reject partially numeric pagination values like `2abc` while still accepting canonicalizable values like `02`. The same client-side parsing is used by blog listing state and bookmark hash routes.
+- **Blog listing URLs canonicalize noisy defaults**. `js/blog-page.js` caps category/search query input to match the public API, removes default `category`, empty `search`, and first-page params, and normalizes empty-query bookmark routes back to `/blog.html#bookmarks`.
+- **Bookmark hash matching is exact**. `js/site-utils.js` only accepts `#bookmarks` and `#bookmarks?...`, so unrelated hashes that merely share the prefix no longer collapse into the local bookmark view.
+- **Bookmark snapshot source is auditable**. `js/bookmark.js` uses named escaped constants for snapshot separators instead of raw control-character bytes, preserving comparison behavior while making source scans reliable.
+- Smoke checks cover invalid public post ids, strict pagination parsing, bookmark hash prefix handling, default listing query cleanup, empty-query bookmark routes, and raw control-character regression checks.
+- Static CSS/JS entry URLs use the `20260607-v83` cache key.
+
+## 2.1 Version v8.2 Highlights
 
 v8.2 is a security and correctness hardening pass surfaced by a full code audit. No runtime rendering or visual changes.
 
@@ -43,7 +55,7 @@ v8.2 is a security and correctness hardening pass surfaced by a full code audit.
 - **List query hardened**. `server/post-service.js` `queryDatabasePages` guards `data.results` with `Array.isArray`, matching `server/block-service.js`, so a malformed upstream page payload cannot throw mid-pagination.
 - Static CSS/JS/SVG entry URLs use the `20260529-v82` cache key.
 
-## 2.1 Version v8.1 Highlights
+## 2.2 Version v8.1 Highlights
 
 v8.1 is a project-infrastructure release: source-of-truth GitHub repo migrated from `aihkibq-ux/Share-everything` to `0000068/share-everything`, with corresponding CI hardening. Runtime, API, and rendering code are byte-identical to v7.9; user-observable production behaviour did not change.
 
@@ -54,7 +66,7 @@ v8.1 is a project-infrastructure release: source-of-truth GitHub repo migrated f
 - **Engines invariant preserved**. `package.json` `"engines": { "node": ">=22" }` stays per the contract asserted by `scripts/smoke-check.mjs`. An early exploration locked it to `"22.x"` to silence a Vercel build warning; the smoke gate forced a revert. Vercel project's Node.js Version setting moved 24.x → 22.x to remove the override warning without touching the contract.
 - Static CSS/JS/SVG entry URLs use the `20260528-v81` cache key.
 
-## 2.2 Version v7.9 Highlights
+## 2.3 Version v7.9 Highlights
 
 v7.9 is a code-quality pass that fixes one production behavior gap and hardens several internal invariants. No visual changes.
 

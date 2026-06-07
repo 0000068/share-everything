@@ -4,7 +4,7 @@ const {
   getPublicPostErrorStatus,
   logServerError,
   rejectUnsupportedReadMethod,
-  readQueryString,
+  readPublicPostId,
   serializePublicError,
 } = require("../server/public-content");
 
@@ -13,7 +13,7 @@ module.exports = async function handler(req, res) {
     return undefined;
   }
 
-  const routeId = readQueryString(req.query.id);
+  const routeId = readPublicPostId(req.query.id);
 
   if (!routeId) {
     res.setHeader("Cache-Control", "no-store");

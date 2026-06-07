@@ -1,6 +1,6 @@
 # 修复清单
 
-> 更新时间：2026-05-29（v8.2 发布）
+> 更新时间：2026-06-07（v8.3 发布）
 
 ---
 
@@ -21,6 +21,34 @@
 ---
 
 ## 三、历史完成记录
+
+### v8.3 公开路由与列表状态硬化（2026-06-07）
+
+全量逐行审查触发的一轮正确性与可维护性硬化：公开 post id 防护、分页解析收紧、博客列表 URL 规范化、书签 hash 边界修复，以及对应 smoke 覆盖。无视觉布局变化。
+
+**生产可见修复**
+
+- `api/post-data.js` / `api/post.js` 改用 `server/public-content.js` 的 `readPublicPostId`，只接受标准 Notion UUID 或 32 位紧凑 page id。`unsafe/post?debug=1` 这类 path-like id 会在进入 Notion 层前返回 `404 + no-store`。
+- `js/site-utils.js` 只把 `#bookmarks` 和 `#bookmarks?...` 识别为书签列表路由，`#bookmarks-old` 等共享前缀的普通 hash 不再被误归一化成书签页。
+- `js/blog-page.js` 会清理默认列表 query：`category=全部`、空 `search=`、`page=1`，并把 `?category=&search=&page=#bookmarks` 规范回 `/blog.html#bookmarks`。
+
+**防御加固与可维护性**
+
+- `server/public-content.js` / `server/post-service.js` / `server/notion-server.js` / `js/blog-page.js` / `js/site-utils.js` 的正整数分页解析统一为 strict digits：`2abc` 回退到 1，`02` 仍规范为 2。
+- `js/blog-page.js` 初始 category/search query 长度与公开 API 对齐：category 128、search 256。
+- `js/bookmark.js` 的 bookmark snapshot key 分隔符改为具名 escaped 常量，去掉源码里的原始控制字符字节，存储比较语义不变。
+
+**Smoke check 配套**
+
+- `scripts/smoke-check/api-contracts.mjs` 覆盖 invalid public post id 不触发上游 Notion 调用。
+- `scripts/smoke-check/public-content-notion.mjs` 覆盖 `readPublicPostId`、strict positive integer、Notion 层分页规范。
+- `scripts/smoke-check/blog-page.mjs` 覆盖默认 query 清理和空 query 书签 hash 清理。
+- `scripts/smoke-check.mjs` 覆盖 bookmark hash 前缀误判、bookmark snapshot 原始控制字符检查、SSR post route invalid id。
+
+**资产版本**
+
+- `package.json` / `package-lock.json` `8.2.0` → `8.3.0`；ASSET_VERSION `20260529-v82` → `20260607-v83`，活跃 `?v=` 引用（`js/app.js` + 三个 HTML）同步。
+- README badge、`FIX_TODO.md` 顶部、`SITE_ARCHITECTURE.md` `> Version` 与 highlights 同步到 v8.3。
 
 ### v8.2 安全与正确性硬化（2026-05-29）
 

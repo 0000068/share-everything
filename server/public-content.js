@@ -1,11 +1,31 @@
+const PUBLIC_POST_ID_MAX_LENGTH = 36;
+const PUBLIC_POST_ID_PATTERN = /^(?:[a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i;
+
 function readQueryString(value) {
   const rawValue = Array.isArray(value) ? value[0] : value;
   return typeof rawValue === "string" ? rawValue.trim() : "";
 }
 
 function readPositiveInteger(value, fallback = 1) {
-  const parsed = Number.parseInt(readQueryString(value), 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  const normalizedFallback = Number.isSafeInteger(Number(fallback)) && Number(fallback) > 0
+    ? Number(fallback)
+    : 1;
+  const rawValue = readQueryString(value);
+  if (!/^\d+$/.test(rawValue)) {
+    return normalizedFallback;
+  }
+
+  const parsed = Number(rawValue);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : normalizedFallback;
+}
+
+function readPublicPostId(value) {
+  const postId = readQueryString(value);
+  if (postId.length === 0 || postId.length > PUBLIC_POST_ID_MAX_LENGTH) {
+    return "";
+  }
+
+  return PUBLIC_POST_ID_PATTERN.test(postId) ? postId : "";
 }
 
 function readRetryAfter(error) {
@@ -192,6 +212,7 @@ module.exports = {
   logServerError,
   rejectUnsupportedReadMethod,
   readPositiveInteger,
+  readPublicPostId,
   readQueryString,
   serializePublicError,
 };

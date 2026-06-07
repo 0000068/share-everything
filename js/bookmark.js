@@ -326,10 +326,13 @@
       }
     }
 
+    const BOOKMARK_SNAPSHOT_FIELD_SEPARATOR = "\u0000";
+    const BOOKMARK_SNAPSHOT_ENTRY_SEPARATOR = "\u0001";
+
     function bookmarkSnapshotKey(entries) {
       return (entries || [])
-        .map((entry) => `${entry.id} ${entry.timestamp}`)
-        .join("");
+        .map((entry) => `${entry.id}${BOOKMARK_SNAPSHOT_FIELD_SEPARATOR}${entry.timestamp}`)
+        .join(BOOKMARK_SNAPSHOT_ENTRY_SEPARATOR);
     }
 
     function scheduleStorageBookmarksUpdated() {

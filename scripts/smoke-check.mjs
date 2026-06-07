@@ -242,6 +242,7 @@ const {
   "buildPublicAccessPolicyFromDatabase",
   "decoratePostSummary",
   "filterPostsBySearch",
+  "normalizePositiveInteger",
   "normalizePostQueryFilters",
   "renderPostContent",
 ]);
@@ -693,6 +694,9 @@ expectIncludes(blogPageJs, "const normalizeBookmarkSearchQuery = SHARED_CONTENT.
 expectIncludes(blogPageJs, "const buildSharedPostSearchText = SHARED_CONTENT.buildPostSearchText;", "blog page should call the shared search text builder directly");
 expectIncludes(blogPageJs, "const parseBookmarkListingHash = siteUtils.parseBookmarkListingHash;", "blog page should rely on the shared bookmark hash parser");
 expectIncludes(blogPageJs, "const buildBookmarkListingUrl = siteUtils.buildBookmarkListingUrl;", "blog page should rely on the shared bookmark route builder");
+expectIncludes(blogPageJs, "PUBLIC_CATEGORY_QUERY_MAX_LENGTH = 128", "blog page should cap category query state to match the public API");
+expectIncludes(blogPageJs, "PUBLIC_SEARCH_QUERY_MAX_LENGTH = 256", "blog page should cap search query state to match the public API");
+expectIncludes(siteUtilsJs, "normalizeBookmarkSearch", "SiteUtils should cap bookmark-listing search state before emitting hash routes");
 expectIncludes(blogPageJs, "siteUtils.getSiteName", "blog page metadata should read the configured site name");
 expectIncludes(blogPageJs, "error?.retryAfter", "blog page load failures should surface Retry-After seconds when available");
 expectIncludes(notionApiJs, 'response.headers?.get?.("retry-after")', "Notion API client should propagate Retry-After response headers to UI errors");
@@ -977,6 +981,23 @@ assert.equal(
   "#bookmarks?search=Alpha&page=2",
   "SiteUtils should emit canonical bookmark hash routes",
 );
+const parsedDirtyBookmarkHash = siteUtilsHarness.window.SiteUtils.parseBookmarkListingHash(
+  "#bookmarks?search=Alpha&page=2abc",
+);
+assert.equal(parsedDirtyBookmarkHash.page, 1, "SiteUtils should reject partially numeric bookmark page values");
+assert.equal(
+  parsedDirtyBookmarkHash.normalizedHash,
+  "#bookmarks?search=Alpha",
+  "SiteUtils should drop invalid bookmark page values from canonical hash routes",
+);
+const parsedPrefixedBookmarkHash = siteUtilsHarness.window.SiteUtils.parseBookmarkListingHash(
+  "#bookmarks-old?search=Alpha&page=2",
+);
+assert.equal(
+  parsedPrefixedBookmarkHash.active,
+  false,
+  "SiteUtils should not treat hashes that merely share the bookmark prefix as bookmark routes",
+);
 assert.equal(
   siteUtilsHarness.window.SiteUtils.resolveShareImageUrl(
     "https://assets.example.com/image.png?X-Amz-Algorithm=test",
@@ -1182,6 +1203,8 @@ expectIncludes(bookmarkJs, "createBookmarkEntry", "bookmark manager should centr
 expectIncludes(bookmarkJs, "buildCardBookmarkSource", "bookmark manager should centralize DOM snapshot extraction");
 expectIncludes(bookmarkJs, "hydrateMissingMetadata", "bookmark manager should hydrate legacy metadata");
 expectIncludes(bookmarkJs, "BOOKMARK_METADATA_HYDRATION_GENERATION = 4", "bookmark metadata should re-hydrate when the persistence generation bumps");
+expectIncludes(bookmarkJs, 'BOOKMARK_SNAPSHOT_FIELD_SEPARATOR = "\\u0000"', "bookmark snapshot keys should use visible escaped separators");
+assert.ok(!/[\u0000\u0001]/.test(bookmarkJs), "bookmark.js should not contain raw control-character bytes");
 expectIncludes(bookmarkJs, "no migration logic", "bookmark metadata constant should document that it is a hydration trigger, not a schema version");
 expectIncludes(bookmarkJs, "resolveDisplayImageUrl", "bookmark normalization should preserve displayable cover images");
 expectIncludes(bookmarkJs, "coverPlaceholder?.dataset?.coverGradient", "bookmark DOM fallback should preserve card gradients");
@@ -1597,25 +1620,41 @@ assert.equal(
   "https://example.com/cover.png",
   "server notion structured data should preserve stable article images",
 );
+const BOOKMARK_HASH_PREFIX_MOCK = "#bookmarks";
+
+function normalizeBookmarkPageNumberMock(value, fallback = 1) {
+  const normalizedFallback = Number.isSafeInteger(Number(fallback)) && Number(fallback) > 0
+    ? Number(fallback)
+    : 1;
+  const rawValue = String(value ?? "").trim();
+  if (!/^\d+$/.test(rawValue)) return normalizedFallback;
+  const parsed = Number(rawValue);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : normalizedFallback;
+}
+
 function buildBookmarkListingUrlMock({ search = "", page = 1, pathname = "/blog.html" } = {}) {
   const params = new URLSearchParams();
   const normalizedSearch = typeof search === "string" ? search.trim() : "";
-  const normalizedPage = Math.max(1, Number.parseInt(String(page ?? ""), 10) || 1);
+  const normalizedPage = normalizeBookmarkPageNumberMock(page, 1);
   if (normalizedSearch) params.set("search", normalizedSearch);
   if (normalizedPage > 1) params.set("page", String(normalizedPage));
   const query = params.toString();
-  return `${pathname}#bookmarks${query ? `?${query}` : ""}`;
+  return `${pathname}${BOOKMARK_HASH_PREFIX_MOCK}${query ? `?${query}` : ""}`;
+}
+
+function isBookmarkListingHashMock(rawHash) {
+  return rawHash === BOOKMARK_HASH_PREFIX_MOCK || rawHash.startsWith(`${BOOKMARK_HASH_PREFIX_MOCK}?`);
 }
 
 function parseBookmarkListingHashMock(hash = "") {
   const rawHash = typeof hash === "string" ? hash.trim() : "";
-  if (!rawHash.startsWith("#bookmarks")) {
+  if (!isBookmarkListingHashMock(rawHash)) {
     return { active: false, search: "", page: 1, normalizedHash: "" };
   }
-  const params = new URLSearchParams(rawHash.slice("#bookmarks".length).replace(/^\?/, ""));
+  const params = new URLSearchParams(rawHash.slice(BOOKMARK_HASH_PREFIX_MOCK.length).replace(/^\?/, ""));
   const search = (params.get("search") || "").trim();
-  const page = Math.max(1, Number.parseInt(String(params.get("page") || ""), 10) || 1);
-  const normalizedHash = `#bookmarks${params.toString() ? `?${params.toString()}` : ""}`;
+  const page = normalizeBookmarkPageNumberMock(params.get("page"), 1);
+  const normalizedHash = buildBookmarkListingUrlMock({ pathname: "", search, page });
   return { active: true, search, page, normalizedHash };
 
 }
@@ -2097,6 +2136,10 @@ await apiPostHandler({ method: "POST", query: {} }, postRouteMethodNotAllowedRes
 assert.equal(postRouteMethodNotAllowedRes.statusCode, 405, "article HTML route should reject unsupported methods with HTTP 405");
 assert.equal(postRouteMethodNotAllowedRes.getHeader("allow"), "GET, HEAD", "article HTML route should advertise the supported read methods on 405 responses");
 assert.equal(postRouteMethodNotAllowedRes.getHeader("cache-control"), "no-store", "article HTML route should mark 405 responses as non-cacheable");
+const invalidPostRouteRes = createApiResponseRecorder();
+await apiPostHandler({ method: "GET", query: { id: "unsafe/post?debug=1" } }, invalidPostRouteRes);
+assert.equal(invalidPostRouteRes.statusCode, 404, "article HTML route should reject invalid public post ids before upstream rendering");
+assert.equal(invalidPostRouteRes.getHeader("cache-control"), "no-store", "article HTML route should keep invalid post ids non-cacheable");
 const headReadGuardRes = createApiResponseRecorder();
 assert.equal(
   publicContentHelpers.rejectUnsupportedReadMethod({ method: "HEAD" }, headReadGuardRes),
@@ -2108,8 +2151,11 @@ expectIncludes(apiPostsDataJs, "queryPublicPosts", "post list endpoint should se
 expectIncludes(apiPostsDataJs, "s-maxage=60", "post list endpoint should allow short-lived CDN caching");
 expectIncludes(apiPostDataJs, "fetchPublicPost", "post data endpoint should only serve posts from the public blog set");
 expectIncludes(apiPostDataJs, "getPublicPostErrorStatus", "post data endpoint should reuse shared public-post error mapping");
+expectIncludes(apiPostDataJs, "readPublicPostId", "post data endpoint should validate route ids before loading public post details");
 expectIncludes(apiPostDataJs, '"Cache-Control", "no-store"', "post data endpoint should not cache public responses");
+expectIncludes(apiPostJs, "readPublicPostId", "article HTML route should validate route ids before rendering public post details");
 expectIncludes(publicContentJs, "rejectUnsupportedReadMethod", "public content helper should centralize read-only method guards");
+expectIncludes(publicContentJs, "function readPublicPostId", "public content helper should centralize public post id validation");
 expectIncludes(publicContentJs, "function logServerError", "public content helper should centralize sanitized server error logging");
 expectIncludes(publicContentJs, 'payload.notionCode = error.notionCode;', "server error logging should preserve Notion error codes without logging full stacks");
 expectIncludes(apiPostsDataJs, 'logServerError("Failed to load public post list", error)', "post list endpoint should log sanitized server errors");

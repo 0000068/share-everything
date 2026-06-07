@@ -2,6 +2,19 @@
 
 All notable changes to this project are tracked here.
 
+## 8.3.0 - 2026-06-07
+
+Public route and listing-state hardening pass from a full line-by-line audit. No visual layout changes.
+
+- `api/post-data.js` and `api/post.js` now validate public post ids through `server/public-content.js` before calling the Notion layer. Only canonical Notion UUIDs and compact 32-character page ids are accepted; path-like ids such as `unsafe/post?debug=1` return a non-cacheable 404 without upstream work.
+- Public pagination parsing is now strict across `server/public-content.js`, `server/post-service.js`, `server/notion-server.js`, `js/blog-page.js`, and `js/site-utils.js`: partially numeric values like `2abc` fall back to page 1, while canonicalizable values like `02` remain accepted as page 2.
+- Blog listing state now caps category/search query input to match the public API, removes default query noise (`category=全部`, `search=`, `page=1`), and canonicalizes bookmark routes with empty query params back to `/blog.html#bookmarks`.
+- `js/site-utils.js` only treats `#bookmarks` and `#bookmarks?...` as bookmark routes, so hashes that merely share the prefix (for example `#bookmarks-old`) no longer collapse into the local bookmark view.
+- `js/bookmark.js` replaces raw control-character separators in bookmark snapshot keys with named escaped constants, making the source auditable while keeping the stored comparison format unchanged.
+- Smoke coverage now locks the new API id guard, strict positive-integer parsing, bookmark hash prefix handling, default listing query cleanup, and empty-query bookmark route cleanup.
+- Static CSS/JS entry URLs use the `20260607-v83` cache key.
+- `package.json`, `package-lock.json`, README badge, `FIX_TODO.md`, and `SITE_ARCHITECTURE.md` synced to 8.3.0.
+
 ## 8.2.0 - 2026-05-29
 
 Security and correctness hardening pass surfaced by a full code audit. No runtime rendering or visual changes.

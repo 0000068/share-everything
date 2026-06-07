@@ -101,6 +101,31 @@ assert.equal(
   404,
   "public post helper should keep invalid route page ids as article-not-found responses",
 );
+assert.equal(
+  publicContentHelpers.readPositiveInteger("2abc", 1),
+  1,
+  "public content helper should reject partially numeric page query strings",
+);
+assert.equal(
+  publicContentHelpers.readPositiveInteger("02", 1),
+  2,
+  "public content helper should still accept canonicalizable numeric page query strings",
+);
+assert.equal(
+  publicContentHelpers.readPublicPostId("550e8400-e29b-41d4-a716-446655440000"),
+  "550e8400-e29b-41d4-a716-446655440000",
+  "public content helper should accept canonical Notion UUID route ids",
+);
+assert.equal(
+  publicContentHelpers.readPublicPostId("550e8400e29b41d4a716446655440000"),
+  "550e8400e29b41d4a716446655440000",
+  "public content helper should accept compact Notion page ids",
+);
+assert.equal(
+  publicContentHelpers.readPublicPostId("unsafe/post?debug=1"),
+  "",
+  "public content helper should reject path-like public post route ids before Notion requests",
+);
 const publicErrorHeaders = [];
 publicContentHelpers.applyPublicErrorHeaders({
   setHeader(name, value) {
@@ -305,6 +330,16 @@ assert.equal(
   boundedPostQueryFilters.search.length,
   256,
   "server notion layer should cap search query input length before caching and filtering",
+);
+assert.equal(
+  serverNotionHelpers.normalizePositiveInteger("2abc", 1),
+  1,
+  "server notion layer should reject partially numeric pagination values",
+);
+assert.equal(
+  serverNotionHelpers.normalizePositiveInteger("02", 1),
+  2,
+  "server notion layer should still accept canonicalizable numeric pagination values",
 );
 const builtPostPayload = serverNotionHelpers.buildPostPayload(
   {
