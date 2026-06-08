@@ -1,6 +1,6 @@
 # 修复清单
 
-> 更新时间：2026-06-07（v8.3 发布）
+> 更新时间：2026-06-08（v8.4 发布）
 
 ---
 
@@ -21,6 +21,24 @@
 ---
 
 ## 三、历史完成记录
+
+### v8.4 缓存键一致性跟进（2026-06-08）
+
+v8.3 逐行复查后的高质量收尾：修复实际运行 CSS 里残留的移动星空背景旧缓存键，并补上 smoke 防回归断言。无视觉布局变化。
+
+**生产可见修复**
+
+- `css/style.css` 两条移动首页星空背景路径从 `mobile-home-starry-bg.svg?v=20260516-v78` 同步到 `mobile-home-starry-bg.svg?v=20260608-v84`，避免移动端继续命中过期背景资源缓存。
+
+**Smoke check 配套**
+
+- `scripts/smoke-check.mjs` 新增移动星空背景 URL 断言，要求真实移动媒体块与 `html.is-mobile-device-viewport` fallback 均使用共享 `ASSET_VERSION`。
+- 同时反向断言不再出现旧的 `mobile-home-starry-bg.svg?v=20260516-v78`。
+
+**资产版本**
+
+- `package.json` / `package-lock.json` `8.3.0` → `8.4.0`；ASSET_VERSION `20260607-v83` → `20260608-v84`，活跃 `?v=` 引用（`js/app.js` + 三个 HTML + 移动星空背景 CSS URL）同步。
+- README badge、`FIX_TODO.md` 顶部、`SITE_ARCHITECTURE.md` `> Version` 与 highlights 同步到 v8.4。
 
 ### v8.3 公开路由与列表状态硬化（2026-06-07）
 

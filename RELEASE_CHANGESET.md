@@ -1,6 +1,6 @@
 # Release Changeset Draft
 
-Updated: 2026-06-07
+Updated: 2026-06-08
 
 ## Scope
 
@@ -18,43 +18,25 @@ This working tree contains one release-sized change set with these review groups
 - `blog.html`
 - `post.html`
 - `js/app.js`
+- `css/style.css`
 
-2. Public API and Notion service hardening
-- `api/post-data.js`
-- `api/post.js`
-- `server/public-content.js`
-- `server/post-service.js`
-- `server/notion-server.js`
-
-3. Browser listing and bookmark behavior
-- `js/blog-page.js`
-- `js/site-utils.js`
-- `js/bookmark.js`
-
-4. Smoke and contract checks
+2. Smoke and contract checks
 - `scripts/smoke-check.mjs`
-- `scripts/smoke-check/api-contracts.mjs`
-- `scripts/smoke-check/blog-page.mjs`
-- `scripts/smoke-check/public-content-notion.mjs`
 
 ## Summary
 
-- Public post routes now reject invalid path-like ids before contacting Notion.
-- Public pagination parsing is strict across server helpers, Notion service code, and client listing state.
-- Blog listing URLs now remove default query noise and canonicalize empty-query bookmark routes.
-- Bookmark hash parsing no longer over-matches unrelated hash prefixes.
-- Bookmark snapshot separators are named escaped constants instead of raw control-character bytes.
-- Static entry URLs use the `20260607-v83` cache key and release metadata is synced to `8.3.0`.
+- Mobile home starfield CSS URLs now use the current `20260608-v84` cache key in both mobile rendering paths.
+- Smoke coverage now asserts the starfield background URL follows the shared `ASSET_VERSION` and rejects the stale `20260516-v78` URL.
+- Static entry URLs use the `20260608-v84` cache key and release metadata is synced to `8.4.0`.
 
 ## Commit Boundary Suggestion
 
 Prefer a single release commit if the project is keeping version-only release commits.
 If this needs to be split for review, use this order:
 
-1. Public API / service hardening.
-2. Browser listing and bookmark canonicalization.
-3. Smoke and contract checks.
-4. Release metadata, cache busting, and documentation updates.
+1. Cache-key consistency fix.
+2. Smoke guard.
+3. Release metadata and documentation updates.
 
 ## Validation Status
 

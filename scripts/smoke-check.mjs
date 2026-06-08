@@ -256,6 +256,17 @@ assert.ok(
 );
 const assetVersion = `v=${assetVersionValue}`;
 const defaultShareImagePath = SHARED_DEFAULT_SHARE_IMAGE_PATH;
+const mobileStarfieldAssetUrl = `/assets/mobile-home-starry-bg.svg?${assetVersion}`;
+assert.equal(
+  (styleCss.match(new RegExp(escapeRegex(mobileStarfieldAssetUrl), "g")) || []).length,
+  2,
+  "mobile home starfield CSS URL should use the shared asset version in both mobile rendering paths",
+);
+expectNotIncludes(
+  styleCss,
+  "mobile-home-starry-bg.svg?v=20260516-v78",
+  "mobile home starfield CSS URL should not keep stale release cache keys",
+);
 assert.equal(
   defaultShareImagePath,
   "/og-image.jpg?v=4",

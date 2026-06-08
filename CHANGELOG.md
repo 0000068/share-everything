@@ -2,6 +2,15 @@
 
 All notable changes to this project are tracked here.
 
+## 8.4.0 - 2026-06-08
+
+Cache-key consistency follow-up from the v8.3 audit.
+
+- Mobile home starfield CSS URLs now use the current `20260608-v84` cache key in both the real mobile media block and the `html.is-mobile-device-viewport` compatibility fallback.
+- Static CSS/JS entry URLs and `js/app.js` module imports use the `20260608-v84` cache key.
+- Smoke coverage now asserts that the mobile starfield background URL follows the shared asset version and does not regress to stale release cache keys.
+- `package.json`, `package-lock.json`, README badge, `FIX_TODO.md`, and `SITE_ARCHITECTURE.md` synced to 8.4.0.
+
 ## 8.3.0 - 2026-06-07
 
 Public route and listing-state hardening pass from a full line-by-line audit. No visual layout changes.

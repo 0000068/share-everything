@@ -1,7 +1,7 @@
 # Share Everything Site Architecture
 
-> Version: v8.3
-> Updated: 2026-06-07
+> Version: v8.4
+> Updated: 2026-06-08
 
 ## 1. Overview
 
@@ -33,7 +33,15 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v8.3 Highlights
+## 2. Version v8.4 Highlights
+
+v8.4 is a cache-key consistency follow-up from the v8.3 audit. It has no visual layout changes.
+
+- **Mobile starfield cache key synchronized**. `css/style.css` now uses the current `20260608-v84` asset key for `assets/mobile-home-starry-bg.svg` in both the real mobile media block and the generated `html.is-mobile-device-viewport` fallback block.
+- **Smoke guard added**. `scripts/smoke-check.mjs` asserts that both mobile starfield CSS URLs follow the shared `ASSET_VERSION` and rejects the stale `20260516-v78` URL.
+- **Release metadata synchronized**. Static CSS/JS entry URLs, `js/app.js` imports, package metadata, README, `FIX_TODO.md`, and this architecture document now describe v8.4.
+
+## 2.1 Version v8.3 Highlights
 
 v8.3 is a public route and listing-state hardening pass surfaced by a full line-by-line audit. It changes URL canonicalization and invalid-input handling, with no visual layout changes.
 
@@ -43,9 +51,9 @@ v8.3 is a public route and listing-state hardening pass surfaced by a full line-
 - **Bookmark hash matching is exact**. `js/site-utils.js` only accepts `#bookmarks` and `#bookmarks?...`, so unrelated hashes that merely share the prefix no longer collapse into the local bookmark view.
 - **Bookmark snapshot source is auditable**. `js/bookmark.js` uses named escaped constants for snapshot separators instead of raw control-character bytes, preserving comparison behavior while making source scans reliable.
 - Smoke checks cover invalid public post ids, strict pagination parsing, bookmark hash prefix handling, default listing query cleanup, empty-query bookmark routes, and raw control-character regression checks.
-- Static CSS/JS entry URLs use the `20260607-v83` cache key.
+- Static CSS/JS entry URLs used the `20260607-v83` cache key.
 
-## 2.1 Version v8.2 Highlights
+## 2.2 Version v8.2 Highlights
 
 v8.2 is a security and correctness hardening pass surfaced by a full code audit. No runtime rendering or visual changes.
 
@@ -55,7 +63,7 @@ v8.2 is a security and correctness hardening pass surfaced by a full code audit.
 - **List query hardened**. `server/post-service.js` `queryDatabasePages` guards `data.results` with `Array.isArray`, matching `server/block-service.js`, so a malformed upstream page payload cannot throw mid-pagination.
 - Static CSS/JS/SVG entry URLs use the `20260529-v82` cache key.
 
-## 2.2 Version v8.1 Highlights
+## 2.3 Version v8.1 Highlights
 
 v8.1 is a project-infrastructure release: source-of-truth GitHub repo migrated from `aihkibq-ux/Share-everything` to `0000068/share-everything`, with corresponding CI hardening. Runtime, API, and rendering code are byte-identical to v7.9; user-observable production behaviour did not change.
 
@@ -66,7 +74,7 @@ v8.1 is a project-infrastructure release: source-of-truth GitHub repo migrated f
 - **Engines invariant preserved**. `package.json` `"engines": { "node": ">=22" }` stays per the contract asserted by `scripts/smoke-check.mjs`. An early exploration locked it to `"22.x"` to silence a Vercel build warning; the smoke gate forced a revert. Vercel project's Node.js Version setting moved 24.x → 22.x to remove the override warning without touching the contract.
 - Static CSS/JS/SVG entry URLs use the `20260528-v81` cache key.
 
-## 2.3 Version v7.9 Highlights
+## 2.4 Version v7.9 Highlights
 
 v7.9 is a code-quality pass that fixes one production behavior gap and hardens several internal invariants. No visual changes.
 
