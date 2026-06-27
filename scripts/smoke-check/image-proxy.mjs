@@ -2,6 +2,8 @@ export async function runImageProxyChecks(context) {
   const {
     assert,
     Buffer,
+    apiCoverHandler,
+    apiCoverJs,
     apiImageHandler,
     apiImageJs,
     createApiResponseRecorder,
@@ -13,6 +15,11 @@ export async function runImageProxyChecks(context) {
     withEnvOverrides,
   } = context;
 
+expectIncludes(apiCoverJs, "COVER_IMAGE_WIDTHS", "cover endpoint should constrain supported thumbnail widths");
+expectIncludes(apiCoverJs, "acceptsExplicitImageMime", "cover endpoint should respect explicit Accept quality values");
+expectIncludes(apiCoverJs, "optimizeCoverImage", "cover endpoint should generate real resized image assets");
+expectIncludes(apiCoverJs, "sharp.strategy.attention", "cover endpoint should use content-aware crop positioning");
+expectIncludes(apiCoverJs, "Vary\", \"Accept", "cover endpoint should vary automatic output format by Accept");
 expectIncludes(apiImageJs, "IMAGE_PROXY_MAX_BYTES", "image proxy endpoint should bound upstream image size");
 expectIncludes(apiImageJs, "isBlockedImageHost", "image proxy endpoint should reject local and private upstream hosts");
 expectIncludes(apiImageJs, "resolvePublicImageHost", "image proxy endpoint should reject hosts that resolve to private addresses");
@@ -20,6 +27,7 @@ expectIncludes(apiImageJs, "__IMAGE_PROXY_HTTPS_REQUEST__", "image proxy endpoin
 expectIncludes(apiImageJs, "lookup(hostname, options, callback)", "image proxy endpoint should use a pinned lookup for the validated upstream host");
 expectIncludes(apiImageJs, "BLOCKED_IMAGE_CONTENT_TYPES", "image proxy endpoint should reject active image formats such as SVG");
 expectIncludes(apiImageJs, "X-Content-Type-Options", "image proxy endpoint should prevent content-type sniffing");
+expectIncludes(apiImageJs, "pipeKnownLengthImageResponse", "image proxy endpoint should stream known-size images after signature sniffing");
 assert.equal(
   JSON.stringify(imageProxyDefaultConfig),
   JSON.stringify({
@@ -97,6 +105,74 @@ assert.ok(
   "image proxy endpoint should make successful images edge-cacheable",
 );
 assert.ok(Buffer.isBuffer(imageProxySuccessRes.textBody), "image proxy endpoint should send a binary image buffer");
+assert.ok(imageProxySuccessRes.bodyChunks.length > 0, "image proxy endpoint should write successful known-size images as a stream");
+assert.equal(
+  Buffer.compare(imageProxySuccessRes.textBody, fakeImageBody),
+  0,
+  "image proxy endpoint should preserve the proxied image bytes while streaming",
+);
+const coverSourcePng = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEklEQVQImWMQqbgjUnGHAUIBACROBaFWe9NSAAAAAElFTkSuQmCC",
+  "base64",
+);
+let coverProxyFetchUrl = "";
+const successfulCoverHandler = loadCommonJsModule("api/cover.js", [], {
+  __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
+  __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
+    body: coverSourcePng,
+    headers: {
+      "content-type": "image/png",
+      "content-length": String(coverSourcePng.byteLength),
+    },
+    onRequest(url) {
+      coverProxyFetchUrl = String(url);
+    },
+  }),
+});
+const coverProxySuccessRes = createApiResponseRecorder();
+await successfulCoverHandler({
+  method: "GET",
+  headers: { accept: "image/webp,image/*" },
+  query: { src: "https://assets.example.com/cover.png", w: "320" },
+}, coverProxySuccessRes);
+assert.equal(coverProxySuccessRes.statusCode, 200, "cover endpoint should return generated cover thumbnails");
+assert.equal(coverProxyFetchUrl, "https://assets.example.com/cover.png", "cover endpoint should fetch the normalized upstream cover URL");
+assert.equal(coverProxySuccessRes.getHeader("content-type"), "image/webp", "cover endpoint should negotiate WebP when the browser accepts it");
+assert.ok(
+  coverProxySuccessRes.getHeader("cache-control")?.includes("s-maxage=2592000"),
+  "cover endpoint should keep generated thumbnails edge-cacheable for a long window",
+);
+assert.equal(coverProxySuccessRes.getHeader("vary"), "Accept", "cover endpoint should vary cached thumbnails by Accept");
+assert.ok(Buffer.isBuffer(coverProxySuccessRes.textBody), "cover endpoint should send a binary optimized image buffer");
+assert.equal(
+  coverProxySuccessRes.textBody.subarray(8, 12).toString("ascii"),
+  "WEBP",
+  "cover endpoint should send actual WebP bytes",
+);
+const coverProxyQualityFallbackRes = createApiResponseRecorder();
+await successfulCoverHandler({
+  method: "GET",
+  headers: { accept: "image/avif;q=0,image/webp;q=0,image/*" },
+  query: { src: "https://assets.example.com/cover.png", w: "320" },
+}, coverProxyQualityFallbackRes);
+assert.equal(
+  coverProxyQualityFallbackRes.getHeader("content-type"),
+  "image/jpeg",
+  "cover endpoint should not choose AVIF/WebP formats with zero Accept quality",
+);
+assert.deepEqual(
+  [...coverProxyQualityFallbackRes.textBody.subarray(0, 3)],
+  [0xff, 0xd8, 0xff],
+  "cover endpoint should fall back to actual JPEG bytes when modern formats are unacceptable",
+);
+const coverProxyInvalidWidthRes = createApiResponseRecorder();
+await successfulCoverHandler({
+  method: "GET",
+  headers: { accept: "image/webp,image/*" },
+  query: { src: "https://assets.example.com/cover.png", w: "123" },
+}, coverProxyInvalidWidthRes);
+assert.equal(coverProxyInvalidWidthRes.statusCode, 400, "cover endpoint should reject unsupported thumbnail widths");
+assert.equal(coverProxyInvalidWidthRes.getHeader("cache-control"), "no-store", "invalid cover requests should not be cached");
 const svgImageProxyHandler = loadCommonJsModule("api/image.js", [], {
   __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
   __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
@@ -223,5 +299,8 @@ assert.equal(redirectImageProxyFetchCount, 1, "image proxy endpoint should stop 
 const imageProxyMethodRes = createApiResponseRecorder();
 await apiImageHandler({ method: "POST", query: { src: "https://assets.example.com/cover.png" } }, imageProxyMethodRes);
 assert.equal(imageProxyMethodRes.statusCode, 405, "image proxy endpoint should reject unsupported methods");
+const coverProxyMethodRes = createApiResponseRecorder();
+await apiCoverHandler({ method: "POST", query: { src: "https://assets.example.com/cover.png" } }, coverProxyMethodRes);
+assert.equal(coverProxyMethodRes.statusCode, 405, "cover endpoint should reject unsupported methods");
 
 }

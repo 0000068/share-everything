@@ -2,14 +2,19 @@
 
 All notable changes to this project are tracked here.
 
-## 8.4.0 - 2026-06-08
+## 8.4.0 - 2026-06-27
 
-Cache-key consistency follow-up from the v8.3 audit.
+Cover-loading performance release plus the v8.3 audit cache-key follow-up.
 
-- Mobile home starfield CSS URLs now use the current `20260608-v84` cache key in both the real mobile media block and the `html.is-mobile-device-viewport` compatibility fallback.
+- Added `/api/cover`, a Sharp-backed thumbnail route for remote card covers. It accepts approved widths `320`, `640`, and `960`, crops to the card aspect with attention strategy, negotiates AVIF/WebP/JPEG from `Accept`, honors `q=0` exclusions, and emits long edge-cache headers.
+- Blog cards now resolve remote covers through `/api/cover`, render responsive `srcset` / `sizes`, and preload the leading covers with `imagesrcset` / `imagesizes` so mobile and desktop clients request smaller generated thumbnails instead of full upstream originals.
+- `/api/image` now streams known-size raster responses after a small SVG/XML body-signature sniff, so article images can start reaching the browser without buffering the whole file first while keeping SSRF, MIME, redirect, and size guards intact.
+- `js/notion-content-url.js`, `js/notion-content.js`, and `js/site-utils.js` expose shared cover URL and `srcset` helpers so browser rendering, SSR-facing modules, and smoke checks use one contract.
+- The local dev server now routes `/api/cover`, and the smoke harness supports streaming writes plus native `node_modules` requires for the Sharp-backed route.
+- Smoke coverage now asserts `/api/cover` WebP generation, JPEG fallback when WebP is explicitly refused, width validation, cache headers, method guards, frontend `srcset` contracts, the Sharp production dependency, and `/api/image` streaming behavior.
+- Mobile home starfield CSS URLs still use the current `20260608-v84` cache key in both the real mobile media block and the `html.is-mobile-device-viewport` compatibility fallback.
 - Static CSS/JS entry URLs and `js/app.js` module imports use the `20260608-v84` cache key.
-- Smoke coverage now asserts that the mobile starfield background URL follows the shared asset version and does not regress to stale release cache keys.
-- `package.json`, `package-lock.json`, README badge, `FIX_TODO.md`, and `SITE_ARCHITECTURE.md` synced to 8.4.0.
+- `package.json`, `package-lock.json`, README badge, `FIX_TODO.md`, and `SITE_ARCHITECTURE.md` are synced to 8.4.0.
 
 ## 8.3.0 - 2026-06-07
 

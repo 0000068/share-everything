@@ -64,7 +64,8 @@
 ### ⚡ 性能
 
 - 字体延迟加载 (`media="print"` → `"all"`)
-- 封面图预加载（前 3 张 `eager` + `fetchpriority="high"`）
+- 卡片封面走 `/api/cover` 生成 320 / 640 / 960 三档 WebP/AVIF/JPEG 缩略图，并通过 `srcset` / `sizes` 按设备选择
+- 文章内远程图片走 `/api/image` 安全代理；已知大小图片先做 SVG/XML 头部检查再流式返回
 - 后续图片全部 `lazy` + `decoding="async"`
 - SPA 路由 HTML 缓存（5 分钟 / 最多 6 页）
 - 悬停 + 聚焦预取（尊重 `saveData` 和 2G 网络）
@@ -101,6 +102,7 @@ Notion Database
       → /api/posts-data     列表 JSON
       → /api/post-data      文章 JSON
       → /api/post           SSR 文章 HTML
+      → /api/cover          封面缩略图生成
       → /api/image          安全图片代理
       → /api/robots         动态 robots.txt
       → /api/sitemap        动态站点地图
@@ -113,7 +115,7 @@ Notion Database
 | 层级 | 技术 | 职责 |
 |------|------|------|
 | 内容源 | Notion API | 文章元数据与块内容 |
-| 服务端 | Vercel Serverless | 公开 API、SSR、图片代理、robots、站点地图 |
+| 服务端 | Vercel Serverless | 公开 API、SSR、封面缩略图、图片代理、robots、站点地图 |
 | 前端 | 原生 HTML/CSS/JS | 静态页面 + 轻量 SPA |
 | DNS | Cloudflare | 仅 DNS 解析 |
 | 收藏 | localStorage | 纯本地存储 |
@@ -130,6 +132,7 @@ Notion Database
 │   ├── posts-data.js       列表数据接口
 │   ├── post-data.js        文章数据接口
 │   ├── post.js             SSR 渲染器
+│   ├── cover.js            封面缩略图生成
 │   ├── image.js            安全图片代理
 │   ├── robots.js           robots.txt 生成
 │   ├── sitemap.js          站点地图生成
@@ -254,7 +257,7 @@ npm.cmd run visual:check
 npm.cmd run verify:release
 ```
 
-该命令会并行运行 smoke suite 和 `VISUAL_STRICT=1` 真实浏览器视觉回归，是发布与 CI 的严格门禁。视觉脚本会启动本地服务，优先使用本机 Chrome 或 Edge 的 headless + CDP 模式截图并执行布局契约断言，覆盖移动首页、移动总览、移动文章空态和桌面首页。普通 `visual:check` 在当前机器无法完成截图时会生成 skipped 报告；`verify:release` 会把这类浏览器不可用问题视为失败。
+该本地发布命令会并行运行 smoke suite 和 `VISUAL_STRICT=1` 真实浏览器视觉回归，是发布前的严格门禁。GitHub Actions 当前只跑 `npm run check`；视觉回归因 Linux 字体栅格化差异保留为本地 contract（见 `FIX_TODO.md` B-3）。视觉脚本会启动本地服务，优先使用本机 Chrome 或 Edge 的 headless + CDP 模式截图并执行布局契约断言，覆盖移动首页、移动总览、移动文章空态和桌面首页。普通 `visual:check` 在当前机器无法完成截图时会生成 skipped 报告；`verify:release` 会把这类浏览器不可用问题视为失败。
 
 ---
 
@@ -380,7 +383,7 @@ NOTION_READ_TIME_PROPERTY_NAMES=ReadTime,Read Time,Reading Time,阅读时间
   </tr>
   <tr>
     <td align="center"><b>后端</b></td>
-    <td>Node.js Serverless Functions (Vercel)</td>
+    <td>Node.js Serverless Functions (Vercel) + Sharp 封面缩略图</td>
   </tr>
   <tr>
     <td align="center"><b>CMS</b></td>
@@ -400,7 +403,7 @@ NOTION_READ_TIME_PROPERTY_NAMES=ReadTime,Read Time,Reading Time,阅读时间
   </tr>
   <tr>
     <td align="center"><b>测试</b></td>
-    <td>自定义冒烟测试 + 真实浏览器截图回归（零三方依赖）</td>
+    <td>自定义冒烟测试 + 真实浏览器截图回归</td>
   </tr>
 </table>
 

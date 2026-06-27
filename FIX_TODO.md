@@ -1,6 +1,6 @@
 # 修复清单
 
-> 更新时间：2026-06-08（v8.4 发布）
+> 更新时间：2026-06-27（v8.4 封面加载优化复检）
 
 ---
 
@@ -22,23 +22,31 @@
 
 ## 三、历史完成记录
 
-### v8.4 缓存键一致性跟进（2026-06-08）
+### v8.4 封面加载优化与缓存键一致性跟进（2026-06-27）
 
-v8.3 逐行复查后的高质量收尾：修复实际运行 CSS 里残留的移动星空背景旧缓存键，并补上 smoke 防回归断言。无视觉布局变化。
+全局逐行复检后的性能收尾：新增专用封面缩略图链路，减少博客列表首屏图片体积；同时保留 v8.3 后续审查发现的移动星空缓存键一致性修复。无视觉布局变化。
 
 **生产可见修复**
 
+- 新增 `api/cover.js`：远程卡片封面统一生成 16:9 缩略图，支持 `320` / `640` / `960` 三档宽度，按 `Accept` 协商 AVIF / WebP / JPEG，并显式遵守 `q=0` 拒收格式。
+- `js/blog-page.js` 的封面 `<img>` 现在带 `srcset` / `sizes`，首批封面 preload 也同步写入 `imagesrcset` / `imagesizes`，让移动端与桌面端都能拿到合适尺寸而不是原图。
+- `api/image.js` 在保留 SSRF、MIME、跳转、大小限制和 SVG/XML 签名嗅探的前提下，对已知长度的远程 raster 图片改为流式透传，文章正文图片首字节更早到达浏览器。
+- `scripts/local-server.mjs` 支持本地 `/api/cover`，本地开发与 Vercel serverless 路径一致。
 - `css/style.css` 两条移动首页星空背景路径从 `mobile-home-starry-bg.svg?v=20260516-v78` 同步到 `mobile-home-starry-bg.svg?v=20260608-v84`，避免移动端继续命中过期背景资源缓存。
 
 **Smoke check 配套**
 
+- `scripts/smoke-check/image-proxy.mjs` 覆盖 `/api/cover` 真实 WebP 输出、`q=0` JPEG fallback、宽度拒绝、长缓存头、method guard，以及 `/api/image` streaming 行为。
+- `scripts/smoke-check/content-modules.mjs` 覆盖封面 URL / `srcset` helper。
+- `scripts/smoke-check.mjs` 锁定 `api/cover.js` 语法、前端 cover contract、本地 server 路由和 `sharp` 生产依赖，防止部署时缺失转码能力。
 - `scripts/smoke-check.mjs` 新增移动星空背景 URL 断言，要求真实移动媒体块与 `html.is-mobile-device-viewport` fallback 均使用共享 `ASSET_VERSION`。
 - 同时反向断言不再出现旧的 `mobile-home-starry-bg.svg?v=20260516-v78`。
 
-**资产版本**
+**资产版本与验证**
 
 - `package.json` / `package-lock.json` `8.3.0` → `8.4.0`；ASSET_VERSION `20260607-v83` → `20260608-v84`，活跃 `?v=` 引用（`js/app.js` + 三个 HTML + 移动星空背景 CSS URL）同步。
 - README badge、`FIX_TODO.md` 顶部、`SITE_ARCHITECTURE.md` `> Version` 与 highlights 同步到 v8.4。
+- 本轮发布前验证命令：`npm.cmd run check`、`npm.cmd run verify:release`、`npm.cmd audit --omit=dev`、`git diff --check`。
 
 ### v8.3 公开路由与列表状态硬化（2026-06-07）
 

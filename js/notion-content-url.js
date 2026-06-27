@@ -12,6 +12,9 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, (sharedUtils = {}) => {
   const SAFE_LINK_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
   const SAFE_IMAGE_PROTOCOLS = new Set(["https:"]);
+  const COVER_IMAGE_PATH = "/api/cover";
+  const COVER_IMAGE_WIDTHS = Object.freeze([320, 640, 960]);
+  const COVER_IMAGE_DEFAULT_WIDTH = 640;
   const IMAGE_PROXY_PATH = "/api/image";
   const { getBaseOrigin } = sharedUtils;
 
@@ -69,6 +72,34 @@
 
   // Public alias matching the higher-level "display image" terminology used by callers.
   const resolveProxiedDisplayImageUrl = buildImageProxyUrl;
+
+  function normalizeCoverImageWidth(width = COVER_IMAGE_DEFAULT_WIDTH) {
+    const parsedWidth = Number(width);
+    return COVER_IMAGE_WIDTHS.includes(parsedWidth) ? parsedWidth : COVER_IMAGE_DEFAULT_WIDTH;
+  }
+
+  function buildCoverImageUrl(candidate, baseOrigin, { width = COVER_IMAGE_DEFAULT_WIDTH } = {}) {
+    const safeImageUrl = resolveDisplayImageUrl(candidate, baseOrigin);
+    if (!safeImageUrl) return null;
+    if (!shouldProxyDisplayImageUrl(safeImageUrl, baseOrigin)) return safeImageUrl;
+
+    const resolvedBaseOrigin = getBaseOrigin(baseOrigin);
+    const coverUrl = new URL(COVER_IMAGE_PATH, resolvedBaseOrigin);
+    coverUrl.searchParams.set("src", safeImageUrl);
+    coverUrl.searchParams.set("w", String(normalizeCoverImageWidth(width)));
+    return coverUrl.href;
+  }
+
+  function buildCoverImageSrcSet(candidate, baseOrigin) {
+    const safeImageUrl = resolveDisplayImageUrl(candidate, baseOrigin);
+    if (!safeImageUrl || !shouldProxyDisplayImageUrl(safeImageUrl, baseOrigin)) return "";
+
+    return COVER_IMAGE_WIDTHS
+      .map((width) => `${buildCoverImageUrl(safeImageUrl, baseOrigin, { width })} ${width}w`)
+      .join(", ");
+  }
+
+  const resolveCoverImageUrl = buildCoverImageUrl;
 
   function shouldOpenLinkInNewTab(href, baseOrigin) {
     try {
@@ -201,13 +232,19 @@
 
   return Object.freeze({
     IMAGE_PROXY_PATH,
+    COVER_IMAGE_DEFAULT_WIDTH,
+    COVER_IMAGE_PATH,
+    COVER_IMAGE_WIDTHS,
     SAFE_IMAGE_PROTOCOLS,
     SAFE_LINK_PROTOCOLS,
+    buildCoverImageSrcSet,
+    buildCoverImageUrl,
     buildImageProxyUrl,
     getUrlHostname,
     isLikelyEphemeralAssetUrl,
     resolveDisplayImageUrl,
     resolveEmbeddableUrl,
+    resolveCoverImageUrl,
     resolveProxiedDisplayImageUrl,
     resolveShareImageUrl,
     sanitizeCspResourceUrl,

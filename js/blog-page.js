@@ -18,6 +18,7 @@
   const HISTORY_MODE_PUSH = "push";
   const PRELOAD_COVER_IMAGE_COUNT = 3;
   const MOBILE_PRELOAD_COVER_IMAGE_COUNT = 1;
+  const COVER_IMAGE_SIZES = "(max-width: 768px) 50vw, (max-width: 900px) 100vw, (max-width: 1200px) 50vw, 400px";
   const PUBLIC_CATEGORY_QUERY_MAX_LENGTH = 128;
   const PUBLIC_SEARCH_QUERY_MAX_LENGTH = 256;
 
@@ -426,6 +427,9 @@
 
     function resolveSafeCoverImage(post) {
       const candidate = post?.coverImage;
+      if (typeof siteUtils.resolveCoverImageUrl === "function") {
+        return siteUtils.resolveCoverImageUrl(candidate);
+      }
       if (typeof siteUtils.resolveProxiedDisplayImageUrl === "function") {
         return siteUtils.resolveProxiedDisplayImageUrl(candidate);
       }
@@ -433,6 +437,14 @@
         return siteUtils.sanitizeImageUrl(candidate);
       }
       return null;
+    }
+
+    function resolveSafeCoverImageSrcSet(post) {
+      const candidate = post?.coverImage;
+      if (typeof siteUtils.buildCoverImageSrcSet === "function") {
+        return siteUtils.buildCoverImageSrcSet(candidate);
+      }
+      return "";
     }
 
     function preloadCoverImages(posts = []) {
@@ -446,12 +458,19 @@
       posts.slice(0, preloadCount).forEach((post) => {
         const coverImage = resolveSafeCoverImage(post);
         if (!coverImage || preloadedCoverImages.has(coverImage)) return;
+        const coverSrcSet = resolveSafeCoverImageSrcSet(post);
 
         preloadedCoverImages.add(coverImage);
         const link = document.createElement("link");
         link.rel = "preload";
         link.as = "image";
         link.href = coverImage;
+        if (coverSrcSet) {
+          link.imageSrcset = coverSrcSet;
+          link.imageSizes = COVER_IMAGE_SIZES;
+          link.setAttribute("imagesrcset", coverSrcSet);
+          link.setAttribute("imagesizes", COVER_IMAGE_SIZES);
+        }
         link.fetchPriority = "high";
         link.setAttribute("fetchpriority", "high");
         link.dataset.blogCoverPreload = "true";
@@ -665,6 +684,10 @@
           ? siteUtils.sanitizeCoverBackground(post.coverGradient, DEFAULT_COVER_GRADIENT)
           : DEFAULT_COVER_GRADIENT;
       const safeCoverImage = resolveSafeCoverImage(post);
+      const safeCoverImageSrcSet = resolveSafeCoverImageSrcSet(post);
+      const coverSrcSetAttributes = safeCoverImageSrcSet
+        ? ` srcset="${esc(safeCoverImageSrcSet)}" sizes="${COVER_IMAGE_SIZES}"`
+        : "";
       const safePostUrl =
         typeof siteUtils.buildPostPath === "function"
           ? siteUtils.buildPostPath(post.id)
@@ -693,7 +716,7 @@
       const coverHtml = safeCoverImage
         ? `<div class="blog-card-cover-placeholder blog-card-cover-img" data-cover-gradient="${esc(safeCoverGradient)}" data-cover-emoji="${safeCoverEmoji}" style="background: ${DEFAULT_COVER_GRADIENT}">
              <span class="blog-card-cover-fallback" aria-hidden="true"></span>
-             <img src="${esc(safeCoverImage)}" alt="${safeTitle}" width="640" height="360" loading="${coverLoading}" decoding="async" fetchpriority="${coverFetchPriority}">
+             <img src="${esc(safeCoverImage)}"${coverSrcSetAttributes} alt="${safeTitle}" width="640" height="360" loading="${coverLoading}" decoding="async" fetchpriority="${coverFetchPriority}">
            </div>`
         : `<div class="blog-card-cover-placeholder" data-cover-gradient="${esc(safeCoverGradient)}" data-cover-emoji="${safeCoverEmoji}" style="background: ${safeCoverGradient}">
              <span class="blog-card-cover-fallback" aria-hidden="true"></span>

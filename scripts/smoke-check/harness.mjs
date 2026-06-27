@@ -53,6 +53,10 @@ function loadCommonJsModule(relativePath, exportedNames = [], sandboxOverrides =
         return nativeRequire(specifier);
       }
 
+      if (projectPath.startsWith("node_modules/")) {
+        return nativeRequire(specifier);
+      }
+
       if (projectPath.endsWith(".json")) {
         return JSON.parse(readFileSync(resolved, "utf8"));
       }
@@ -371,6 +375,8 @@ function createApiResponseRecorder() {
     headers: new Map(),
     jsonBody: null,
     textBody: null,
+    bodyChunks: [],
+    headersSent: false,
     ended: false,
     setHeader(name, value) {
       this.headers.set(String(name).toLowerCase(), String(value));
@@ -385,18 +391,34 @@ function createApiResponseRecorder() {
     },
     json(payload) {
       this.jsonBody = payload;
+      this.headersSent = true;
       this.ended = true;
       return payload;
     },
+    write(payload = "") {
+      const buffer = Buffer.isBuffer(payload) ? payload : Buffer.from(String(payload));
+      this.bodyChunks.push(buffer);
+      this.headersSent = true;
+      return true;
+    },
     send(payload) {
       this.textBody = payload;
+      this.headersSent = true;
       this.ended = true;
       return payload;
     },
     end(payload = "") {
-      this.textBody = payload;
+      if (payload !== "") {
+        this.write(payload);
+      }
+      if (this.bodyChunks.length > 0) {
+        this.textBody = Buffer.concat(this.bodyChunks);
+      } else if (this.textBody === null) {
+        this.textBody = payload;
+      }
+      this.headersSent = true;
       this.ended = true;
-      return payload;
+      return this.textBody;
     },
   };
 }

@@ -1,7 +1,7 @@
 # Share Everything Site Architecture
 
 > Version: v8.4
-> Updated: 2026-06-08
+> Updated: 2026-06-27
 
 ## 1. Overview
 
@@ -12,7 +12,7 @@ It is not a React, Next.js, Vue, Cloudflare Workers, or Cloudflare Pages app. Cl
 | Layer | Technology | Responsibility |
 |---|---|---|
 | Content source | Notion API | Article metadata and block content |
-| Server | Vercel Serverless Functions | Public list API, post data API, SSR post HTML, robots, sitemap, image proxy |
+| Server | Vercel Serverless Functions | Public list API, post data API, SSR post HTML, cover thumbnails, robots, sitemap, image proxy |
 | Frontend | Vanilla HTML/CSS/JS | Static entry pages plus lightweight SPA navigation |
 | DNS | Cloudflare | DNS only |
 | Bookmarks | `localStorage` | Fully local bookmark storage |
@@ -24,6 +24,7 @@ Notion Database
       -> /api/posts-data
       -> /api/post-data
       -> /api/post
+      -> /api/cover
       -> /api/image
       -> /api/robots
       -> /api/sitemap
@@ -35,10 +36,13 @@ Notion Database
 
 ## 2. Version v8.4 Highlights
 
-v8.4 is a cache-key consistency follow-up from the v8.3 audit. It has no visual layout changes.
+v8.4 is a cache-key consistency follow-up from the v8.3 audit. It also adds the cover-image performance pipeline from the follow-up image-loading audit.
 
 - **Mobile starfield cache key synchronized**. `css/style.css` now uses the current `20260608-v84` asset key for `assets/mobile-home-starry-bg.svg` in both the real mobile media block and the generated `html.is-mobile-device-viewport` fallback block.
 - **Smoke guard added**. `scripts/smoke-check.mjs` asserts that both mobile starfield CSS URLs follow the shared `ASSET_VERSION` and rejects the stale `20260516-v78` URL.
+- **Cover thumbnails generated server-side**. `api/cover.js` uses Sharp to crop remote card covers to 16:9 at 320 / 640 / 960 widths, negotiates AVIF/WebP/JPEG from `Accept`, strips metadata, and serves long edge-cacheable responses.
+- **Responsive cover markup**. `js/blog-page.js` now renders cover `srcset` / `sizes`, and preload links carry `imagesrcset` / `imagesizes` so the browser chooses a device-appropriate generated cover.
+- **Image proxy stays the safe original-image path**. `api/image.js` continues to own remote image SSRF validation and streams known-size original images after SVG/XML signature sniffing; `/api/cover` reuses that safety core before optimizing bytes.
 - **Release metadata synchronized**. Static CSS/JS entry URLs, `js/app.js` imports, package metadata, README, `FIX_TODO.md`, and this architecture document now describe v8.4.
 
 ## 2.1 Version v8.3 Highlights
@@ -298,7 +302,7 @@ v5.9 completed the mobile home visual restoration and landed the full post-v5.7 
 - Public client payloads no longer expose or regenerate `_searchText`; server-side search text stays non-enumerable and internal.
 - Server-side Notion block rendering now has a configurable total block budget, bounded recursive fan-out, and single-flight failure cooldowns.
 - Browser-side post summary caching and `sessionStorage` cleanup are bounded and throttled to reduce repeated tab-sync work.
-- Release verification runs the smoke suite and strict visual regression in parallel, and GitHub Actions now covers Node 22 and 24 with stale workflow cancellation.
+- Release verification runs the smoke suite and strict visual regression in parallel as the local release contract. GitHub Actions currently runs the smoke gate across Node 22 and 24 with stale workflow cancellation; the cross-platform visual baseline gap remains tracked in `FIX_TODO.md` B-3.
 - `FIX_TODO.md` is the single authoritative repair status document; summary documents point back to it instead of carrying duplicate stale checklists.
 - Mobile pages now disable the particle canvas entirely after real-device frame-rate checks, while desktop home keeps the 350-particle animation.
 - Blog cover placeholders no longer render the notebook emoji; slow or failed covers fall back to quiet gradients.
@@ -453,7 +457,7 @@ v2.3 restores the v1.6-style whole-page SPA route motion while keeping the v2.0 
 - Blog cover cards include a stable fallback layer so slow images do not leave a blank cover area.
 - Blog cover media is non-interactive so clicks always reach the card link, while bookmark buttons remain above the link layer.
 - Article content prioritizes the first image with eager loading and high fetch priority.
-- Remote display images can be routed through the same-origin `/api/image` proxy for better cache behavior.
+- Remote display images can be routed through the same-origin `/api/image` proxy for better cache behavior; known-size image responses stream after the proxy sniffs the initial bytes for SVG/XML signatures.
 - Mobile particle rendering uses a lightweight profile on real mobile devices only, and particles pause briefly while scrolling on mobile pages where they are enabled.
 - Mobile UI and performance overrides are gated by the shared real-mobile media query rather than width alone, keeping PC behavior stable even in narrow browser windows.
 - SPA page HTML requests are coalesced, while route swaps keep the v1.6-style 150ms visual exit cue.
@@ -483,6 +487,7 @@ v2.3 restores the v1.6-style whole-page SPA route motion while keeping the v2.0 
 | `/api/posts-data` | `GET` | Public post list JSON |
 | `/api/post-data` | `GET` | Single post JSON |
 | `/api/post` | `GET` | SSR article HTML |
+| `/api/cover` | `GET` | Same-origin optimized card cover thumbnails |
 | `/api/image` | `GET` | Same-origin remote image proxy |
 | `/api/robots` | `GET` | Dynamic robots.txt |
 | `/api/sitemap` | `GET` | Dynamic sitemap XML |
@@ -497,6 +502,7 @@ Read-only public APIs reject non-`GET` methods with `405` and `Cache-Control: no
 | Static HTML and `/` | `public, max-age=0, must-revalidate` |
 | CSS and JS | `public, max-age=3600, stale-while-revalidate=86400` |
 | `favicon.png`, `og-image.jpg` | `public, max-age=86400` |
+| Successful `/api/cover` responses | `public, max-age=86400, s-maxage=2592000, stale-while-revalidate=604800` |
 | Successful `/api/image` responses | `public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400` |
 | `/api/posts-data` list JSON | `public, max-age=0, s-maxage=60, stale-while-revalidate=300` |
 | `/api/sitemap` | `public, max-age=0, s-maxage=300, stale-while-revalidate=600` |
@@ -505,7 +511,7 @@ Read-only public APIs reject non-`GET` methods with `405` and `Cache-Control: no
 | Public API errors | `no-store` |
 | Disabled `/api/notion` | `no-store` |
 
-`vercel.json` does not set an API-wide `Cache-Control`; individual handlers own their cache policy so `/api/image` can stay edge-cacheable while data and SSR routes stay non-cacheable. Do not add a catch-all `/api/*` `Cache-Control` header in `vercel.json`.
+`vercel.json` does not set an API-wide `Cache-Control`; individual handlers own their cache policy so `/api/cover` and `/api/image` can stay edge-cacheable while data and SSR routes stay non-cacheable. Do not add a catch-all `/api/*` `Cache-Control` header in `vercel.json`.
 
 The global `/(.*)` headers block in `vercel.json` (CSP frame-ancestors, X-Frame-Options, HSTS, Referrer-Policy, Permissions-Policy, and `X-Content-Type-Options: nosniff`) applies to every route, including API responses — so HTML, static assets, and JSON all get MIME-sniffing and clickjacking protection from a single source. `X-Content-Type-Options: nosniff` lives in this catch-all block (a dedicated `/api/(.*)` rule was removed as redundant once it was global); `/api/image` additionally sets `nosniff` in code. Keep all of these headers in the catch-all block — do not scope them under `/api/(.*)` only, because HTML/static responses need them too.
 
@@ -519,7 +525,7 @@ Client-side `notion-api.js` keeps a short bounded in-memory post-list response c
 - Static pages use CSP meta tags generated from `server/security-policy.js`.
 - SSR article pages send CSP through response headers; JSON-LD and initial post data remain inert script data blocks without nonce attributes.
 - `connect-src` remains same-origin so browser data requests continue through semantic API routes.
-- `/api/image` only accepts `https:` upstream URLs, rejects localhost/private literal hosts and private DNS results, pins the validated DNS answer to the actual HTTPS request through a custom lookup, validates every redirect hop manually, enforces image content types, limits image size, applies a timeout, and sends `X-Content-Type-Options: nosniff`.
+- `/api/image` only accepts `https:` upstream URLs, rejects localhost/private literal hosts and private DNS results, pins the validated DNS answer to the actual HTTPS request through a custom lookup, validates every redirect hop manually, enforces image content types, limits image size, applies a timeout, and sends `X-Content-Type-Options: nosniff`. `/api/cover` reuses this upstream safety path before Sharp optimization and rejects unsupported widths/formats with `no-store`.
 - Embed iframes intentionally use a permissive sandbox subset (`allow-scripts`, `allow-same-origin`, popups, forms, and presentation) so trusted providers such as YouTube, Bilibili, Vimeo, Figma, Loom, and CodePen can render; this is a deliberate usability tradeoff, while page-level `frame-src`, same-origin API boundaries, and `frame-ancestors 'none'` still constrain where embeds can load and how this site can be framed.
 - Public error details are hidden unless `EXPOSE_PUBLIC_ERROR_DETAILS=true` is set for local debugging.
 
@@ -537,6 +543,7 @@ Client-side `notion-api.js` keeps a short bounded in-memory post-list response c
 |-- og-image.jpg
 |-- SITE_ARCHITECTURE.md
 |-- api/
+|   |-- cover.js
 |   |-- image.js
 |   |-- posts-data.js
 |   |-- post-data.js
@@ -700,7 +707,7 @@ immediately on load and depends on preceding globals.
 
 `notion-content-utils.js` owns reusable pure content helpers such as schema resolution, page-property lookup, HTML escaping, CSS color sanitization, and post search-text normalization.
 
-`notion-content-url.js` owns display-safe URL and image proxy helpers, including CSP-aligned image protocol checks, remote image proxy URL construction, embeddable URL normalization, and stable share-image selection.
+`notion-content-url.js` owns display-safe URL and image proxy helpers, including CSP-aligned image protocol checks, remote image proxy URL construction, card-cover thumbnail URL/srcset construction, embeddable URL normalization, and stable share-image selection.
 
 `notion-article-renderer.js` owns the article header and shell HTML while receiving lower-level dependencies from `notion-content.js`.
 
@@ -713,9 +720,10 @@ immediately on load and depends on preceding globals.
 - Same-origin images remain direct.
 - External display images must be `https:`.
 - Remote display images can be rewritten to `/api/image?src=...`.
+- Remote card covers can be rewritten to `/api/cover?src=...&w=...` at approved 320 / 640 / 960 widths.
 - Share images still avoid likely ephemeral signed URLs and fall back to stable defaults.
 
-`blog-page.js` uses `SiteUtils.resolveProxiedDisplayImageUrl()` for cover cards, preloads the first three cover images on desktop, preloads only the first cover on real mobile devices, and uses cover fallback markup so cards remain visually stable while images load.
+`blog-page.js` uses `SiteUtils.resolveCoverImageUrl()` and `SiteUtils.buildCoverImageSrcSet()` for cover cards, preloads the first three cover images on desktop, preloads only the first cover on real mobile devices, and uses cover fallback markup so cards remain visually stable while images load. Cover preload links include `imagesrcset` / `imagesizes`; cover `<img>` tags include `srcset` / `sizes` so mobile and desktop viewports choose the smallest suitable generated thumbnail. `/api/image` still streams known-size original remote images after a small SVG/XML signature sniff instead of buffering the full image before the browser receives the first bytes.
 
 Cover images and fallback layers set `pointer-events: none`; the full-card link sits above the media layer, and the bookmark button sits above the link. This preserves the expected behavior that clicking the cover opens the article and clicking the bookmark toggles the bookmark.
 
@@ -760,7 +768,7 @@ Use:
 npm.cmd run dev
 ```
 
-This starts `scripts/local-server.mjs` on `127.0.0.1:4173` by default and supports static assets plus semantic API routes including `/api/image`, `/api/post`, `/api/post-data`, `/api/posts-data`, `/api/robots`, and `/api/sitemap`.
+This starts `scripts/local-server.mjs` on `127.0.0.1:4173` by default and supports static assets plus semantic API routes including `/api/cover`, `/api/image`, `/api/post`, `/api/post-data`, `/api/posts-data`, `/api/robots`, and `/api/sitemap`.
 
 Use:
 
@@ -833,14 +841,14 @@ Category navigation is Notion-driven. The server reads the resolved `Category` /
 
 ## 14. Checks
 
-`scripts/inject-site-meta.mjs --check` and `scripts/smoke-check.mjs` together make up the `npm.cmd run check` entrypoint. `npm.cmd run verify:release` runs the smoke suite and `visual-regression.mjs` with `VISUAL_STRICT=1` in parallel, and the same strict command is wired into `.github/workflows/release-check.yml` across the Node 22/24 matrix for push and pull request validation. Shared harness utilities and heavier domain checks live in focused modules under `scripts/smoke-check/`:
+`scripts/inject-site-meta.mjs --check` and `scripts/smoke-check.mjs` together make up the `npm.cmd run check` entrypoint, which is the GitHub Actions gate across the Node 22/24 matrix for push and pull request validation. `npm.cmd run verify:release` runs the smoke suite and `visual-regression.mjs` with `VISUAL_STRICT=1` in parallel as the local release contract while the cross-platform visual baseline gap remains tracked in `FIX_TODO.md` B-3. Shared harness utilities and heavier domain checks live in focused modules under `scripts/smoke-check/`:
 
 - `harness.mjs` for VM/module loading helpers, fake DOM primitives, and common assertions.
 - `api-contracts.mjs` for final API handler payload contracts such as `/api/posts-data` category presentation metadata.
 - `blog-page.mjs` for blog listing, filtering, bookmark hash, and pagination behavior.
 - `content-modules.mjs` for shared Notion content module boundaries and renderer helpers.
 - `notion-api-client.mjs` for browser-side Notion client summary caching and session fallback behavior.
-- `image-proxy.mjs` for `/api/image` SSRF, MIME, size, redirect, and method checks.
+- `image-proxy.mjs` for `/api/image` SSRF, MIME, size, redirect, streaming, `/api/cover` thumbnail generation, and method checks.
 - `public-content-notion.mjs` for public error mapping and server-side Notion data behavior.
 - `routing-vercel.mjs` for disabled legacy proxy, robots, sitemap, and Vercel header rules.
 - `server-modules.mjs` for Notion server module boundaries, configuration, category navigation, and cache helpers.
@@ -857,12 +865,13 @@ The smoke suite currently covers:
 - SPA navigation and page HTML request coalescing.
 - SPA post-template fallback for local `/posts/:id` 404s.
 - SPA route transition animation parameters.
-- Blog cover preloading and mobile reveal behavior.
+- Blog cover preloading, responsive cover `srcset` / `sizes`, and mobile reveal behavior.
 - Notion block and inline equation rendering through MathML instead of visible TeX code.
 - Real-mobile gating for mobile-only CSS, particle density, bookmark control placement, and the article dock safe-area layout.
 - Blog cover click layering.
 - Remote display image proxying.
-- `/api/image` private-host/DNS validation, pinned lookup behavior, redirect-hop validation, cache headers, binary response behavior, and method guard.
+- `/api/image` private-host/DNS validation, pinned lookup behavior, redirect-hop validation, cache headers, streaming binary response behavior, SVG/XML body sniffing, and method guard.
+- `/api/cover` width validation, Accept-based WebP generation, long edge caching, and method guard.
 - API `405` and `no-store` behavior.
 - Public content error mapping and `Retry-After` propagation.
 - Sitemap behavior.

@@ -153,6 +153,34 @@ export function runContentModuleChecks(context) {
     "notion-content-url.js should still allow same-origin local image URLs",
   );
   assert.equal(
+    notionContentUrlHelpers.resolveCoverImageUrl("/cover.png", "http://localhost:3000"),
+    "http://localhost:3000/cover.png",
+    "notion-content-url.js should keep same-origin cover images direct",
+  );
+  const coverThumbnailUrl = new URL(
+    notionContentUrlHelpers.resolveCoverImageUrl("https://assets.example.com/cover.png?token=1", "https://example.com", { width: 320 }),
+  );
+  assert.equal(coverThumbnailUrl.pathname, "/api/cover", "notion-content-url.js should route remote card covers through the cover endpoint");
+  assert.equal(coverThumbnailUrl.searchParams.get("w"), "320", "notion-content-url.js should preserve the requested cover width");
+  assert.equal(
+    coverThumbnailUrl.searchParams.get("src"),
+    "https://assets.example.com/cover.png?token=1",
+    "notion-content-url.js should preserve the upstream remote cover URL inside the cover query",
+  );
+  const coverThumbnailSrcSet = notionContentUrlHelpers.buildCoverImageSrcSet(
+    "https://assets.example.com/cover.png",
+    "https://example.com",
+  );
+  assert.equal(
+    coverThumbnailSrcSet.split(", ").length,
+    3,
+    "notion-content-url.js should build one responsive cover candidate per approved thumbnail width",
+  );
+  assert.ok(
+    coverThumbnailSrcSet.includes("/api/cover?") && coverThumbnailSrcSet.includes("320w") && coverThumbnailSrcSet.includes("960w"),
+    "notion-content-url.js should include cover endpoint URLs and width descriptors in srcsets",
+  );
+  assert.equal(
     notionContentUrlHelpers.resolveEmbeddableUrl("https://vimeo.com/123456789/abcdef123", "https://example.com"),
     "https://player.vimeo.com/video/123456789?h=abcdef123",
     "notion-content-url.js should preserve Vimeo unlisted hash tokens on embed URLs",

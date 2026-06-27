@@ -124,6 +124,24 @@
     return sanitizeImageUrl(candidate);
   }
 
+  function resolveCoverImageUrl(candidate, options = {}) {
+    const notionContent = getNotionContent();
+    if (typeof notionContent.resolveCoverImageUrl === "function") {
+      return notionContent.resolveCoverImageUrl(candidate, window.location.origin, options);
+    }
+
+    return resolveProxiedDisplayImageUrl(candidate);
+  }
+
+  function buildCoverImageSrcSet(candidate) {
+    const notionContent = getNotionContent();
+    if (typeof notionContent.buildCoverImageSrcSet === "function") {
+      return notionContent.buildCoverImageSrcSet(candidate, window.location.origin);
+    }
+
+    return "";
+  }
+
   function sanitizeCoverBackground(value, fallback = null) {
     if (typeof value !== "string") return fallback;
 
@@ -359,7 +377,9 @@
     normalizePostId,
     parseBookmarkListingHash,
     rememberBlogReturnUrl,
+    buildCoverImageSrcSet,
     resolveDisplayImageUrl,
+    resolveCoverImageUrl,
     resolveProxiedDisplayImageUrl,
     resolveShareImageUrl,
     sanitizeCoverBackground,

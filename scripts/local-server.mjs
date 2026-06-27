@@ -35,6 +35,7 @@ const mimeTypes = new Map([
   [".xml", "application/xml; charset=utf-8"],
 ]);
 const apiHandlerSpecifiers = new Map([
+  ["/api/cover", "../api/cover.js"],
   ["/api/image", "../api/image.js"],
   ["/api/notion", "../api/notion.js"],
   ["/api/post", "../api/post.js"],
@@ -95,17 +96,23 @@ function getApiHandler(pathname) {
 function createApiResponse(res) {
   let statusCode = 200;
   const headers = new Map();
+  let didWriteHead = false;
 
   function setHeader(name, value) {
     headers.set(String(name), value);
   }
 
   function writeHead() {
+    if (didWriteHead) return;
     headers.forEach((value, name) => res.setHeader(name, value));
     res.statusCode = statusCode;
+    didWriteHead = true;
   }
 
   return {
+    get headersSent() {
+      return res.headersSent || didWriteHead;
+    },
     setHeader,
     getHeader(name) {
       return headers.get(String(name)) || headers.get(String(name).toLowerCase());
@@ -126,6 +133,10 @@ function createApiResponse(res) {
       writeHead();
       res.end(payload);
       return payload;
+    },
+    write(payload) {
+      writeHead();
+      return res.write(payload);
     },
     end(payload = "") {
       writeHead();

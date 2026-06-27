@@ -21,6 +21,7 @@ function readNonNegativeEnvInteger(key, fallback) {
 const IMAGE_PROXY_TIMEOUT_MS = readPositiveEnvNumber("IMAGE_PROXY_TIMEOUT_MS", 10_000);
 const IMAGE_PROXY_MAX_BYTES = readPositiveEnvNumber("IMAGE_PROXY_MAX_BYTES", 8 * 1024 * 1024);
 const IMAGE_PROXY_MAX_REDIRECTS = readNonNegativeEnvInteger("IMAGE_PROXY_MAX_REDIRECTS", 4);
+const IMAGE_PROXY_SIGNATURE_SNIFF_BYTES = 256;
 const IMAGE_PROXY_CACHE_CONTROL = "public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400";
 const BLOCKED_IMAGE_CONTENT_TYPES = new Set(["image/svg+xml"]);
 const IMAGE_PROXY_REQUEST_HEADERS = Object.freeze({
@@ -344,6 +345,8 @@ function createImageResponse(response, cleanup) {
     ok: Number(response.statusCode) >= 200 && Number(response.statusCode) < 300,
     status: Number(response.statusCode) || 0,
     headers: createResponseHeaders(response.headers),
+    stream: response,
+    cleanup,
     readBuffer,
     async arrayBuffer() {
       const buffer = await readBuffer();
@@ -468,7 +471,7 @@ function isImageContentType(contentType) {
 // declared MIME. Reject responses whose first bytes look like XML/SVG markup.
 function hasSvgOrXmlSignature(buffer) {
   if (!Buffer.isBuffer(buffer) || buffer.byteLength === 0) return false;
-  const head = buffer.subarray(0, Math.min(256, buffer.byteLength))
+  const head = buffer.subarray(0, Math.min(IMAGE_PROXY_SIGNATURE_SNIFF_BYTES, buffer.byteLength))
     .toString("utf8")
     .replace(/^[﻿\s]+/, "")
     .toLowerCase();
@@ -479,13 +482,21 @@ function hasSvgOrXmlSignature(buffer) {
   );
 }
 
+function readImageContentLength(response) {
+  const rawContentLength = response.headers.get("content-length");
+  if (typeof rawContentLength !== "string" || rawContentLength.trim() === "") {
+    return null;
+  }
+
+  const contentLength = Number(rawContentLength);
+  return Number.isSafeInteger(contentLength) && contentLength >= 0 ? contentLength : null;
+}
+
 async function readBoundedImageBuffer(response) {
-  const contentLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(contentLength) && contentLength > IMAGE_PROXY_MAX_BYTES) {
+  const contentLength = readImageContentLength(response);
+  if (contentLength !== null && contentLength > IMAGE_PROXY_MAX_BYTES) {
     response.discardBody?.();
-    const error = new Error("Image is too large");
-    error.status = 413;
-    throw error;
+    throw createImageProxyError("Image is too large", 413);
   }
 
   if (typeof response.readBuffer === "function") {
@@ -494,15 +505,93 @@ async function readBoundedImageBuffer(response) {
 
   const arrayBuffer = await response.arrayBuffer();
   if (arrayBuffer.byteLength > IMAGE_PROXY_MAX_BYTES) {
-    const error = new Error("Image is too large");
-    error.status = 413;
-    throw error;
+    throw createImageProxyError("Image is too large", 413);
   }
 
   return Buffer.from(arrayBuffer);
 }
 
-module.exports = async function handler(req, res) {
+function pipeKnownLengthImageResponse(response, res) {
+  const stream = response.stream;
+  if (!stream || typeof stream.on !== "function" || typeof res.write !== "function") {
+    return null;
+  }
+
+  return new Promise((resolve, reject) => {
+    const bufferedChunks = [];
+    let bufferedBytes = 0;
+    let totalBytes = 0;
+    let didFlush = false;
+    let settled = false;
+
+    function settle(callback, value) {
+      if (settled) return;
+      settled = true;
+      response.cleanup?.();
+      callback(value);
+    }
+
+    function rejectWith(message, status) {
+      const error = createImageProxyError(message, status);
+      stream.destroy?.(error);
+      settle(reject, error);
+    }
+
+    function flushBufferedChunks() {
+      if (didFlush) return true;
+
+      const headBuffer = Buffer.concat(bufferedChunks, bufferedBytes);
+      if (hasSvgOrXmlSignature(headBuffer)) {
+        rejectWith("Upstream response body looks like SVG/XML despite the declared image MIME type", 415);
+        return false;
+      }
+
+      didFlush = true;
+      res.status(200);
+      for (const chunk of bufferedChunks) {
+        res.write(chunk);
+      }
+      bufferedChunks.length = 0;
+      bufferedBytes = 0;
+      return true;
+    }
+
+    stream.on("data", (chunk) => {
+      if (settled) return;
+
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      totalBytes += buffer.byteLength;
+      if (totalBytes > IMAGE_PROXY_MAX_BYTES) {
+        rejectWith("Image is too large", 413);
+        return;
+      }
+
+      if (!didFlush) {
+        bufferedChunks.push(buffer);
+        bufferedBytes += buffer.byteLength;
+        if (bufferedBytes >= IMAGE_PROXY_SIGNATURE_SNIFF_BYTES) {
+          flushBufferedChunks();
+        }
+        return;
+      }
+
+      res.write(buffer);
+    });
+
+    stream.on("end", () => {
+      if (settled || !flushBufferedChunks()) return;
+
+      res.end();
+      settle(resolve);
+    });
+
+    stream.on("error", (error) => {
+      settle(reject, error);
+    });
+  });
+}
+
+async function handler(req, res) {
   if (rejectUnsupportedReadMethod(req, res)) {
     return undefined;
   }
@@ -546,6 +635,18 @@ module.exports = async function handler(req, res) {
       return res.status(200).end();
     }
 
+    const contentLength = readImageContentLength(response);
+    if (contentLength !== null && contentLength > IMAGE_PROXY_MAX_BYTES) {
+      response.discardBody?.();
+      throw createImageProxyError("Image is too large", 413);
+    }
+
+    const streamingResponse = contentLength !== null ? pipeKnownLengthImageResponse(response, res) : null;
+    if (streamingResponse) {
+      await streamingResponse;
+      return undefined;
+    }
+
     const body = await readBoundedImageBuffer(response);
     if (hasSvgOrXmlSignature(body)) {
       const error = new Error("Upstream response body looks like SVG/XML despite the declared image MIME type");
@@ -555,6 +656,10 @@ module.exports = async function handler(req, res) {
     return res.status(200).send(body);
   } catch (error) {
     const status = Number(error?.status) || (error?.name === "AbortError" ? 504 : 502);
+    if (res.headersSent) {
+      res.end?.();
+      return undefined;
+    }
     res.setHeader("Cache-Control", "no-store");
     return res.status(status).json(
       serializePublicError(error, status === 413 ? "Image too large" : "Image unavailable"),
@@ -562,4 +667,19 @@ module.exports = async function handler(req, res) {
   } finally {
     clearTimeout(timeoutId);
   }
-};
+}
+
+handler.__internal = Object.freeze({
+  createImageProxyError,
+  fetchImageResponse,
+  hasSvgOrXmlSignature,
+  IMAGE_PROXY_CACHE_CONTROL,
+  IMAGE_PROXY_MAX_BYTES,
+  IMAGE_PROXY_TIMEOUT_MS,
+  isImageContentType,
+  normalizeSourceUrl,
+  readBoundedImageBuffer,
+  readImageContentLength,
+});
+
+module.exports = handler;

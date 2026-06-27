@@ -72,6 +72,7 @@ import {
   "scripts/release-check.mjs",
   "scripts/visual-baselines/approve.mjs",
   "scripts/visual-baselines/generate.mjs",
+  "api/cover.js",
   "api/notion.js",
   "api/image.js",
   "api/posts-data.js",
@@ -173,6 +174,7 @@ const smokeCheckModuleSources = [
 ];
 const visualRegressionJs = read("scripts/visual-regression.mjs");
 const apiNotionJs = read("api/notion.js");
+const apiCoverJs = read("api/cover.js");
 const apiImageJs = read("api/image.js");
 const apiPostsDataJs = read("api/posts-data.js");
 const apiPostDataJs = read("api/post-data.js");
@@ -203,6 +205,7 @@ const serverCacheStoreHelpers = loadCommonJsModule("server/cache-store.js");
 const publicContentHelpers = loadCommonJsModule("server/public-content.js");
 const securityPolicyHelpers = loadCommonJsModule("server/security-policy.js");
 const apiNotionHandler = loadCommonJsModule("api/notion.js");
+const apiCoverHandler = loadCommonJsModule("api/cover.js");
 const apiImageHandler = loadCommonJsModule("api/image.js");
 const {
   __test: imageProxyDefaultConfig,
@@ -778,6 +781,16 @@ expectIncludes(notionApiJs, "postSummaryMemoryCache.keys().next().value", "notio
 expectNotIncludes(notionApiJs, "_searchText:", "notion client should not reintroduce derived search text into public summary objects");
 expectNotIncludes(bookmarkJs, "_searchText:", "bookmark manager should not persist derived search text in localStorage");
 expectIncludes(notionContentJs, "IMAGE_PROXY_PATH", "shared notion content should proxy remote display images through the same-origin image endpoint");
+expectIncludes(notionContentUrlJs, "COVER_IMAGE_PATH = \"/api/cover\"", "shared notion URL helpers should expose the cover thumbnail endpoint");
+expectIncludes(notionContentUrlJs, "buildCoverImageSrcSet", "shared notion URL helpers should build responsive cover srcsets");
+expectIncludes(siteUtilsJs, "resolveCoverImageUrl", "SiteUtils should expose cover-specific image URLs");
+expectIncludes(blogPageJs, "COVER_IMAGE_SIZES", "blog cards should declare responsive image sizes for covers");
+expectIncludes(blogPageJs, "imagesrcset", "blog cover preloads should advertise responsive srcsets");
+expectIncludes(blogPageJs, 'srcset="${esc(safeCoverImageSrcSet)}"', "blog cards should render responsive cover srcsets");
+expectIncludes(blogPageJs, 'sizes="${COVER_IMAGE_SIZES}"', "blog cards should render responsive cover sizes");
+expectIncludes(apiCoverJs, "sharp", "cover endpoint should use sharp for real thumbnail generation");
+expectIncludes(apiCoverJs, "COVER_IMAGE_WIDTHS = Object.freeze([320, 640, 960])", "cover endpoint should constrain generated thumbnail widths");
+expectIncludes(apiCoverJs, "COVER_IMAGE_CACHE_CONTROL", "cover endpoint should own a long edge-cache policy for generated thumbnails");
 expectIncludes(apiImageJs, "IMAGE_PROXY_CACHE_CONTROL", "image proxy endpoint should cache successful image responses at the edge");
 expectIncludes(apiImageJs, 'readPositiveEnvNumber("IMAGE_PROXY_TIMEOUT_MS", 10_000)', "image proxy timeout should be configurable while keeping its default");
 expectIncludes(apiImageJs, 'readPositiveEnvNumber("IMAGE_PROXY_MAX_BYTES", 8 * 1024 * 1024)', "image proxy size limit should be configurable while keeping its default");
@@ -813,6 +826,11 @@ expectIncludes(releaseCheckWorkflowYml, "concurrency:", "release workflow should
 expectIncludes(releaseCheckWorkflowYml, "cancel-in-progress: true", "release workflow should cancel in-progress stale runs");
 expectIncludes(releaseCheckWorkflowYml, "timeout-minutes: 10", "release workflow should bound CI runtime");
 expectIncludes(packageJson, '"node": ">=22"', "package engines should require an active LTS Node runtime");
+assert.equal(
+  typeof packageMetadata.dependencies?.sharp,
+  "string",
+  "package.json should keep sharp as a production dependency for cover thumbnail generation",
+);
 expectIncludes(readmeMd, "node-%3E%3D22", "README badge should advertise the supported Node engine floor");
 expectIncludes(readmeMd, "Node.js](https://nodejs.org/) ≥ 22", "README prerequisites should match package engines");
 expectIncludes(siteArchitectureMd, "Node 22/24 matrix", "architecture docs should describe the current release-check Node matrix");
@@ -825,7 +843,9 @@ expectIncludes(localServerJs, 'await loadDotEnvFile(path.join(rootDir, ".env"));
 expectIncludes(localServerJs, 'import { loadDotEnvFile } from "./lib/dotenv.mjs";', "local server should delegate .env parsing to the shared helper");
 const dotenvHelperJs = read("scripts/lib/dotenv.mjs");
 expectIncludes(dotenvHelperJs, "Object.prototype.hasOwnProperty.call(env, key)", "shared dotenv helper should not override shell-provided environment variables with .env values");
+expectIncludes(localServerJs, '["/api/cover", "../api/cover.js"]', "local server should expose the cover thumbnail handler");
 expectIncludes(localServerJs, '["/api/robots", "../api/robots.js"]', "local server should expose the dynamic robots handler");
+expectIncludes(localServerJs, "write(payload)", "local server response shim should support streaming API handlers");
 expectIncludes(localServerJs, "function getApiHandler", "local server should lazy-load API handlers by route");
 expectNotIncludes(localServerJs, '["/api/post", require("../api/post.js")]', "local server should not eager-load every API handler at startup");
 expectIncludes(localServerJs, "function isDeniedStaticPath", "local server should centralize static denylist checks");
@@ -846,6 +866,8 @@ expectIncludes(readmeMd, "npm.cmd run visual:check", "README should document the
 expectIncludes(readmeMd, "VISUAL_STRICT=1", "README should document strict visual regression mode");
 expectIncludes(readmeMd, "npm test` 与 `npm.cmd run check` 等价", "README should document that npm test stays a fast smoke check");
 expectIncludes(readmeMd, "并行运行 smoke suite 和 `VISUAL_STRICT=1`", "README should document parallel strict release checks");
+expectIncludes(readmeMd, "GitHub Actions 当前只跑 `npm run check`", "README should not overstate CI visual coverage");
+expectNotIncludes(readmeMd, "发布与 CI 的严格门禁", "README should describe strict visual checks as local release gating only");
 expectIncludes(siteArchitectureMd, `> Version: ${releaseVersion}`, "architecture docs should match the next release commit");
 expectIncludes(siteArchitectureMd, `Version ${releaseVersion} Highlights`, "architecture docs should describe the current release");
 expectNotIncludes(siteArchitectureMd, "> Version: v4.7", "architecture docs should not keep stale release metadata");
@@ -866,6 +888,9 @@ expectIncludes(siteArchitectureMd, "Do not add a catch-all `/api/*` `Cache-Contr
 expectIncludes(siteArchitectureMd, "up to 200 post summaries in memory", "architecture docs should describe the bounded summary memory cache");
 expectIncludes(siteArchitectureMd, "`blog-page.js` owns the `hashchange` flow for `/blog.html#bookmarks`", "architecture docs should document hash-only bookmark routing ownership");
 expectIncludes(siteArchitectureMd, "`scripts/inject-site-meta.mjs --check` and `scripts/smoke-check.mjs` together make up the `npm.cmd run check` entrypoint", "architecture docs should describe the smoke-check entrypoint");
+expectIncludes(siteArchitectureMd, "which is the GitHub Actions gate across the Node 22/24 matrix", "architecture docs should describe CI as the smoke gate");
+expectIncludes(siteArchitectureMd, "local release contract while the cross-platform visual baseline gap remains tracked", "architecture docs should describe strict visual checks as local release gating only");
+expectNotIncludes(siteArchitectureMd, "same strict command is wired into `.github/workflows/release-check.yml`", "architecture docs should not overstate CI visual coverage");
 expectIncludes(siteArchitectureMd, "`image-proxy.mjs` for `/api/image`", "architecture docs should list focused smoke-check modules");
 expectIncludes(siteArchitectureMd, "`visual-regression.mjs` for real-browser screenshot checks", "architecture docs should describe the visual regression script");
 expectIncludes(siteArchitectureMd, "VISUAL_STRICT=1", "architecture docs should document strict visual regression mode");
@@ -960,6 +985,23 @@ const siteUtilsHarness = loadBrowserScript("js/site-utils.js", {
         proxyUrl.searchParams.set("src", parsed.href);
         return proxyUrl.href;
       },
+      resolveCoverImageUrl: (value, baseOrigin, { width = 640 } = {}) => {
+        if (!value || typeof value !== "string") return null;
+        const parsed = new URL(value, baseOrigin);
+        if (parsed.origin === new URL(baseOrigin).origin) return parsed.href;
+        const coverUrl = new URL("/api/cover", baseOrigin);
+        coverUrl.searchParams.set("src", parsed.href);
+        coverUrl.searchParams.set("w", String(width));
+        return coverUrl.href;
+      },
+      buildCoverImageSrcSet: (value, baseOrigin) => [320, 640, 960]
+        .map((width) => {
+          const coverUrl = new URL("/api/cover", baseOrigin);
+          coverUrl.searchParams.set("src", new URL(value, baseOrigin).href);
+          coverUrl.searchParams.set("w", String(width));
+          return `${coverUrl.href} ${width}w`;
+        })
+        .join(", "),
     },
   },
   document: {
@@ -1031,6 +1073,15 @@ assert.equal(
   siteUtilsHarness.window.SiteUtils.resolveProxiedDisplayImageUrl("https://assets.example.com/cover.png"),
   "https://example.com/api/image?src=https%3A%2F%2Fassets.example.com%2Fcover.png",
   "SiteUtils should expose the shared proxied display image resolver",
+);
+assert.equal(
+  siteUtilsHarness.window.SiteUtils.resolveCoverImageUrl("https://assets.example.com/cover.png", { width: 320 }),
+  "https://example.com/api/cover?src=https%3A%2F%2Fassets.example.com%2Fcover.png&w=320",
+  "SiteUtils should expose the shared cover thumbnail resolver",
+);
+assert.ok(
+  siteUtilsHarness.window.SiteUtils.buildCoverImageSrcSet("https://assets.example.com/cover.png").includes("960w"),
+  "SiteUtils should expose responsive cover thumbnail srcsets",
 );
 const gradientWithCalcPlus = "linear-gradient(135deg, #abc 0%, #def calc(50% + 1px))";
 assert.equal(
@@ -1278,6 +1329,23 @@ assert.equal(
   proxiedDisplayImageUrl.searchParams.get("src"),
   "https://assets.example.com/cover.png?token=1",
   "shared notion content helpers should preserve the upstream remote image URL inside the proxy query",
+);
+const responsiveCoverImageUrl = new URL(
+  notionContentHelpers.resolveCoverImageUrl("https://assets.example.com/cover.png?token=1", "https://example.com", { width: 960 }),
+);
+assert.equal(
+  responsiveCoverImageUrl.pathname,
+  "/api/cover",
+  "shared notion content helpers should send remote card covers through the cover thumbnail path",
+);
+assert.equal(
+  responsiveCoverImageUrl.searchParams.get("w"),
+  "960",
+  "shared notion content helpers should preserve the requested responsive cover width",
+);
+assert.ok(
+  notionContentHelpers.buildCoverImageSrcSet("https://assets.example.com/cover.png", "https://example.com").includes("640w"),
+  "shared notion content helpers should expose responsive card cover srcsets",
 );
 notionBlockFixtures.forEach((fixture) => runNotionBlockFixture(fixture, notionContentHelpers));
 const renderedArticleHtml = normalizeHtml(notionContentHelpers.renderPostArticle({
@@ -2196,6 +2264,8 @@ await runApiContractChecks({
 await runImageProxyChecks({
   assert,
   Buffer,
+  apiCoverHandler,
+  apiCoverJs,
   apiImageHandler,
   apiImageJs,
   createApiResponseRecorder,
