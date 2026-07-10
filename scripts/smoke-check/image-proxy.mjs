@@ -9,298 +9,615 @@ export async function runImageProxyChecks(context) {
     createApiResponseRecorder,
     createImageRequestMock,
     expectIncludes,
+    expectNotIncludes,
     imageProxyDefaultConfig,
     loadCommonJsModule,
     publicImageDnsLookup,
     withEnvOverrides,
   } = context;
 
-expectIncludes(apiCoverJs, "COVER_IMAGE_WIDTHS", "cover endpoint should constrain supported thumbnail widths");
-expectIncludes(apiCoverJs, "acceptsExplicitImageMime", "cover endpoint should respect explicit Accept quality values");
-expectIncludes(apiCoverJs, "optimizeCoverImage", "cover endpoint should generate real resized image assets");
-expectIncludes(apiCoverJs, "sharp.strategy.attention", "cover endpoint should use content-aware crop positioning");
-expectIncludes(apiCoverJs, "Vary\", \"Accept", "cover endpoint should vary automatic output format by Accept");
-expectIncludes(apiImageJs, "IMAGE_PROXY_MAX_BYTES", "image proxy endpoint should bound upstream image size");
-expectIncludes(apiImageJs, "isBlockedImageHost", "image proxy endpoint should reject local and private upstream hosts");
-expectIncludes(apiImageJs, "resolvePublicImageHost", "image proxy endpoint should reject hosts that resolve to private addresses");
-expectIncludes(apiImageJs, "__IMAGE_PROXY_HTTPS_REQUEST__", "image proxy endpoint should bind checked DNS answers to the upstream request");
-expectIncludes(apiImageJs, "lookup(hostname, options, callback)", "image proxy endpoint should use a pinned lookup for the validated upstream host");
-expectIncludes(apiImageJs, "BLOCKED_IMAGE_CONTENT_TYPES", "image proxy endpoint should reject active image formats such as SVG");
-expectIncludes(apiImageJs, "X-Content-Type-Options", "image proxy endpoint should prevent content-type sniffing");
-expectIncludes(apiImageJs, "pipeKnownLengthImageResponse", "image proxy endpoint should stream known-size images after signature sniffing");
-assert.equal(
-  JSON.stringify(imageProxyDefaultConfig),
-  JSON.stringify({
-    IMAGE_PROXY_TIMEOUT_MS: 10_000,
-    IMAGE_PROXY_MAX_BYTES: 8 * 1024 * 1024,
-    IMAGE_PROXY_MAX_REDIRECTS: 4,
-  }),
-  "image proxy endpoint should preserve the documented default limits",
-);
-const imageProxyTunedConfig = withEnvOverrides({
-  IMAGE_PROXY_TIMEOUT_MS: "2500",
-  IMAGE_PROXY_MAX_BYTES: "1048576",
-  IMAGE_PROXY_MAX_REDIRECTS: "1",
-}, () => loadCommonJsModule("api/image.js", [
-  "IMAGE_PROXY_TIMEOUT_MS",
-  "IMAGE_PROXY_MAX_BYTES",
-  "IMAGE_PROXY_MAX_REDIRECTS",
-]).__test);
-assert.equal(
-  JSON.stringify(imageProxyTunedConfig),
-  JSON.stringify({
-    IMAGE_PROXY_TIMEOUT_MS: 2500,
-    IMAGE_PROXY_MAX_BYTES: 1048576,
-    IMAGE_PROXY_MAX_REDIRECTS: 1,
-  }),
-  "image proxy endpoint should allow deployment-specific limit tuning through env vars",
-);
-const imageProxyInvalidEnvConfig = withEnvOverrides({
-  IMAGE_PROXY_TIMEOUT_MS: "0",
-  IMAGE_PROXY_MAX_BYTES: "-1",
-  IMAGE_PROXY_MAX_REDIRECTS: "-1",
-}, () => loadCommonJsModule("api/image.js", [
-  "IMAGE_PROXY_TIMEOUT_MS",
-  "IMAGE_PROXY_MAX_BYTES",
-  "IMAGE_PROXY_MAX_REDIRECTS",
-]).__test);
-assert.equal(
-  JSON.stringify(imageProxyInvalidEnvConfig),
-  JSON.stringify(imageProxyDefaultConfig),
-  "image proxy endpoint should fall back to safe defaults for invalid env limits",
-);
-let imageProxyFetchUrl = "";
-let imageProxyLookupAddress = "";
-const fakeImageBody = Buffer.from("png");
-const successfulImageProxyHandler = loadCommonJsModule("api/image.js", [], {
-  __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
-  __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
-    body: fakeImageBody,
-    headers: {
-      "content-type": "image/png",
-      "content-length": String(fakeImageBody.byteLength),
-    },
-    onRequest(url, options) {
-      imageProxyFetchUrl = String(url);
-      assert.equal(typeof options.lookup, "function", "image proxy endpoint should pin the validated DNS address");
-      options.lookup("assets.example.com", {}, (error, address, family) => {
-        assert.equal(error, null);
-        imageProxyLookupAddress = address;
-        assert.equal(family, 4, "image proxy endpoint should preserve the resolved IP family");
-      });
-    },
-  }),
-});
-const imageProxySuccessRes = createApiResponseRecorder();
-await successfulImageProxyHandler({
-  method: "GET",
-  query: { src: "https://assets.example.com/cover.png" },
-}, imageProxySuccessRes);
-assert.equal(imageProxySuccessRes.statusCode, 200, "image proxy endpoint should return proxied images");
-assert.equal(imageProxyFetchUrl, "https://assets.example.com/cover.png", "image proxy endpoint should fetch the normalized upstream image URL");
-assert.equal(imageProxyLookupAddress, "93.184.216.34", "image proxy endpoint should connect to the DNS answer it already validated");
-assert.equal(imageProxySuccessRes.getHeader("content-type"), "image/png", "image proxy endpoint should preserve upstream image content type");
-assert.ok(
-  imageProxySuccessRes.getHeader("cache-control")?.includes("s-maxage=604800"),
-  "image proxy endpoint should make successful images edge-cacheable",
-);
-assert.ok(Buffer.isBuffer(imageProxySuccessRes.textBody), "image proxy endpoint should send a binary image buffer");
-assert.ok(imageProxySuccessRes.bodyChunks.length > 0, "image proxy endpoint should write successful known-size images as a stream");
-assert.equal(
-  Buffer.compare(imageProxySuccessRes.textBody, fakeImageBody),
-  0,
-  "image proxy endpoint should preserve the proxied image bytes while streaming",
-);
-const coverSourcePng = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEklEQVQImWMQqbgjUnGHAUIBACROBaFWe9NSAAAAAElFTkSuQmCC",
-  "base64",
-);
-let coverProxyFetchUrl = "";
-const successfulCoverHandler = loadCommonJsModule("api/cover.js", [], {
-  __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
-  __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
-    body: coverSourcePng,
-    headers: {
-      "content-type": "image/png",
-      "content-length": String(coverSourcePng.byteLength),
-    },
-    onRequest(url) {
-      coverProxyFetchUrl = String(url);
-    },
-  }),
-});
-const coverProxySuccessRes = createApiResponseRecorder();
-await successfulCoverHandler({
-  method: "GET",
-  headers: { accept: "image/webp,image/*" },
-  query: { src: "https://assets.example.com/cover.png", w: "320" },
-}, coverProxySuccessRes);
-assert.equal(coverProxySuccessRes.statusCode, 200, "cover endpoint should return generated cover thumbnails");
-assert.equal(coverProxyFetchUrl, "https://assets.example.com/cover.png", "cover endpoint should fetch the normalized upstream cover URL");
-assert.equal(coverProxySuccessRes.getHeader("content-type"), "image/webp", "cover endpoint should negotiate WebP when the browser accepts it");
-assert.ok(
-  coverProxySuccessRes.getHeader("cache-control")?.includes("s-maxage=2592000"),
-  "cover endpoint should keep generated thumbnails edge-cacheable for a long window",
-);
-assert.equal(coverProxySuccessRes.getHeader("vary"), "Accept", "cover endpoint should vary cached thumbnails by Accept");
-assert.ok(Buffer.isBuffer(coverProxySuccessRes.textBody), "cover endpoint should send a binary optimized image buffer");
-assert.equal(
-  coverProxySuccessRes.textBody.subarray(8, 12).toString("ascii"),
-  "WEBP",
-  "cover endpoint should send actual WebP bytes",
-);
-const coverProxyQualityFallbackRes = createApiResponseRecorder();
-await successfulCoverHandler({
-  method: "GET",
-  headers: { accept: "image/avif;q=0,image/webp;q=0,image/*" },
-  query: { src: "https://assets.example.com/cover.png", w: "320" },
-}, coverProxyQualityFallbackRes);
-assert.equal(
-  coverProxyQualityFallbackRes.getHeader("content-type"),
-  "image/jpeg",
-  "cover endpoint should not choose AVIF/WebP formats with zero Accept quality",
-);
-assert.deepEqual(
-  [...coverProxyQualityFallbackRes.textBody.subarray(0, 3)],
-  [0xff, 0xd8, 0xff],
-  "cover endpoint should fall back to actual JPEG bytes when modern formats are unacceptable",
-);
-const coverProxyInvalidWidthRes = createApiResponseRecorder();
-await successfulCoverHandler({
-  method: "GET",
-  headers: { accept: "image/webp,image/*" },
-  query: { src: "https://assets.example.com/cover.png", w: "123" },
-}, coverProxyInvalidWidthRes);
-assert.equal(coverProxyInvalidWidthRes.statusCode, 400, "cover endpoint should reject unsupported thumbnail widths");
-assert.equal(coverProxyInvalidWidthRes.getHeader("cache-control"), "no-store", "invalid cover requests should not be cached");
-const svgImageProxyHandler = loadCommonJsModule("api/image.js", [], {
-  __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
-  __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
-    body: Buffer.from("<svg></svg>"),
-    headers: {
-      "content-type": "image/svg+xml; charset=utf-8",
-      "content-length": "11",
-    },
-  }),
-});
-const imageProxySvgRes = createApiResponseRecorder();
-await svgImageProxyHandler({
-  method: "GET",
-  query: { src: "https://assets.example.com/active.svg" },
-}, imageProxySvgRes);
-assert.equal(imageProxySvgRes.statusCode, 415, "image proxy endpoint should reject active SVG images");
-assert.equal(imageProxySvgRes.getHeader("cache-control"), "no-store", "rejected SVG proxy responses should not be cached");
-const disguisedSvgBody = Buffer.from('<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"><script>1</script></svg>');
-const disguisedSvgProxyHandler = loadCommonJsModule("api/image.js", [], {
-  __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
-  __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
-    body: disguisedSvgBody,
-    headers: {
-      "content-type": "image/png",
-      "content-length": String(disguisedSvgBody.byteLength),
-    },
-  }),
-});
-const imageProxyDisguisedSvgRes = createApiResponseRecorder();
-await disguisedSvgProxyHandler({
-  method: "GET",
-  query: { src: "https://assets.example.com/disguised.png" },
-}, imageProxyDisguisedSvgRes);
-assert.equal(
-  imageProxyDisguisedSvgRes.statusCode,
-  415,
-  "image proxy endpoint should reject bodies whose magic bytes look like SVG/XML even when Content-Type claims a raster format",
-);
-assert.equal(
-  imageProxyDisguisedSvgRes.getHeader("cache-control"),
-  "no-store",
-  "disguised SVG rejections should not be cached",
-);
-expectIncludes(apiImageJs, "hasSvgOrXmlSignature", "image proxy endpoint should sniff response body for XML/SVG signatures regardless of declared MIME type");
-let blockedImageProxyFetchCount = 0;
-const blockedImageProxyHandler = loadCommonJsModule("api/image.js", [], {
-  __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
-  __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
-    onRequest() {
-      blockedImageProxyFetchCount += 1;
-      throw new Error("Blocked image URL should not be fetched");
-    },
-  }),
-});
-const imageProxyBlockedRes = createApiResponseRecorder();
-await blockedImageProxyHandler({
-  method: "GET",
-  query: { src: "https://127.0.0.1/private.png" },
-}, imageProxyBlockedRes);
-assert.equal(imageProxyBlockedRes.statusCode, 400, "image proxy endpoint should reject private upstream hosts");
-assert.equal(blockedImageProxyFetchCount, 0, "image proxy endpoint should reject private hosts before fetching");
-const imageProxyBlockedIpv6Res = createApiResponseRecorder();
-await blockedImageProxyHandler({
-  method: "GET",
-  query: { src: "https://[::1]/private.png" },
-}, imageProxyBlockedIpv6Res);
-assert.equal(imageProxyBlockedIpv6Res.statusCode, 400, "image proxy endpoint should reject IPv6 loopback upstream hosts");
-assert.equal(blockedImageProxyFetchCount, 0, "image proxy endpoint should reject blocked IPv6 hosts before fetching");
-const imageProxyBlockedMappedIpv6Res = createApiResponseRecorder();
-await blockedImageProxyHandler({
-  method: "GET",
-  query: { src: "https://[::ffff:127.0.0.1]/private.png" },
-}, imageProxyBlockedMappedIpv6Res);
-assert.equal(imageProxyBlockedMappedIpv6Res.statusCode, 400, "image proxy endpoint should reject IPv4-mapped IPv6 upstream hosts");
-assert.equal(blockedImageProxyFetchCount, 0, "image proxy endpoint should reject blocked IPv4-mapped IPv6 hosts before fetching");
-const dnsBlockedImageProxyHandler = loadCommonJsModule("api/image.js", [], {
-  __IMAGE_PROXY_DNS_LOOKUP__: async () => [{ address: "10.0.0.8", family: 4 }],
-  __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
-    onRequest() {
-      throw new Error("DNS-blocked image URL should not be fetched");
-    },
-  }),
-});
-const imageProxyDnsBlockedRes = createApiResponseRecorder();
-await dnsBlockedImageProxyHandler({
-  method: "GET",
-  query: { src: "https://assets.example.com/private.png" },
-}, imageProxyDnsBlockedRes);
-assert.equal(imageProxyDnsBlockedRes.statusCode, 400, "image proxy endpoint should reject upstream hosts whose DNS resolves to private addresses");
-const mappedDnsBlockedImageProxyHandler = loadCommonJsModule("api/image.js", [], {
-  __IMAGE_PROXY_DNS_LOOKUP__: async () => [{ address: "::ffff:10.0.0.8", family: 6 }],
-  __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
-    onRequest() {
-      throw new Error("DNS-blocked IPv4-mapped image URL should not be fetched");
-    },
-  }),
-});
-const imageProxyMappedDnsBlockedRes = createApiResponseRecorder();
-await mappedDnsBlockedImageProxyHandler({
-  method: "GET",
-  query: { src: "https://assets.example.com/private.png" },
-}, imageProxyMappedDnsBlockedRes);
-assert.equal(imageProxyMappedDnsBlockedRes.statusCode, 400, "image proxy endpoint should reject DNS answers with private IPv4 embedded in IPv6");
-let redirectImageProxyFetchCount = 0;
-const redirectBlockedImageProxyHandler = loadCommonJsModule("api/image.js", [], {
-  __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
-  __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
-    status: 302,
-    headers: {
-      location: "https://[::1]/private.png",
-    },
-    onRequest() {
-      redirectImageProxyFetchCount += 1;
-    },
-  }),
-});
-const imageProxyRedirectBlockedRes = createApiResponseRecorder();
-await redirectBlockedImageProxyHandler({
-  method: "GET",
-  query: { src: "https://assets.example.com/redirect.png" },
-}, imageProxyRedirectBlockedRes);
-assert.equal(imageProxyRedirectBlockedRes.statusCode, 400, "image proxy endpoint should reject redirects to blocked hosts");
-assert.equal(redirectImageProxyFetchCount, 1, "image proxy endpoint should stop before fetching a blocked redirect target");
-const imageProxyMethodRes = createApiResponseRecorder();
-await apiImageHandler({ method: "POST", query: { src: "https://assets.example.com/cover.png" } }, imageProxyMethodRes);
-assert.equal(imageProxyMethodRes.statusCode, 405, "image proxy endpoint should reject unsupported methods");
-const coverProxyMethodRes = createApiResponseRecorder();
-await apiCoverHandler({ method: "POST", query: { src: "https://assets.example.com/cover.png" } }, coverProxyMethodRes);
-assert.equal(coverProxyMethodRes.statusCode, 405, "cover endpoint should reject unsupported methods");
+  const signingEnv = {
+    IMAGE_PROXY_SIGNING_SECRET: "smoke-test-image-signing-secret-v1",
+    NOTION_TOKEN: null,
+  };
+  const coverSourcePng = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEklEQVQImWMQqbgjUnGHAUIBACROBaFWe9NSAAAAAElFTkSuQmCC",
+    "base64",
+  );
 
+  function loadSignedModule(relativePath, sandboxOverrides = {}, envOverrides = {}) {
+    return withEnvOverrides({ ...signingEnv, ...envOverrides }, () => {
+      const sourcePolicy = loadCommonJsModule("server/image-source-policy.js");
+      return {
+        handler: loadCommonJsModule(relativePath, [], sandboxOverrides),
+        sign: sourcePolicy.createImageSourceSignature,
+      };
+    });
+  }
+
+  expectIncludes(apiCoverJs, "COVER_IMAGE_WIDTHS", "cover endpoint should constrain supported thumbnail widths");
+  expectIncludes(apiCoverJs, "readAcceptedQuality", "cover endpoint should negotiate explicit Accept quality values");
+  expectIncludes(apiCoverJs, "optimizeCoverImage", "cover endpoint should generate real resized image assets");
+  expectIncludes(apiCoverJs, "sharp.strategy.attention", "cover endpoint should use content-aware crop positioning");
+  expectIncludes(apiCoverJs, "../server/image-proxy", "cover endpoint should reuse the shared image fetch service");
+  expectIncludes(apiImageJs, "../server/image-proxy", "image endpoint should delegate SSRF and upstream I/O to the shared service");
+  expectIncludes(apiImageJs, "detectRasterImageMediaType", "image endpoint should validate raster magic bytes");
+  expectIncludes(apiImageJs, "authorizeImageSourceQuery", "image endpoint should require server-issued source signatures");
+  expectIncludes(apiImageJs, "createFixedWindowRateLimiter", "image endpoint should bound per-client origin work");
+  expectNotIncludes(apiCoverJs, "imageProxyHandler.__internal", "cover endpoint should not depend on another API handler's internals");
+
+  assert.deepEqual(
+    { ...imageProxyDefaultConfig },
+    {
+      IMAGE_PROXY_TIMEOUT_MS: 10_000,
+      IMAGE_PROXY_MAX_BYTES: 8 * 1024 * 1024,
+      IMAGE_PROXY_MAX_REDIRECTS: 4,
+    },
+    "image proxy service should preserve the documented default limits",
+  );
+  const imageProxyTunedConfig = withEnvOverrides({
+    IMAGE_PROXY_TIMEOUT_MS: "2500",
+    IMAGE_PROXY_MAX_BYTES: "1048576",
+    IMAGE_PROXY_MAX_REDIRECTS: "1",
+  }, () => loadCommonJsModule("server/image-proxy.js", [
+    "IMAGE_PROXY_TIMEOUT_MS",
+    "IMAGE_PROXY_MAX_BYTES",
+    "IMAGE_PROXY_MAX_REDIRECTS",
+  ]).__test);
+  assert.deepEqual(
+    { ...imageProxyTunedConfig },
+    {
+      IMAGE_PROXY_TIMEOUT_MS: 2500,
+      IMAGE_PROXY_MAX_BYTES: 1048576,
+      IMAGE_PROXY_MAX_REDIRECTS: 1,
+    },
+    "image proxy service should allow deployment-specific limit tuning through env vars",
+  );
+  const imageProxyInvalidEnvConfig = withEnvOverrides({
+    IMAGE_PROXY_TIMEOUT_MS: "0",
+    IMAGE_PROXY_MAX_BYTES: "-1",
+    IMAGE_PROXY_MAX_REDIRECTS: "-1",
+  }, () => loadCommonJsModule("server/image-proxy.js", [
+    "IMAGE_PROXY_TIMEOUT_MS",
+    "IMAGE_PROXY_MAX_BYTES",
+    "IMAGE_PROXY_MAX_REDIRECTS",
+  ]).__test);
+  assert.deepEqual(
+    { ...imageProxyInvalidEnvConfig },
+    { ...imageProxyDefaultConfig },
+    "image proxy service should fall back to safe defaults for invalid env limits",
+  );
+
+  const imageFormatHelpers = loadCommonJsModule("server/image-format.js");
+  assert.equal(imageFormatHelpers.detectRasterImageMediaType(coverSourcePng), "image/png");
+  assert.equal(
+    imageFormatHelpers.detectRasterImageMediaType(Buffer.from([0xff, 0xd8, 0xff, 0x00])),
+    "image/jpeg",
+  );
+  assert.equal(
+    imageFormatHelpers.detectRasterImageMediaType(Buffer.from([
+      0x52, 0x49, 0x46, 0x46,
+      0x0c, 0x00, 0x00, 0x00,
+      0x57, 0x45, 0x42, 0x50,
+      0x56, 0x50, 0x38, 0x58,
+    ])),
+    "image/webp",
+  );
+  assert.equal(
+    imageFormatHelpers.detectRasterImageMediaType(Buffer.from("BMnot-a-bitmap", "ascii")),
+    "",
+    "short BMP-like text should not pass raster validation",
+  );
+  assert.equal(
+    imageFormatHelpers.normalizeDeclaredImageMediaType("image/apng"),
+    "image/png",
+    "safe raster aliases should normalize to the canonical response type",
+  );
+  assert.equal(
+    imageFormatHelpers.detectRasterImageMediaType(Buffer.from('{"not":"an image"}')),
+    "",
+    "raster detection should reject arbitrary bytes even when an upstream MIME claims image content",
+  );
+
+  const signedPolicy = withEnvOverrides(signingEnv, () => (
+    loadCommonJsModule("server/image-source-policy.js")
+  ));
+  const signedSource = "https://assets.example.com/cover.png?token=1";
+  const sourceSignature = signedPolicy.createImageSourceSignature(signedSource);
+  assert.equal(sourceSignature.length, 43, "image source signatures should use fixed-length base64url HMACs");
+  assert.equal(signedPolicy.verifyImageSourceSignature(signedSource, sourceSignature), true);
+  assert.equal(signedPolicy.verifyImageSourceSignature(`${signedSource}x`, sourceSignature), false);
+  assert.equal(
+    signedPolicy.verifyImageSourceSignature(signedSource, ` ${sourceSignature}`),
+    false,
+    "signature verification should reject non-canonical whitespace variants",
+  );
+  const weakSecretPolicy = withEnvOverrides({
+    IMAGE_PROXY_SIGNING_SECRET: "too-short",
+    NOTION_TOKEN: "fallback-notion-token-that-is-long-enough-to-sign",
+  }, () => loadCommonJsModule("server/image-source-policy.js"));
+  assert.equal(
+    weakSecretPolicy.isImageProxySigningConfigured(),
+    false,
+    "an explicitly configured weak signing secret should fail closed instead of silently changing keys",
+  );
+  const signedSummary = signedPolicy.withCoverImageSignature({ coverImage: signedSource });
+  assert.equal(
+    signedPolicy.verifyImageSourceSignature(signedSource, signedSummary.coverImageSignature),
+    true,
+    "public post summaries should carry a valid cover source signature",
+  );
+  const [signedImageBlock] = signedPolicy.withBlockImageSignatures([{
+    type: "image",
+    url: signedSource,
+  }]);
+  assert.equal(
+    signedPolicy.verifyImageSourceSignature(signedSource, signedImageBlock.imageProxySignature),
+    true,
+    "mapped article image blocks should carry a valid proxy signature",
+  );
+
+  const requestGuardHelpers = loadCommonJsModule("server/request-guard.js");
+  const limiter = requestGuardHelpers.createFixedWindowRateLimiter({ limit: 2, windowMs: 1_000 });
+  assert.equal(limiter.consume("client", 100).allowed, true);
+  assert.equal(limiter.consume("client", 200).allowed, true);
+  assert.equal(limiter.consume("client", 300).allowed, false);
+  assert.equal(limiter.consume("client", 1_101).allowed, true, "rate limits should reset after their bounded window");
+  const gate = requestGuardHelpers.createConcurrencyGate(1);
+  const releaseGate = gate.tryAcquire();
+  assert.equal(typeof releaseGate, "function");
+  assert.equal(gate.tryAcquire(), null, "concurrency gates should fail fast when saturated");
+  releaseGate();
+  assert.equal(typeof gate.tryAcquire(), "function", "concurrency capacity should return after release");
+
+  let imageProxyFetchUrl = "";
+  let imageProxyLookupAddress = "";
+  const successfulImageModule = loadSignedModule("api/image.js", {
+    __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
+    __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
+      body: coverSourcePng,
+      headers: {
+        "content-type": "image/png",
+        "content-length": String(coverSourcePng.byteLength),
+      },
+      onRequest(url, options) {
+        imageProxyFetchUrl = String(url);
+        assert.equal(options.autoSelectFamily, true, "validated DNS answers should retain IPv4/IPv6 fallback support");
+        assert.equal(typeof options.lookup, "function", "image proxy endpoint should pin the validated DNS address");
+        options.lookup("assets.example.com", {}, (error, address, family) => {
+          assert.equal(error, null);
+          imageProxyLookupAddress = address;
+          assert.equal(family, 4);
+        });
+        options.lookup("assets.example.com", { all: true }, (error, addresses) => {
+          assert.equal(error, null);
+          assert.equal(addresses.length, 1);
+          assert.equal(addresses[0].address, "93.184.216.34");
+          assert.equal(addresses[0].family, 4);
+        });
+      },
+    }),
+  });
+  const imageProxySuccessRes = createApiResponseRecorder();
+  const successfulImageUrl = "https://assets.example.com/cover.png";
+  await successfulImageModule.handler({
+    method: "GET",
+    headers: { "x-forwarded-for": "203.0.113.10" },
+    query: {
+      src: successfulImageUrl,
+      sig: successfulImageModule.sign(successfulImageUrl),
+    },
+  }, imageProxySuccessRes);
+  assert.equal(imageProxySuccessRes.statusCode, 200);
+  assert.equal(imageProxyFetchUrl, successfulImageUrl);
+  assert.equal(imageProxyLookupAddress, "93.184.216.34");
+  assert.equal(imageProxySuccessRes.getHeader("content-type"), "image/png");
+  assert.ok(imageProxySuccessRes.getHeader("cache-control")?.includes("s-maxage=604800"));
+  assert.equal(Buffer.compare(imageProxySuccessRes.textBody, coverSourcePng), 0);
+  const imageProxyHeadRes = createApiResponseRecorder();
+  await successfulImageModule.handler({
+    method: "HEAD",
+    headers: { "x-forwarded-for": "203.0.113.11" },
+    query: {
+      src: successfulImageUrl,
+      sig: successfulImageModule.sign(successfulImageUrl),
+    },
+  }, imageProxyHeadRes);
+  assert.equal(imageProxyHeadRes.statusCode, 200);
+  assert.equal(imageProxyHeadRes.getHeader("content-type"), "image/png");
+  assert.equal(imageProxyHeadRes.getHeader("content-length"), String(coverSourcePng.byteLength));
+  assert.equal(imageProxyHeadRes.textBody, "", "HEAD should validate the GET representation without returning its body");
+
+  let unsignedFetchCount = 0;
+  const unsignedImageModule = loadSignedModule("api/image.js", {
+    __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
+    __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
+      onRequest() {
+        unsignedFetchCount += 1;
+      },
+    }),
+  });
+  const unsignedImageRes = createApiResponseRecorder();
+  await unsignedImageModule.handler({
+    method: "GET",
+    headers: {},
+    query: { src: successfulImageUrl },
+  }, unsignedImageRes);
+  assert.equal(unsignedImageRes.statusCode, 403);
+  assert.equal(unsignedImageRes.getHeader("content-type"), "application/json; charset=utf-8");
+  assert.equal(unsignedFetchCount, 0, "unsigned sources should be rejected before DNS or upstream I/O");
+
+  const duplicateSourceRes = createApiResponseRecorder();
+  await unsignedImageModule.handler({
+    method: "GET",
+    headers: {},
+    query: {
+      src: [successfulImageUrl, successfulImageUrl],
+      sig: unsignedImageModule.sign(successfulImageUrl),
+    },
+  }, duplicateSourceRes);
+  assert.equal(duplicateSourceRes.statusCode, 400, "duplicated signed query fields should be rejected");
+  assert.equal(unsignedFetchCount, 0);
+
+  const nonCanonicalSourceRes = createApiResponseRecorder();
+  await unsignedImageModule.handler({
+    method: "GET",
+    headers: {},
+    query: {
+      src: ` ${successfulImageUrl}`,
+      sig: unsignedImageModule.sign(successfulImageUrl),
+    },
+  }, nonCanonicalSourceRes);
+  assert.equal(nonCanonicalSourceRes.statusCode, 400, "non-canonical source variants should not fragment the cache key");
+  assert.equal(unsignedFetchCount, 0);
+
+  const strictQueryRes = createApiResponseRecorder();
+  await unsignedImageModule.handler({
+    method: "GET",
+    headers: {},
+    query: {
+      cacheBust: "1",
+      src: successfulImageUrl,
+      sig: unsignedImageModule.sign(successfulImageUrl),
+    },
+  }, strictQueryRes);
+  assert.equal(strictQueryRes.statusCode, 400, "unexpected query keys should not bypass the canonical CDN cache key");
+  assert.equal(unsignedFetchCount, 0);
+
+  let limitedFetchCount = 0;
+  const limitedImageModule = loadSignedModule("api/image.js", {
+    __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
+    __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
+      body: coverSourcePng,
+      headers: {
+        "content-type": "image/png",
+        "content-length": String(coverSourcePng.byteLength),
+      },
+      onRequest() {
+        limitedFetchCount += 1;
+      },
+    }),
+  }, {
+    IMAGE_PROXY_RATE_LIMIT_PER_MINUTE: "1",
+  });
+  const limitedQuery = {
+    src: successfulImageUrl,
+    sig: limitedImageModule.sign(successfulImageUrl),
+  };
+  await limitedImageModule.handler({
+    method: "GET",
+    headers: { "x-forwarded-for": "203.0.113.20" },
+    query: limitedQuery,
+  }, createApiResponseRecorder());
+  const rateLimitedRes = createApiResponseRecorder();
+  await limitedImageModule.handler({
+    method: "GET",
+    headers: { "x-forwarded-for": "203.0.113.20" },
+    query: limitedQuery,
+  }, rateLimitedRes);
+  assert.equal(rateLimitedRes.statusCode, 429);
+  assert.equal(rateLimitedRes.getHeader("retry-after"), "60");
+  assert.equal(limitedFetchCount, 1, "rate-limited requests should not perform upstream work");
+
+  const unconfiguredImageHandler = withEnvOverrides({
+    IMAGE_PROXY_SIGNING_SECRET: null,
+    NOTION_TOKEN: null,
+  }, () => loadCommonJsModule("api/image.js"));
+  const unconfiguredImageRes = createApiResponseRecorder();
+  await unconfiguredImageHandler({ method: "GET", headers: {}, query: { src: successfulImageUrl } }, unconfiguredImageRes);
+  assert.equal(unconfiguredImageRes.statusCode, 503, "image proxy should fail closed when no signing key is configured");
+
+  const dnsTimeoutModule = loadSignedModule("api/image.js", {
+    __IMAGE_PROXY_DNS_LOOKUP__: () => new Promise(() => {}),
+    __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
+      onRequest() {
+        throw new Error("a timed-out DNS lookup must not start an upstream request");
+      },
+    }),
+  }, {
+    IMAGE_PROXY_TIMEOUT_MS: "20",
+  });
+  const dnsTimeoutRes = createApiResponseRecorder();
+  await dnsTimeoutModule.handler({
+    method: "GET",
+    headers: {},
+    query: {
+      src: successfulImageUrl,
+      sig: dnsTimeoutModule.sign(successfulImageUrl),
+    },
+  }, dnsTimeoutRes);
+  assert.equal(dnsTimeoutRes.statusCode, 504, "the request timeout should include initial DNS resolution");
+
+  const successfulCoverModule = loadSignedModule("api/cover.js", {
+    __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
+    __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
+      body: coverSourcePng,
+      headers: {
+        "content-type": "image/png",
+        "content-length": String(coverSourcePng.byteLength),
+      },
+    }),
+  });
+  const coverProxySuccessRes = createApiResponseRecorder();
+  await successfulCoverModule.handler({
+    method: "GET",
+    headers: { accept: "image/avif;q=0.4,image/webp;q=1,image/*;q=0.2" },
+    query: {
+      src: successfulImageUrl,
+      sig: successfulCoverModule.sign(successfulImageUrl),
+      w: "320",
+    },
+  }, coverProxySuccessRes);
+  assert.equal(coverProxySuccessRes.statusCode, 200);
+  assert.equal(coverProxySuccessRes.getHeader("content-type"), "image/webp", "higher Accept quality should beat server format preference");
+  assert.ok(coverProxySuccessRes.getHeader("cache-control")?.includes("s-maxage=2592000"));
+  assert.equal(coverProxySuccessRes.getHeader("vary"), "Accept");
+  assert.equal(coverProxySuccessRes.textBody.subarray(8, 12).toString("ascii"), "WEBP");
+  const coverProxyHeadRes = createApiResponseRecorder();
+  await successfulCoverModule.handler({
+    method: "HEAD",
+    headers: { accept: "image/webp", "x-forwarded-for": "203.0.113.12" },
+    query: {
+      src: successfulImageUrl,
+      sig: successfulCoverModule.sign(successfulImageUrl),
+      w: "320",
+    },
+  }, coverProxyHeadRes);
+  assert.equal(coverProxyHeadRes.statusCode, 200);
+  assert.equal(coverProxyHeadRes.getHeader("content-type"), "image/webp");
+  assert.ok(Number(coverProxyHeadRes.getHeader("content-length")) > 0);
+  assert.equal(coverProxyHeadRes.textBody, "", "cover HEAD should run the real transform without returning a body");
+
+  const duplicateCoverParameterRes = createApiResponseRecorder();
+  await successfulCoverModule.handler({
+    method: "GET",
+    headers: { accept: "image/webp" },
+    query: {
+      src: successfulImageUrl,
+      sig: successfulCoverModule.sign(successfulImageUrl),
+      w: ["320", "640"],
+    },
+  }, duplicateCoverParameterRes);
+  assert.equal(duplicateCoverParameterRes.statusCode, 400, "duplicate optional cover parameters should be rejected");
+  for (const nonCanonicalQuery of [
+    { w: "0320" },
+    { w: "" },
+    { format: "auto", w: "320" },
+    { format: "JPEG", w: "320" },
+  ]) {
+    const nonCanonicalCoverRes = createApiResponseRecorder();
+    await successfulCoverModule.handler({
+      method: "GET",
+      headers: { accept: "image/webp" },
+      query: {
+        src: successfulImageUrl,
+        sig: successfulCoverModule.sign(successfulImageUrl),
+        ...nonCanonicalQuery,
+      },
+    }, nonCanonicalCoverRes);
+    assert.equal(
+      nonCanonicalCoverRes.statusCode,
+      400,
+      "cover variants should use one canonical query representation",
+    );
+  }
+
+  const explicitJpegRes = createApiResponseRecorder();
+  await successfulCoverModule.handler({
+    method: "GET",
+    headers: { accept: "image/avif" },
+    query: {
+      format: "jpeg",
+      src: successfulImageUrl,
+      sig: successfulCoverModule.sign(successfulImageUrl),
+      w: "320",
+    },
+  }, explicitJpegRes);
+  assert.equal(explicitJpegRes.getHeader("content-type"), "image/jpeg");
+  assert.equal(explicitJpegRes.getHeader("vary"), undefined, "explicit formats should not retain a stale Accept variance");
+  assert.deepEqual([...explicitJpegRes.textBody.subarray(0, 3)], [0xff, 0xd8, 0xff]);
+
+  const coverNotAcceptableRes = createApiResponseRecorder();
+  await successfulCoverModule.handler({
+    method: "GET",
+    headers: { accept: "image/avif;q=0,image/webp;q=0,image/jpeg;q=0" },
+    query: {
+      src: successfulImageUrl,
+      sig: successfulCoverModule.sign(successfulImageUrl),
+      w: "320",
+    },
+  }, coverNotAcceptableRes);
+  assert.equal(coverNotAcceptableRes.statusCode, 406);
+  assert.equal(coverNotAcceptableRes.getHeader("content-type"), "application/json; charset=utf-8");
+
+  const invalidRasterBody = Buffer.from('{"error":"not an image"}');
+  const invalidRasterImageModule = loadSignedModule("api/image.js", {
+    __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
+    __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
+      body: invalidRasterBody,
+      headers: {
+        "content-type": "image/png",
+        "content-length": String(invalidRasterBody.byteLength),
+      },
+    }),
+  });
+  const invalidRasterImageRes = createApiResponseRecorder();
+  await invalidRasterImageModule.handler({
+    method: "GET",
+    headers: {},
+    query: {
+      src: successfulImageUrl,
+      sig: invalidRasterImageModule.sign(successfulImageUrl),
+    },
+  }, invalidRasterImageRes);
+  assert.equal(invalidRasterImageRes.statusCode, 415);
+  assert.equal(invalidRasterImageRes.getHeader("content-type"), "application/json; charset=utf-8");
+  assert.equal(invalidRasterImageRes.getHeader("cache-control"), "no-store");
+  const invalidRasterHeadRes = createApiResponseRecorder();
+  await invalidRasterImageModule.handler({
+    method: "HEAD",
+    headers: {},
+    query: {
+      src: successfulImageUrl,
+      sig: invalidRasterImageModule.sign(successfulImageUrl),
+    },
+  }, invalidRasterHeadRes);
+  assert.equal(invalidRasterHeadRes.statusCode, 415, "HEAD must not bypass raw raster validation");
+
+  const invalidCoverModule = loadSignedModule("api/cover.js", {
+    __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
+    __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
+      body: invalidRasterBody,
+      headers: {
+        "content-type": "image/png",
+        "content-length": String(invalidRasterBody.byteLength),
+      },
+    }),
+  });
+  const invalidCoverRes = createApiResponseRecorder();
+  await invalidCoverModule.handler({
+    method: "GET",
+    headers: { accept: "image/webp" },
+    query: {
+      src: successfulImageUrl,
+      sig: invalidCoverModule.sign(successfulImageUrl),
+      w: "320",
+    },
+  }, invalidCoverRes);
+  assert.equal(invalidCoverRes.statusCode, 415);
+  assert.equal(invalidCoverRes.getHeader("content-type"), "application/json; charset=utf-8");
+  assert.equal(invalidCoverRes.getHeader("vary"), undefined);
+  assert.equal(invalidCoverRes.getHeader("content-length"), undefined);
+  const invalidCoverHeadRes = createApiResponseRecorder();
+  await invalidCoverModule.handler({
+    method: "HEAD",
+    headers: { accept: "image/webp" },
+    query: {
+      src: successfulImageUrl,
+      sig: invalidCoverModule.sign(successfulImageUrl),
+      w: "320",
+    },
+  }, invalidCoverHeadRes);
+  assert.equal(invalidCoverHeadRes.statusCode, 415, "HEAD must not bypass cover source validation");
+
+  let blockedFetchCount = 0;
+  const blockedImageModule = loadSignedModule("api/image.js", {
+    __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
+    __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
+      onRequest() {
+        blockedFetchCount += 1;
+      },
+    }),
+  });
+  for (const blockedUrl of [
+    "https://127.0.0.1/private.png",
+    "https://2130706433/private.png",
+    "https://0x7f000001/private.png",
+    "https://subdomain.localhost/private.png",
+    "https://[::1]/private.png",
+    "https://[::ffff:127.0.0.1]/private.png",
+  ]) {
+    const blockedRes = createApiResponseRecorder();
+    await blockedImageModule.handler({
+      method: "GET",
+      headers: {},
+      query: {
+        src: blockedUrl,
+        sig: blockedImageModule.sign(blockedUrl),
+      },
+    }, blockedRes);
+    assert.equal(blockedRes.statusCode, 400);
+  }
+  assert.equal(blockedFetchCount, 0, "private hosts should be rejected before upstream I/O");
+  const imageProxyHelpers = loadCommonJsModule("server/image-proxy.js");
+  for (const reservedAddress of [
+    "192.0.2.1",
+    "198.18.0.1",
+    "198.51.100.1",
+    "203.0.113.1",
+    "2001:db8::1",
+    "3fff::1",
+  ]) {
+    assert.equal(
+      imageProxyHelpers.isBlockedIpAddress(reservedAddress),
+      true,
+      `${reservedAddress} should not be treated as a public image origin`,
+    );
+  }
+  assert.equal(imageProxyHelpers.isBlockedIpAddress("93.184.216.34"), false);
+  assert.equal(imageProxyHelpers.isBlockedIpAddress("2606:4700:4700::1111"), false);
+  assert.equal(
+    imageProxyHelpers.getImageProxyErrorStatus({ status: 304 }),
+    502,
+    "non-error upstream status codes should not become invalid JSON error responses",
+  );
+
+  const dnsBlockedModule = loadSignedModule("api/image.js", {
+    __IMAGE_PROXY_DNS_LOOKUP__: async () => [{ address: "10.0.0.8", family: 4 }],
+    __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
+      onRequest() {
+        throw new Error("DNS-blocked image URL should not be fetched");
+      },
+    }),
+  });
+  const dnsBlockedRes = createApiResponseRecorder();
+  await dnsBlockedModule.handler({
+    method: "GET",
+    headers: {},
+    query: {
+      src: successfulImageUrl,
+      sig: dnsBlockedModule.sign(successfulImageUrl),
+    },
+  }, dnsBlockedRes);
+  assert.equal(dnsBlockedRes.statusCode, 400);
+
+  let redirectFetchCount = 0;
+  const redirectBlockedModule = loadSignedModule("api/image.js", {
+    __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
+    __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
+      status: 302,
+      headers: { location: "https://[::1]/private.png" },
+      onRequest() {
+        redirectFetchCount += 1;
+      },
+    }),
+  });
+  const redirectBlockedRes = createApiResponseRecorder();
+  await redirectBlockedModule.handler({
+    method: "GET",
+    headers: {},
+    query: {
+      src: successfulImageUrl,
+      sig: redirectBlockedModule.sign(successfulImageUrl),
+    },
+  }, redirectBlockedRes);
+  assert.equal(redirectBlockedRes.statusCode, 400);
+  assert.equal(redirectFetchCount, 1, "blocked redirect targets should not receive a second request");
+
+  const imageProxyMethodRes = createApiResponseRecorder();
+  await apiImageHandler({ method: "POST", query: {} }, imageProxyMethodRes);
+  assert.equal(imageProxyMethodRes.statusCode, 405);
+  const coverProxyMethodRes = createApiResponseRecorder();
+  await apiCoverHandler({ method: "POST", query: {} }, coverProxyMethodRes);
+  assert.equal(coverProxyMethodRes.statusCode, 405);
 }

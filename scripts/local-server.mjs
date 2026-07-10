@@ -99,12 +99,20 @@ function createApiResponse(res) {
   let didWriteHead = false;
 
   function setHeader(name, value) {
-    headers.set(String(name), value);
+    const normalizedName = String(name).toLowerCase();
+    headers.set(normalizedName, {
+      name: String(name),
+      value,
+    });
+  }
+
+  function removeHeader(name) {
+    headers.delete(String(name).toLowerCase());
   }
 
   function writeHead() {
     if (didWriteHead) return;
-    headers.forEach((value, name) => res.setHeader(name, value));
+    headers.forEach((header) => res.setHeader(header.name, header.value));
     res.statusCode = statusCode;
     didWriteHead = true;
   }
@@ -114,15 +122,16 @@ function createApiResponse(res) {
       return res.headersSent || didWriteHead;
     },
     setHeader,
+    removeHeader,
     getHeader(name) {
-      return headers.get(String(name)) || headers.get(String(name).toLowerCase());
+      return headers.get(String(name).toLowerCase())?.value;
     },
     status(code) {
       statusCode = Number(code) || 200;
       return this;
     },
     json(payload) {
-      if (!headers.has("Content-Type")) {
+      if (!headers.has("content-type")) {
         setHeader("Content-Type", "application/json; charset=utf-8");
       }
       writeHead();
@@ -137,6 +146,10 @@ function createApiResponse(res) {
     write(payload) {
       writeHead();
       return res.write(payload);
+    },
+    once(eventName, listener) {
+      res.once(eventName, listener);
+      return this;
     },
     end(payload = "") {
       writeHead();
@@ -193,7 +206,7 @@ function isDeniedStaticPath(relativePath) {
 }
 
 async function serveStatic(url, res) {
-  let pathname = "";
+  let pathname;
   try {
     pathname = decodeURIComponent(url.pathname);
   } catch {

@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-8.4.0-00e5ff?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/version-8.5.0-00e5ff?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/node-%3E%3D22-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/deploy-Vercel-000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel" />
   <img src="https://img.shields.io/badge/CMS-Notion-000?style=flat-square&logo=notion&logoColor=white" alt="Notion" />
@@ -149,7 +149,11 @@ Notion Database
 │   ├── notion-config.js    环境变量、站点 URL、并发工具
 │   ├── category-navigation.js  Notion 分类导航与展示映射
 │   ├── security-policy.js  CSP 策略构建器
-│   └── public-content.js   错误处理、输入验证
+│   ├── public-content.js   错误处理、输入验证
+│   ├── image-source-policy.js  图片源 HMAC 签名与授权
+│   ├── image-proxy.js      SSRF 防护、DNS 固定与有界下载
+│   ├── image-format.js     Raster 魔数识别与 MIME 规范化
+│   └── request-guard.js    有界限流与并发闸门
 ├── js/
 │   ├── app.js              ES module 入口，按依赖顺序加载前端模块
 │   ├── runtime-core.js     页面生命周期、进度条、焦点管理
@@ -174,8 +178,10 @@ Notion Database
 │   └── post-page.css       文章页样式
 ├── scripts/
 │   ├── local-server.mjs    本地开发服务器
+│   ├── architecture-check.mjs  模块边界与循环依赖门禁
 │   ├── smoke-check.mjs     冒烟测试（5800+ 行测试 / 约 350 个断言）
 │   └── visual-regression.mjs  真实浏览器截图回归
+├── eslint.config.mjs       浏览器 / CommonJS / ESM 分层静态规则
 └── vercel.json             路由、缓存、安全头
 ```
 
@@ -225,6 +231,13 @@ NOTION_BLOCK_TOTAL_LIMIT=2000
 IMAGE_PROXY_TIMEOUT_MS=10000
 IMAGE_PROXY_MAX_BYTES=8388608
 IMAGE_PROXY_MAX_REDIRECTS=4
+IMAGE_PROXY_RATE_LIMIT_PER_MINUTE=180
+IMAGE_PROXY_RATE_LIMIT_MAX_CLIENTS=2048
+IMAGE_PROXY_MAX_CONCURRENT_REQUESTS=8
+COVER_IMAGE_RATE_LIMIT_PER_MINUTE=90
+COVER_IMAGE_MAX_CONCURRENT_REQUESTS=2
+# 推荐设置至少 32 UTF-8 字节的独立随机值；未设置时使用 NOTION_TOKEN 派生签名密钥
+IMAGE_PROXY_SIGNING_SECRET=replace_with_at_least_32_random_characters
 # 默认保持 v2.5 行为：整个配置的 Notion 数据库都作为公开内容读取。
 # 请把草稿放到另一个数据库；公开/发布字段会被忽略。
 ```
@@ -245,7 +258,7 @@ npm.cmd run dev
 npm.cmd run check
 ```
 
-`npm test` 与 `npm.cmd run check` 等价，会先跑 `inject-site-meta --check` 同步静态 HTML 元数据，再跑无浏览器依赖的 smoke suite，适合本地快速反馈。需要复核移动端/桌面视觉时：
+`npm test` 与 `npm.cmd run check` 等价，会依次运行 ESLint、模块边界/循环依赖检查、生成 CSS 与静态元数据一致性检查，以及无浏览器依赖的 smoke suite。需要复核移动端/桌面视觉时：
 
 ```powershell
 npm.cmd run visual:check
@@ -257,7 +270,7 @@ npm.cmd run visual:check
 npm.cmd run verify:release
 ```
 
-该本地发布命令会并行运行 smoke suite 和 `VISUAL_STRICT=1` 真实浏览器视觉回归，是发布前的严格门禁。GitHub Actions 当前只跑 `npm run check`；视觉回归因 Linux 字体栅格化差异保留为本地 contract（见 `FIX_TODO.md` B-3）。视觉脚本会启动本地服务，优先使用本机 Chrome 或 Edge 的 headless + CDP 模式截图并执行布局契约断言，覆盖移动首页、移动总览、移动文章空态和桌面首页。普通 `visual:check` 在当前机器无法完成截图时会生成 skipped 报告；`verify:release` 会把这类浏览器不可用问题视为失败。
+该本地发布命令会并行运行完整快速门禁和 `VISUAL_STRICT=1` 像素级视觉回归。GitHub Actions 除 Node 22/24 快速门禁与高危依赖公告审计外，还会在 Linux Chrome 中运行 `VISUAL_STRICT=1 + VISUAL_SKIP_DIFF=1` 的跨平台真实浏览器结构契约；它验证 DOM、尺寸、可见性、移动端粒子和控件布局，但跳过会受字体栅格化影响的像素差。Windows 基线像素比较保留为本地发布 contract，跨平台结构契约则由 CI 强制执行。
 
 ---
 
@@ -267,10 +280,12 @@ npm.cmd run verify:release
 
 1. Fork 本仓库
 2. 在 [Vercel](https://vercel.com) 导入项目
-3. 添加环境变量 `NOTION_TOKEN` 和 `NOTION_DATABASE_ID`
+3. 添加环境变量 `NOTION_TOKEN` 和 `NOTION_DATABASE_ID`；推荐再设置独立随机的 `IMAGE_PROXY_SIGNING_SECRET`
 4. 部署完成 ✅
 
 项目自带 `vercel.json` 配置，无需额外设置。
+
+远程图片代理只接受服务端为公开 Notion 内容签发的 HMAC URL。未设置 `IMAGE_PROXY_SIGNING_SECRET` 时会从 `NOTION_TOKEN` 派生密钥，部署可直接工作；生产环境推荐使用至少 32 UTF-8 字节的独立稳定随机值，避免轮换 Notion Token 时让旧书签中的签名失效。显式设置但不足 32 字节会 fail-closed，不会静默改用另一把密钥。旧缓存或旧书签中没有签名的图片会安全回退为浏览器直连 HTTPS 源图，不会开放匿名代理。
 
 ### Notion 数据库设置
 
@@ -367,9 +382,15 @@ NOTION_READ_TIME_PROPERTY_NAMES=ReadTime,Read Time,Reading Time,阅读时间
 | `NOTION_REQUEST_TIMEOUT_MS` | ❌ | `12000` | Notion API 超时 (ms) |
 | `NOTION_BLOCK_CHILD_CONCURRENCY` | ❌ | `4` | 块子元素并发获取数 |
 | `NOTION_BLOCK_TOTAL_LIMIT` | ❌ | `2000` | 单篇文章递归获取的最大 Notion block 数 |
-| `IMAGE_PROXY_TIMEOUT_MS` | ❌ | `10000` | 图片代理上游请求超时 (ms) |
+| `IMAGE_PROXY_TIMEOUT_MS` | ❌ | `10000` | 图片代理完整上游阶段超时，包括初始 DNS (ms) |
 | `IMAGE_PROXY_MAX_BYTES` | ❌ | `8388608` | 图片代理最大响应体字节数 |
 | `IMAGE_PROXY_MAX_REDIRECTS` | ❌ | `4` | 图片代理最大重定向跳数 |
+| `IMAGE_PROXY_SIGNING_SECRET` | 推荐 | `NOTION_TOKEN` 派生 | 图片源 HMAC 签名密钥；独立值至少 32 UTF-8 字节 |
+| `IMAGE_PROXY_RATE_LIMIT_PER_MINUTE` | ❌ | `180` | 每个客户端、每个热实例每分钟允许的原图代理未缓存请求数 |
+| `IMAGE_PROXY_RATE_LIMIT_MAX_CLIENTS` | ❌ | `2048` | 单实例限流状态最多保留的客户端数 |
+| `IMAGE_PROXY_MAX_CONCURRENT_REQUESTS` | ❌ | `8` | 单实例原图代理最大并发数 |
+| `COVER_IMAGE_RATE_LIMIT_PER_MINUTE` | ❌ | `90` | 每个客户端、每个热实例每分钟允许的封面转码未缓存请求数 |
+| `COVER_IMAGE_MAX_CONCURRENT_REQUESTS` | ❌ | `2` | 单实例 Sharp 封面转码最大并发数 |
 | `EXPOSE_PUBLIC_ERROR_DETAILS` | ❌ | `false` | 是否在 API 响应中暴露详细错误 |
 
 ---
@@ -403,7 +424,7 @@ NOTION_READ_TIME_PROPERTY_NAMES=ReadTime,Read Time,Reading Time,阅读时间
   </tr>
   <tr>
     <td align="center"><b>测试</b></td>
-    <td>自定义冒烟测试 + 真实浏览器截图回归</td>
+    <td>ESLint + 架构门禁 + 行为冒烟测试 + 真实浏览器截图回归</td>
   </tr>
 </table>
 

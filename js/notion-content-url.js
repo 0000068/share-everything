@@ -16,6 +16,8 @@
   const COVER_IMAGE_WIDTHS = Object.freeze([320, 640, 960]);
   const COVER_IMAGE_DEFAULT_WIDTH = 640;
   const IMAGE_PROXY_PATH = "/api/image";
+  const IMAGE_PROXY_SIGNATURE_PARAMETER = "sig";
+  const IMAGE_PROXY_SIGNATURE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
   const { getBaseOrigin } = sharedUtils;
 
   if (typeof getBaseOrigin !== "function") {
@@ -28,6 +30,7 @@
     try {
       const resolvedBaseOrigin = getBaseOrigin(baseOrigin);
       const parsed = new URL(candidate, resolvedBaseOrigin);
+      if (parsed.username || parsed.password) return null;
       if (allowSameOrigin && parsed.origin === new URL(resolvedBaseOrigin).origin) {
         return parsed.href;
       }
@@ -59,14 +62,61 @@
     }
   }
 
-  function buildImageProxyUrl(candidate, baseOrigin) {
+  function normalizeImageProxySignature(signature) {
+    const normalized = typeof signature === "string" ? signature.trim() : "";
+    return IMAGE_PROXY_SIGNATURE_PATTERN.test(normalized) ? normalized : "";
+  }
+
+  function resolveImageProxySource(candidate, baseOrigin, signature = "") {
     const safeImageUrl = resolveDisplayImageUrl(candidate, baseOrigin);
     if (!safeImageUrl) return null;
-    if (!shouldProxyDisplayImageUrl(safeImageUrl, baseOrigin)) return safeImageUrl;
+
+    const resolvedBaseOrigin = getBaseOrigin(baseOrigin);
+    const baseUrl = new URL(resolvedBaseOrigin);
+    const parsed = new URL(safeImageUrl, resolvedBaseOrigin);
+    const normalizedSignature = normalizeImageProxySignature(signature);
+    const isExistingProxyUrl = parsed.origin === baseUrl.origin
+      && (parsed.pathname === IMAGE_PROXY_PATH || parsed.pathname === COVER_IMAGE_PATH);
+    if (!isExistingProxyUrl) {
+      if (shouldProxyDisplayImageUrl(parsed.href, baseOrigin)) {
+        parsed.hash = "";
+      }
+      return {
+        safeImageUrl: parsed.href,
+        signature: normalizedSignature,
+      };
+    }
+
+    const originalSource = resolveDisplayImageUrl(parsed.searchParams.get("src"), baseOrigin);
+    if (!originalSource || !shouldProxyDisplayImageUrl(originalSource, baseOrigin)) {
+      return {
+        safeImageUrl,
+        signature: normalizedSignature,
+      };
+    }
+
+    const canonicalOriginalSource = new URL(originalSource, resolvedBaseOrigin);
+    canonicalOriginalSource.hash = "";
+    return {
+      safeImageUrl: canonicalOriginalSource.href,
+      signature: normalizedSignature
+        || normalizeImageProxySignature(parsed.searchParams.get(IMAGE_PROXY_SIGNATURE_PARAMETER)),
+    };
+  }
+
+  function buildImageProxyUrl(candidate, baseOrigin, { signature = "" } = {}) {
+    const source = resolveImageProxySource(candidate, baseOrigin, signature);
+    if (!source) return null;
+    if (!shouldProxyDisplayImageUrl(source.safeImageUrl, baseOrigin)) return source.safeImageUrl;
+    // Old cached API payloads and bookmarks do not contain a signature. Keep
+    // them functional by loading the remote HTTPS image directly; only signed
+    // sources may use the first-party proxy.
+    if (!source.signature) return source.safeImageUrl;
 
     const resolvedBaseOrigin = getBaseOrigin(baseOrigin);
     const proxyUrl = new URL(IMAGE_PROXY_PATH, resolvedBaseOrigin);
-    proxyUrl.searchParams.set("src", safeImageUrl);
+    proxyUrl.searchParams.set("src", source.safeImageUrl);
+    proxyUrl.searchParams.set(IMAGE_PROXY_SIGNATURE_PARAMETER, source.signature);
     return proxyUrl.href;
   }
 
@@ -78,24 +128,36 @@
     return COVER_IMAGE_WIDTHS.includes(parsedWidth) ? parsedWidth : COVER_IMAGE_DEFAULT_WIDTH;
   }
 
-  function buildCoverImageUrl(candidate, baseOrigin, { width = COVER_IMAGE_DEFAULT_WIDTH } = {}) {
-    const safeImageUrl = resolveDisplayImageUrl(candidate, baseOrigin);
-    if (!safeImageUrl) return null;
-    if (!shouldProxyDisplayImageUrl(safeImageUrl, baseOrigin)) return safeImageUrl;
+  function buildCoverImageUrl(candidate, baseOrigin, {
+    signature = "",
+    width = COVER_IMAGE_DEFAULT_WIDTH,
+  } = {}) {
+    const source = resolveImageProxySource(candidate, baseOrigin, signature);
+    if (!source) return null;
+    if (!shouldProxyDisplayImageUrl(source.safeImageUrl, baseOrigin)) return source.safeImageUrl;
+    if (!source.signature) return source.safeImageUrl;
 
     const resolvedBaseOrigin = getBaseOrigin(baseOrigin);
     const coverUrl = new URL(COVER_IMAGE_PATH, resolvedBaseOrigin);
-    coverUrl.searchParams.set("src", safeImageUrl);
+    coverUrl.searchParams.set("src", source.safeImageUrl);
+    coverUrl.searchParams.set(IMAGE_PROXY_SIGNATURE_PARAMETER, source.signature);
     coverUrl.searchParams.set("w", String(normalizeCoverImageWidth(width)));
     return coverUrl.href;
   }
 
-  function buildCoverImageSrcSet(candidate, baseOrigin) {
-    const safeImageUrl = resolveDisplayImageUrl(candidate, baseOrigin);
-    if (!safeImageUrl || !shouldProxyDisplayImageUrl(safeImageUrl, baseOrigin)) return "";
+  function buildCoverImageSrcSet(candidate, baseOrigin, { signature = "" } = {}) {
+    const source = resolveImageProxySource(candidate, baseOrigin, signature);
+    if (
+      !source
+      || !source.signature
+      || !shouldProxyDisplayImageUrl(source.safeImageUrl, baseOrigin)
+    ) return "";
 
     return COVER_IMAGE_WIDTHS
-      .map((width) => `${buildCoverImageUrl(safeImageUrl, baseOrigin, { width })} ${width}w`)
+      .map((width) => `${buildCoverImageUrl(source.safeImageUrl, baseOrigin, {
+        signature: source.signature,
+        width,
+      })} ${width}w`)
       .join(", ");
   }
 
@@ -232,6 +294,7 @@
 
   return Object.freeze({
     IMAGE_PROXY_PATH,
+    IMAGE_PROXY_SIGNATURE_PARAMETER,
     COVER_IMAGE_DEFAULT_WIDTH,
     COVER_IMAGE_PATH,
     COVER_IMAGE_WIDTHS,
@@ -242,10 +305,12 @@
     buildImageProxyUrl,
     getUrlHostname,
     isLikelyEphemeralAssetUrl,
+    normalizeImageProxySignature,
     resolveDisplayImageUrl,
     resolveEmbeddableUrl,
     resolveCoverImageUrl,
     resolveProxiedDisplayImageUrl,
+    resolveImageProxySource,
     resolveShareImageUrl,
     sanitizeCspResourceUrl,
     sanitizeUrl,

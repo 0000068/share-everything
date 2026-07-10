@@ -136,8 +136,12 @@ publicContentHelpers.applyPublicErrorHeaders({
 });
 assert.equal(
   JSON.stringify(publicErrorHeaders),
-  JSON.stringify([["Cache-Control", "no-store"], ["Retry-After", "30"]]),
-  "public content helper should keep public errors non-cacheable while forwarding Retry-After",
+  JSON.stringify([
+    ["Content-Type", "application/json; charset=utf-8"],
+    ["Cache-Control", "no-store"],
+    ["Retry-After", "30"],
+  ]),
+  "public content helper should mark JSON errors explicitly, keep them non-cacheable, and forward Retry-After",
 );
 const serverErrorLogs = [];
 const originalConsoleError = console.error;

@@ -1,6 +1,6 @@
 # 修复清单
 
-> 更新时间：2026-06-27（v8.4 封面加载优化复检）
+> 更新时间：2026-07-10（v8.5 图片代理与质量门禁加固）
 
 ---
 
@@ -14,13 +14,37 @@
 
 | ID | 简述 | 触发条件 |
 |---|---|---|
-| `B-2` | **菜单 active 状态 i18n-safe 校验**。`js/blog-page.js:506-516` 使用 `button.dataset.nav === "bookmarks"` / `"overview"` 区分激活按钮（之前是中文文本匹配，已重构）。当前 data 值是英文 key，i18n 安全。**触发再审**：站点引入运行时多语言切换时确认 data-nav 仍是 stable key。 |
-| `B-3` | **Visual regression CI gate 跨平台 baseline 缺口**。`scripts/visual-baselines/*.png` 是 Windows 本地生成；GitHub Actions Linux runner 跑 visual:check 时 font rasterisation 差异稳定产生 ~4.5% 像素差，与内容无关。`.github/workflows/release-check.yml` 现在只跑 `npm run check`，`npm run verify:release`（含 visual）只作本地 contract。**触发再审**：当出现第二个 contributor / Mac 协作 / 需要 CI 把关视觉回归时。可行修复：用 Docker (`mcr.microsoft.com/playwright`) 或 self-hosted Windows runner 重新生成 Linux baseline 与 Windows baseline 共存；或重写 visual-regression.mjs 走 DOM/computed-style 而不是像素对比。 |
+| `B-2` | **菜单 active 状态 i18n-safe 校验**。`js/blog-page.js` 的 `updatePageUI()` 使用 `button.dataset.nav === "bookmarks"` / `"overview"` 区分激活按钮（之前是中文文本匹配，已重构）。当前 data 值是英文 key，i18n 安全。**触发再审**：站点引入运行时多语言切换时确认 data-nav 仍是 stable key。 |
 | `B-4` | **v8.0 之前的 Vercel deployment Redeploy 失败**。旧 deployment 记录里的 Git source 还指向 `aihkibq-ux/Share-everything`（已 404）。Vercel 的 Instant Rollback / Redeploy 对 v7.x 系列会报 "The provided GitHub repository can't be found"。**触发再审**：当 v8.x 出现需要回滚到 v7.x 行为的回归时；目前唯一通路是本地 `git checkout v7.x` 然后强制 push 到 main，让 webhook 触发一次新 deployment。日常无影响。 |
 
 ---
 
 ## 三、历史完成记录
+
+### v8.5 图片代理与质量门禁加固（2026-07-10）
+
+从生产边界重新审查远程图片链路，并把静态质量、模块边界和真实浏览器行为升级为可执行门禁。整个 Notion 数据库继续按产品设计公开；本轮限制的是图片代理能力，而不是内容公开范围。
+
+**生产安全与正确性**
+
+- `server/image-source-policy.js` 为服务端发布的封面和正文图片源生成 HMAC 签名；`/api/image`、`/api/cover` 只接受签名正确、字段唯一且没有额外 query 的请求，避免公开端点演变为匿名通用代理。
+- `server/image-format.js` 依据真实文件签名识别 PNG、JPEG、GIF、WebP、AVIF/HEIF、BMP、TIFF、ICO；上游仅伪造 `Content-Type` 无法再得到可缓存的图片响应。
+- 图片成功头延迟到验证/转换完成后写入；所有失败响应统一为 `application/json; charset=utf-8 + no-store`，并清除残留的实体头和 `Vary`，修复错误 JSON 被标记成图片的真实线上缺陷。
+- `server/request-guard.js` 对原图代理与 Sharp 转换分别施加有界的每客户端固定窗口限流和单实例并发闸门，超限返回 `429` 或 `503`，避免未命中 CDN 时耗尽连接、内存或 CPU。
+- `/api/cover` 的 `Accept` 协商按相对质量值选择 AVIF/WebP/JPEG，精确 `q=0` 优先于通配符，完全不可接受时返回 `406`；显式 `format` 不再发送多余的 `Vary: Accept`。
+
+**架构与代码质量**
+
+- `server/image-proxy.js` 独立拥有 DNS、私网地址拒绝、DNS pinning、逐跳重定向复验、超时和有界读取；`api/cover.js` 不再依赖 `api/image.js` 的测试内部对象。
+- 新增 ESLint 10 分层配置，分别建模浏览器脚本、CommonJS 服务与 ESM 工具；清理全部静态错误、无用变量、重复导入和历史测试死代码。
+- 新增 `scripts/architecture-check.mjs`，阻止生产模块循环依赖、浏览器层越界、server 反向依赖 API、API handler 互相依赖。
+- smoke suite 改为从真实聚焦模块组装测试能力，覆盖签名篡改、重复/额外 query、无密钥 fail-closed、真实格式嗅探、限流/并发、SSRF、JSON 错误 MIME 与完整 cover 协商。
+- GitHub Actions 保留 Node 22/24 快速门禁，并新增 Linux Chrome 严格结构契约；Windows 像素 baseline 继续由本地 `verify:release` 校验。工作流 token 权限收窄为只读、不保留 checkout 凭据，checkout v7.0.0 与 setup-node v6.4.0 按完整 SHA 固定。原 `B-3` 跨平台 CI 缺口已关闭。
+
+**版本与依赖**
+
+- `package.json` / `package-lock.json` 升级到 `8.5.0` 并设置 `private: true`；Sharp、PostCSS、selector parser 与静态质量工具使用已锁定的当前版本。
+- ASSET_VERSION 同步为 `20260710-v85`；README、架构文档、变更日志、环境变量示例和 release changeset 同步到 v8.5。
 
 ### v8.4 封面加载优化与缓存键一致性跟进（2026-06-27）
 
@@ -234,4 +258,10 @@ v5.7 及之前的 22 项落地内容（A-1 templatePromise 自清 / A-2 SPA 滑�
 - 本地快速检查：`npm.cmd run check`
 - 发布门禁（含严格视觉回归）：`npm.cmd run verify:release`
 - 视觉回归：`npm.cmd run visual:check`
+- 完整依赖审计：`npm.cmd audit --audit-level=low`
+- 生产依赖审计：`npm.cmd audit --omit=dev`
+- 直接依赖更新检查：`npm.cmd outdated --long`
+- 干净安装锁文件检查：`npm.cmd ci --dry-run`
 - diff 空白检查：`git diff --check`
+
+v8.5 最终结果：提交前复检再次确认快速门禁、严格浏览器/像素回归、完整与生产依赖审计、直接依赖更新检查、干净安装锁文件检查、diff 空白检查全部通过；0 个已知依赖漏洞、0 个过期直接依赖。复检前已刷新 `origin/main`，与本地 `HEAD` 的分叉计数为 `0 0`。Notion live check 因本地未提供集成凭据按设计安全跳过。

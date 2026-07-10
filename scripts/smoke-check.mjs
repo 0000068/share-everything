@@ -65,6 +65,7 @@ import {
   "js/spa-router.js",
   "js/ui-effects.js",
   "scripts/build-mobile-fallbacks.mjs",
+  "scripts/architecture-check.mjs",
   "scripts/inject-site-meta.mjs",
   "scripts/lib/html-escape.mjs",
   "scripts/lib/html-rewriter.mjs",
@@ -82,6 +83,10 @@ import {
   "api/sitemap.js",
   "server/public-content.js",
   "server/html-escape.js",
+  "server/image-format.js",
+  "server/image-proxy.js",
+  "server/image-source-policy.js",
+  "server/request-guard.js",
   "server/security-policy.js",
   "server/notion-config.js",
   "server/category-navigation.js",
@@ -188,6 +193,7 @@ const serverCacheStoreJs = read("server/cache-store.js");
 const serverNotionClientJs = read("server/notion-client.js");
 const serverNotionSchemaJs = read("server/notion-schema.js");
 const serverPublicPolicyJs = read("server/public-policy.js");
+const serverImageProxyJs = read("server/image-proxy.js");
 const serverBlockServiceJs = read("server/block-service.js");
 const serverPostServiceJs = read("server/post-service.js");
 const serverRenderServiceJs = read("server/render-service.js");
@@ -209,7 +215,7 @@ const apiCoverHandler = loadCommonJsModule("api/cover.js");
 const apiImageHandler = loadCommonJsModule("api/image.js");
 const {
   __test: imageProxyDefaultConfig,
-} = loadCommonJsModule("api/image.js", [
+} = loadCommonJsModule("server/image-proxy.js", [
   "IMAGE_PROXY_TIMEOUT_MS",
   "IMAGE_PROXY_MAX_BYTES",
   "IMAGE_PROXY_MAX_REDIRECTS",
@@ -232,23 +238,12 @@ const {
 ], {
   __parse5ForSmokeCheck: parse5ForSmokeCheck,
 });
-const {
-  __test: serverNotionHelpers,
-} = loadCommonJsModule("server/notion-server.js", [
-  "buildPostPayload",
-  "buildArticleStructuredData",
-  "buildPublicCategories",
-  "buildContentSchema",
-  "buildCategoryFilter",
-  "buildCategoryPresentation",
-  "buildDatabaseSorts",
-  "buildPublicAccessPolicyFromDatabase",
-  "decoratePostSummary",
-  "filterPostsBySearch",
-  "normalizePositiveInteger",
-  "normalizePostQueryFilters",
-  "renderPostContent",
-]);
+const serverNotionHelpers = {
+  ...loadCommonJsModule("server/notion-schema.js"),
+  ...loadCommonJsModule("server/public-policy.js"),
+  ...loadCommonJsModule("server/post-service.js"),
+  ...loadCommonJsModule("server/notion-server.js"),
+};
 
 const appAssetVersionMatch = appJs.match(/const ASSET_VERSION = "([^"]+)";/);
 assert.ok(appAssetVersionMatch, "app.js should declare a literal ASSET_VERSION");
@@ -792,15 +787,16 @@ expectIncludes(apiCoverJs, "sharp", "cover endpoint should use sharp for real th
 expectIncludes(apiCoverJs, "COVER_IMAGE_WIDTHS = Object.freeze([320, 640, 960])", "cover endpoint should constrain generated thumbnail widths");
 expectIncludes(apiCoverJs, "COVER_IMAGE_CACHE_CONTROL", "cover endpoint should own a long edge-cache policy for generated thumbnails");
 expectIncludes(apiImageJs, "IMAGE_PROXY_CACHE_CONTROL", "image proxy endpoint should cache successful image responses at the edge");
-expectIncludes(apiImageJs, 'readPositiveEnvNumber("IMAGE_PROXY_TIMEOUT_MS", 10_000)', "image proxy timeout should be configurable while keeping its default");
-expectIncludes(apiImageJs, 'readPositiveEnvNumber("IMAGE_PROXY_MAX_BYTES", 8 * 1024 * 1024)', "image proxy size limit should be configurable while keeping its default");
-expectIncludes(apiImageJs, 'readNonNegativeEnvInteger("IMAGE_PROXY_MAX_REDIRECTS", 4)', "image proxy redirect limit should be configurable while keeping its default");
+expectIncludes(serverImageProxyJs, 'readPositiveIntegerEnv("IMAGE_PROXY_TIMEOUT_MS", 10_000)', "image proxy timeout should be configurable while keeping its default");
+expectIncludes(serverImageProxyJs, 'readPositiveIntegerEnv("IMAGE_PROXY_MAX_BYTES", 8 * 1024 * 1024)', "image proxy size limit should be configurable while keeping its default");
+expectIncludes(serverImageProxyJs, 'readNonNegativeEnvInteger("IMAGE_PROXY_MAX_REDIRECTS", 4)', "image proxy redirect limit should be configurable while keeping its default");
 expectIncludes(packageJson, '"dev": "node scripts/local-server.mjs"', "package scripts should expose the local API-aware dev server");
 expectIncludes(localServerJs, "async function readRequestBody", "local dev server should read request bodies before invoking API handlers");
 expectIncludes(localServerJs, "body,", "local dev server should pass parsed body values to API handlers");
 expectIncludes(packageJson, '"notion:live-check": "node scripts/notion-live-check.mjs"', "package scripts should expose the optional live Notion integration check");
 expectIncludes(packageJson, '"mobile:fallbacks": "node scripts/build-mobile-fallbacks.mjs"', "package scripts should expose the mobile fallback generator");
-expectIncludes(packageJson, '"check": "node scripts/build-mobile-fallbacks.mjs --check && node scripts/inject-site-meta.mjs --check && node scripts/smoke-check.mjs"', "package check should verify generated mobile fallbacks before smoke checks");
+expectIncludes(packageJson, '"check": "npm run lint && npm run architecture:check && node scripts/build-mobile-fallbacks.mjs --check && node scripts/inject-site-meta.mjs --check && node scripts/smoke-check.mjs"', "package check should run static and architecture analysis before generated assets and smoke checks");
+assert.equal(packageMetadata.private, true, "deployment-only package metadata should prevent accidental npm publication");
 const buildMobileFallbacksJs = read("scripts/build-mobile-fallbacks.mjs");
 expectIncludes(buildMobileFallbacksJs, "isKeyframeStep", "mobile fallback generator should skip prefixing keyframe step selectors");
 expectIncludes(buildMobileFallbacksJs, "keyframes", "mobile fallback generator should recognize @keyframes at-rules when filtering keyframe steps");
@@ -835,6 +831,22 @@ expectIncludes(readmeMd, "node-%3E%3D22", "README badge should advertise the sup
 expectIncludes(readmeMd, "Node.js](https://nodejs.org/) ≥ 22", "README prerequisites should match package engines");
 expectIncludes(siteArchitectureMd, "Node 22/24 matrix", "architecture docs should describe the current release-check Node matrix");
 expectIncludes(releaseCheckWorkflowYml, "node-version: [22, 24]", "release workflow should test the supported Node engine range");
+expectIncludes(releaseCheckWorkflowYml, "browser-contract:", "release workflow should include the cross-platform browser contract job");
+expectIncludes(releaseCheckWorkflowYml, 'VISUAL_SKIP_DIFF: "1"', "CI browser contract should avoid platform-specific pixel comparisons");
+expectIncludes(releaseCheckWorkflowYml, 'VISUAL_STRICT: "1"', "CI browser contract should fail closed when browser assertions cannot run");
+expectIncludes(releaseCheckWorkflowYml, "permissions:\n  contents: read", "release workflow should keep the token read-only");
+expectIncludes(releaseCheckWorkflowYml, "persist-credentials: false", "release workflow should not retain unused checkout credentials");
+expectIncludes(releaseCheckWorkflowYml, "npm audit --audit-level=high", "release workflow should reject high-severity dependency advisories");
+expectIncludes(
+  releaseCheckWorkflowYml,
+  "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0",
+  "release workflow should pin the reviewed checkout action release",
+);
+expectIncludes(
+  releaseCheckWorkflowYml,
+  "actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0",
+  "release workflow should pin the reviewed setup-node action release",
+);
 expectNotIncludes(releaseCheckWorkflowYml, "node-version: [18, 20, 22]", "release workflow should drop EOL Node versions");
 expectIncludes(releaseCheckWorkflowYml, "node-version: ${{ matrix.node-version }}", "release workflow should use the Node matrix value");
 expectNotIncludes(releaseCheckWorkflowYml, 'node-version: "20"', "release workflow should not pin checks to Node 20 only");
@@ -865,9 +877,10 @@ expectNotIncludes(readmeMd, "badge/version-4.7.0", "README badge should not keep
 expectIncludes(readmeMd, "npm.cmd run visual:check", "README should document the browser visual regression check");
 expectIncludes(readmeMd, "VISUAL_STRICT=1", "README should document strict visual regression mode");
 expectIncludes(readmeMd, "npm test` 与 `npm.cmd run check` 等价", "README should document that npm test stays a fast smoke check");
-expectIncludes(readmeMd, "并行运行 smoke suite 和 `VISUAL_STRICT=1`", "README should document parallel strict release checks");
-expectIncludes(readmeMd, "GitHub Actions 当前只跑 `npm run check`", "README should not overstate CI visual coverage");
-expectNotIncludes(readmeMd, "发布与 CI 的严格门禁", "README should describe strict visual checks as local release gating only");
+expectIncludes(readmeMd, "并行运行完整快速门禁和 `VISUAL_STRICT=1`", "README should document parallel strict release checks");
+expectIncludes(readmeMd, "GitHub Actions 除 Node 22/24 快速门禁与高危依赖公告审计外", "README should document the CI browser and dependency gates");
+expectIncludes(readmeMd, "VISUAL_SKIP_DIFF=1", "README should distinguish the cross-platform browser contract from pixel baselines");
+expectNotIncludes(readmeMd, "GitHub Actions 当前只跑 `npm run check`", "README should not retain the resolved CI visual gap");
 expectIncludes(siteArchitectureMd, `> Version: ${releaseVersion}`, "architecture docs should match the next release commit");
 expectIncludes(siteArchitectureMd, `Version ${releaseVersion} Highlights`, "architecture docs should describe the current release");
 expectNotIncludes(siteArchitectureMd, "> Version: v4.7", "architecture docs should not keep stale release metadata");
@@ -887,11 +900,11 @@ expectIncludes(siteArchitectureMd, ".kiro/steering/git-rules.md", "architecture 
 expectIncludes(siteArchitectureMd, "Do not add a catch-all `/api/*` `Cache-Control` header", "architecture docs should warn against API-wide cache headers");
 expectIncludes(siteArchitectureMd, "up to 200 post summaries in memory", "architecture docs should describe the bounded summary memory cache");
 expectIncludes(siteArchitectureMd, "`blog-page.js` owns the `hashchange` flow for `/blog.html#bookmarks`", "architecture docs should document hash-only bookmark routing ownership");
-expectIncludes(siteArchitectureMd, "`scripts/inject-site-meta.mjs --check` and `scripts/smoke-check.mjs` together make up the `npm.cmd run check` entrypoint", "architecture docs should describe the smoke-check entrypoint");
-expectIncludes(siteArchitectureMd, "which is the GitHub Actions gate across the Node 22/24 matrix", "architecture docs should describe CI as the smoke gate");
-expectIncludes(siteArchitectureMd, "local release contract while the cross-platform visual baseline gap remains tracked", "architecture docs should describe strict visual checks as local release gating only");
-expectNotIncludes(siteArchitectureMd, "same strict command is wired into `.github/workflows/release-check.yml`", "architecture docs should not overstate CI visual coverage");
-expectIncludes(siteArchitectureMd, "`image-proxy.mjs` for `/api/image`", "architecture docs should list focused smoke-check modules");
+expectIncludes(siteArchitectureMd, "runs ESLint, `scripts/architecture-check.mjs`", "architecture docs should describe the complete fast quality gate");
+expectIncludes(siteArchitectureMd, "strict Linux Chrome browser contract", "architecture docs should describe the CI browser contract");
+expectIncludes(siteArchitectureMd, "full Windows pixel baseline", "architecture docs should distinguish the local pixel release contract");
+expectNotIncludes(siteArchitectureMd, "cross-platform visual baseline gap remains tracked", "architecture docs should not retain the resolved CI gap");
+expectIncludes(siteArchitectureMd, "`image-proxy.mjs` for HMAC source authorization", "architecture docs should list focused image-boundary checks");
 expectIncludes(siteArchitectureMd, "`visual-regression.mjs` for real-browser screenshot checks", "architecture docs should describe the visual regression script");
 expectIncludes(siteArchitectureMd, "VISUAL_STRICT=1", "architecture docs should document strict visual regression mode");
 expectIncludes(readmeMd, "/api/robots", "README should document the dynamic robots endpoint");
@@ -1264,9 +1277,12 @@ expectNotIncludes(bookmarkJs, "codeUnit.toString(16)", "bookmark selector escapi
 expectIncludes(bookmarkJs, "createBookmarkEntry", "bookmark manager should centralize bookmark record creation");
 expectIncludes(bookmarkJs, "buildCardBookmarkSource", "bookmark manager should centralize DOM snapshot extraction");
 expectIncludes(bookmarkJs, "hydrateMissingMetadata", "bookmark manager should hydrate legacy metadata");
-expectIncludes(bookmarkJs, "BOOKMARK_METADATA_HYDRATION_GENERATION = 4", "bookmark metadata should re-hydrate when the persistence generation bumps");
+expectIncludes(bookmarkJs, "BOOKMARK_METADATA_HYDRATION_GENERATION = 5", "bookmark metadata should re-hydrate when the persistence generation bumps");
 expectIncludes(bookmarkJs, 'BOOKMARK_SNAPSHOT_FIELD_SEPARATOR = "\\u0000"', "bookmark snapshot keys should use visible escaped separators");
-assert.ok(!/[\u0000\u0001]/.test(bookmarkJs), "bookmark.js should not contain raw control-character bytes");
+assert.ok(
+  !Array.from(bookmarkJs).some((character) => [0, 1].includes(character.codePointAt(0))),
+  "bookmark.js should not contain raw control-character bytes",
+);
 expectIncludes(bookmarkJs, "no migration logic", "bookmark metadata constant should document that it is a hydration trigger, not a schema version");
 expectIncludes(bookmarkJs, "resolveDisplayImageUrl", "bookmark normalization should preserve displayable cover images");
 expectIncludes(bookmarkJs, "coverPlaceholder?.dataset?.coverGradient", "bookmark DOM fallback should preserve card gradients");
@@ -1313,7 +1329,11 @@ assert.equal(
   "shared notion content helpers should keep same-origin display images direct",
 );
 const proxiedDisplayImageUrl = new URL(
-  notionContentHelpers.resolveProxiedDisplayImageUrl("https://assets.example.com/cover.png?token=1", "https://example.com"),
+  notionContentHelpers.resolveProxiedDisplayImageUrl(
+    "https://assets.example.com/cover.png?token=1",
+    "https://example.com",
+    { signature: "a".repeat(43) },
+  ),
 );
 assert.equal(
   proxiedDisplayImageUrl.origin,
@@ -1331,7 +1351,11 @@ assert.equal(
   "shared notion content helpers should preserve the upstream remote image URL inside the proxy query",
 );
 const responsiveCoverImageUrl = new URL(
-  notionContentHelpers.resolveCoverImageUrl("https://assets.example.com/cover.png?token=1", "https://example.com", { width: 960 }),
+  notionContentHelpers.resolveCoverImageUrl(
+    "https://assets.example.com/cover.png?token=1",
+    "https://example.com",
+    { signature: "a".repeat(43), width: 960 },
+  ),
 );
 assert.equal(
   responsiveCoverImageUrl.pathname,
@@ -1344,7 +1368,11 @@ assert.equal(
   "shared notion content helpers should preserve the requested responsive cover width",
 );
 assert.ok(
-  notionContentHelpers.buildCoverImageSrcSet("https://assets.example.com/cover.png", "https://example.com").includes("640w"),
+  notionContentHelpers.buildCoverImageSrcSet(
+    "https://assets.example.com/cover.png",
+    "https://example.com",
+    { signature: "a".repeat(43) },
+  ).includes("640w"),
   "shared notion content helpers should expose responsive card cover srcsets",
 );
 notionBlockFixtures.forEach((fixture) => runNotionBlockFixture(fixture, notionContentHelpers));
@@ -1496,7 +1524,7 @@ assert.equal(
 );
 assert.equal(
   bookmarkManagerHarness.window.BookmarkManager.getAll()[0]?.metadataVersion,
-  4,
+  5,
   "bookmark manager should persist the upgraded metadata version for new bookmarks",
 );
 assert.equal(
@@ -2271,6 +2299,7 @@ await runImageProxyChecks({
   createApiResponseRecorder,
   createImageRequestMock,
   expectIncludes,
+  expectNotIncludes,
   imageProxyDefaultConfig,
   loadCommonJsModule,
   publicImageDnsLookup,

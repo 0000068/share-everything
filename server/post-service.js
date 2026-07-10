@@ -42,6 +42,10 @@ const {
   createSingleFlight,
   createTtlSlot,
 } = require("./cache-store");
+const {
+  withBlockImageSignatures,
+  withCoverImageSignature,
+} = require("./image-source-policy");
 
 const DEFAULT_POST_PAGE_SIZE = 9;
 const PUBLIC_SEARCH_QUERY_MAX_LENGTH = 256;
@@ -168,10 +172,10 @@ async function queryDatabasePages({ filter, schema = null } = {}) {
     startCursor = data.has_more ? data.next_cursor : null;
   } while (startCursor);
 
-  const mappedPages = pages.map((page) => mapNotionPage(page, {
+  const mappedPages = pages.map((page) => withCoverImageSignature(mapNotionPage(page, {
     includeSearchText: true,
     schema,
-  }));
+  })));
   return sorts ? mappedPages : sortPostsByDateDesc(mappedPages);
 }
 
@@ -398,7 +402,7 @@ function buildPostPayload(summary, blocks) {
 
   return {
     ...summary,
-    content: mapped,
+    content: withBlockImageSignatures(mapped),
   };
 }
 
@@ -445,10 +449,10 @@ async function fetchPublicPost(pageId) {
     const publicPage = assertPublicPage(page, metadata.publicAccessPolicy);
     const categoryOptions = readCategorySelectOptions(metadata.database, metadata.contentSchema);
     const categoryOptionLookup = buildCategoryOptionLookup(categoryOptions);
-    const summary = decoratePostSummary(mapNotionPage(publicPage, {
+    const summary = withCoverImageSignature(decoratePostSummary(mapNotionPage(publicPage, {
       includeSearchText: true,
       schema: metadata.contentSchema,
-    }), categoryOptionLookup);
+    }), categoryOptionLookup));
     const blocks = await fetchAllBlockChildren(publicPage.id);
     const post = buildPostPayload(summary, blocks);
     cachePublicPost(cacheKey, post);

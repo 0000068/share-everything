@@ -11,11 +11,12 @@
     // generation → fetch fresh data on read". The stored property is still
     // named `metadataVersion` for backward compatibility with existing entries
     // in users' localStorage; do not rename the field.
-    const BOOKMARK_METADATA_HYDRATION_GENERATION = 4;
+    const BOOKMARK_METADATA_HYDRATION_GENERATION = 5;
     const siteUtils = window.SiteUtils || {};
     const resolveDisplayImageUrl = siteUtils.resolveDisplayImageUrl;
     const sanitizeImageUrl = siteUtils.sanitizeImageUrl;
     const sanitizeCoverBackground = siteUtils.sanitizeCoverBackground;
+    const normalizeImageProxySignature = siteUtils.normalizeImageProxySignature;
     let bookmarksCache = null;
     let metadataHydrationPromise = null;
     let storageSyncTimer = null;
@@ -69,6 +70,10 @@
         date: normalizeText(entry.date),
         readTime: normalizeText(entry.readTime),
         coverImage: normalizePersistentCoverImage(entry.coverImage),
+        coverImageSignature:
+          typeof normalizeImageProxySignature === "function"
+            ? normalizeImageProxySignature(entry.coverImageSignature)
+            : "",
         coverEmoji: normalizeText(entry.coverEmoji, "📝"),
         coverGradient:
           typeof sanitizeCoverBackground === "function"
@@ -154,6 +159,7 @@
         date: source?.date || "",
         readTime: source?.readTime || "",
         coverImage: source?.coverImage || null,
+        coverImageSignature: source?.coverImageSignature || "",
         coverEmoji: source?.coverEmoji || "📝",
         coverGradient: source?.coverGradient || null,
         tags: Array.isArray(source?.tags) ? source.tags : [],
@@ -186,6 +192,7 @@
         date,
         readTime,
         coverImage: img?.src || null,
+        coverImageSignature: card.dataset?.coverSignature || "",
         coverEmoji: coverPlaceholder?.dataset?.coverEmoji || emoji?.textContent || "📝",
         coverGradient: coverPlaceholder?.dataset?.coverGradient || null,
         tags,

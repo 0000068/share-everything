@@ -7,7 +7,6 @@
   const MOBILE_EAGER_COVER_IMAGE_COUNT = 1;
   const PAGINATION_SIBLING_COUNT = 2;
   const PAGINATION_MAX_NUMBERED_BUTTONS = (PAGINATION_SIBLING_COUNT * 2) + 3;
-  const DEFAULT_SUPPORTED_CATEGORIES = Object.freeze(SHARED_CONTENT.getSupportedBlogCategories());
   const BOOKMARK_ONLY_CATEGORIES = Object.freeze(SHARED_CONTENT.getBookmarkOnlyCategories());
   const FALLBACK_CATEGORY_COLOR = SHARED_CONTENT.DEFAULT_CATEGORY_COLOR;
   const DEFAULT_COVER_GRADIENT = SHARED_CONTENT.DEFAULT_COVER_GRADIENT;
@@ -428,7 +427,9 @@
     function resolveSafeCoverImage(post) {
       const candidate = post?.coverImage;
       if (typeof siteUtils.resolveCoverImageUrl === "function") {
-        return siteUtils.resolveCoverImageUrl(candidate);
+        return siteUtils.resolveCoverImageUrl(candidate, {
+          signature: post?.coverImageSignature,
+        });
       }
       if (typeof siteUtils.resolveProxiedDisplayImageUrl === "function") {
         return siteUtils.resolveProxiedDisplayImageUrl(candidate);
@@ -442,7 +443,9 @@
     function resolveSafeCoverImageSrcSet(post) {
       const candidate = post?.coverImage;
       if (typeof siteUtils.buildCoverImageSrcSet === "function") {
-        return siteUtils.buildCoverImageSrcSet(candidate);
+        return siteUtils.buildCoverImageSrcSet(candidate, {
+          signature: post?.coverImageSignature,
+        });
       }
       return "";
     }
@@ -723,7 +726,7 @@
            </div>`;
 
       return `
-        <article class="blog-card" data-reveal data-post-id="${esc(post.id)}" data-post-tags="${serializedTags}" role="listitem">
+        <article class="blog-card" data-reveal data-post-id="${esc(post.id)}" data-post-tags="${serializedTags}" data-cover-signature="${esc(post.coverImageSignature || "")}" role="listitem">
           <a href="${safePostUrl}" class="blog-card-link" aria-label="阅读文章：${safeTitle}"></a>
           ${coverHtml}
           <div class="blog-card-body">

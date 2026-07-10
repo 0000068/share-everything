@@ -34,6 +34,12 @@ function readRetryAfter(error) {
 }
 
 function applyPublicErrorHeaders(res, error) {
+  if (!res.headersSent) {
+    ["Content-Length", "Content-Range", "Vary"].forEach((name) => {
+      res.removeHeader?.(name);
+    });
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+  }
   res.setHeader("Cache-Control", "no-store");
   const retryAfter = readRetryAfter(error);
   if (retryAfter) {
@@ -68,7 +74,7 @@ function rejectUnsupportedReadMethod(req, res) {
   }
 
   res.setHeader("Allow", "GET, HEAD");
-  res.setHeader("Cache-Control", "no-store");
+  applyPublicErrorHeaders(res);
   res.status(405).json({ error: "Method not allowed" });
   return true;
 }

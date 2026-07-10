@@ -1,8 +1,8 @@
 {
   "name": "share-everything",
-  "version": "8.4.0",
+  "version": "8.5.0",
   "type": "commonjs",
-  "private": false,
+  "private": true,
   "license": "MIT",
   "description": "Share Everything — 探索、记录、分享",
   "keywords": [
@@ -15,8 +15,10 @@
     "node": ">=22"
   },
   "scripts": {
-    "check": "node scripts/build-mobile-fallbacks.mjs --check && node scripts/inject-site-meta.mjs --check && node scripts/smoke-check.mjs",
+    "architecture:check": "node scripts/architecture-check.mjs",
+    "check": "npm run lint && npm run architecture:check && node scripts/build-mobile-fallbacks.mjs --check && node scripts/inject-site-meta.mjs --check && node scripts/smoke-check.mjs",
     "dev": "node scripts/local-server.mjs",
+    "lint": "eslint . --max-warnings 0",
     "meta:inject": "node scripts/inject-site-meta.mjs",
     "mobile:fallbacks": "node scripts/build-mobile-fallbacks.mjs",
     "notion:live-check": "node scripts/notion-live-check.mjs",
@@ -27,11 +29,14 @@
     "verify:release": "node scripts/release-check.mjs"
   },
   "devDependencies": {
-    "parse5": "^8.0.1",
-    "postcss": "^8.5.14",
-    "postcss-selector-parser": "^7.1.1"
+    "@eslint/js": "10.0.1",
+    "eslint": "10.6.0",
+    "globals": "17.7.0",
+    "parse5": "8.0.1",
+    "postcss": "8.5.16",
+    "postcss-selector-parser": "7.1.4"
   },
   "dependencies": {
-    "sharp": "^0.35.2"
+    "sharp": "0.35.3"
   }
 }

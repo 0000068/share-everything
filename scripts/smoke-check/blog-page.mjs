@@ -4,12 +4,10 @@ export async function runBlogPageChecks(context) {
     FakeElement,
     buildBookmarkListingUrlMock,
     createClassList,
-    createJsonResponse,
     loadBrowserScript,
     notionContentHelpers,
     parseBookmarkListingHashMock,
     registeredPages,
-    siteUtilsHarness,
   } = context;
 
 const blogFiltersEl = new FakeElement();

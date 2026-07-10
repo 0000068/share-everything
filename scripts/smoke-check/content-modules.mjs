@@ -148,6 +148,14 @@ export function runContentModuleChecks(context) {
     "notion-content-url.js should reject external http images that production CSP would block",
   );
   assert.equal(
+    notionContentUrlHelpers.resolveDisplayImageUrl(
+      "https://user:password@cdn.example.com/cover.png",
+      "https://example.com",
+    ),
+    null,
+    "notion-content-url.js should reject credential-bearing image URLs",
+  );
+  assert.equal(
     notionContentUrlHelpers.resolveProxiedDisplayImageUrl("/cover.png", "http://localhost:3000"),
     "http://localhost:3000/cover.png",
     "notion-content-url.js should still allow same-origin local image URLs",
@@ -157,19 +165,38 @@ export function runContentModuleChecks(context) {
     "http://localhost:3000/cover.png",
     "notion-content-url.js should keep same-origin cover images direct",
   );
+  const imageProxySignature = "a".repeat(43);
+  assert.equal(
+    notionContentUrlHelpers.resolveCoverImageUrl(
+      "https://assets.example.com/legacy-cover.png",
+      "https://example.com",
+    ),
+    "https://assets.example.com/legacy-cover.png",
+    "notion-content-url.js should keep unsigned legacy cover sources working through a direct HTTPS fallback",
+  );
   const coverThumbnailUrl = new URL(
-    notionContentUrlHelpers.resolveCoverImageUrl("https://assets.example.com/cover.png?token=1", "https://example.com", { width: 320 }),
+    notionContentUrlHelpers.resolveCoverImageUrl(
+      "https://assets.example.com/cover.png?token=1#ignored-fragment",
+      "https://example.com",
+      { signature: imageProxySignature, width: 320 },
+    ),
   );
   assert.equal(coverThumbnailUrl.pathname, "/api/cover", "notion-content-url.js should route remote card covers through the cover endpoint");
   assert.equal(coverThumbnailUrl.searchParams.get("w"), "320", "notion-content-url.js should preserve the requested cover width");
   assert.equal(
     coverThumbnailUrl.searchParams.get("src"),
     "https://assets.example.com/cover.png?token=1",
-    "notion-content-url.js should preserve the upstream remote cover URL inside the cover query",
+    "notion-content-url.js should preserve the canonical upstream cover URL without a request-irrelevant fragment",
+  );
+  assert.equal(
+    coverThumbnailUrl.searchParams.get("sig"),
+    imageProxySignature,
+    "notion-content-url.js should attach the server-issued image source signature",
   );
   const coverThumbnailSrcSet = notionContentUrlHelpers.buildCoverImageSrcSet(
     "https://assets.example.com/cover.png",
     "https://example.com",
+    { signature: imageProxySignature },
   );
   assert.equal(
     coverThumbnailSrcSet.split(", ").length,

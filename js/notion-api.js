@@ -31,12 +31,12 @@
     const POST_SUMMARY_SESSION_MAX_TAGS = 8;
     const POST_SUMMARY_SESSION_MAX_TAG_LENGTH = 48;
     const POST_SUMMARY_SESSION_MAX_COVER_IMAGE_LENGTH = 320;
+    const POST_SUMMARY_SESSION_MAX_IMAGE_SIGNATURE_LENGTH = 64;
     const POST_SUMMARY_SESSION_MAX_GRADIENT_LENGTH = 160;
     const sharedContent = window.NotionContent;
     const ALL_CATEGORY = sharedContent.ALL_CATEGORY;
     const REMOTE_BLOG_CATEGORIES = sharedContent.getRemoteBlogCategories();
     const fallbackCategoryColor = sharedContent.DEFAULT_CATEGORY_COLOR;
-    const fallbackCoverGradient = sharedContent.DEFAULT_COVER_GRADIENT;
     let categoryNavigationCache = normalizeCategoryList(REMOTE_BLOG_CATEGORIES);
     const categoryPresentationCache = new Map();
     const pendingRequests = new Map();
@@ -333,6 +333,10 @@
         date: truncateText(summary.date, 32),
         readTime: truncateText(summary.readTime, POST_SUMMARY_SESSION_MAX_READ_TIME_LENGTH),
         coverImage: normalizeSessionCoverImage(summary.coverImage),
+        coverImageSignature: truncateText(
+          sharedContent.normalizeImageProxySignature(summary.coverImageSignature),
+          POST_SUMMARY_SESSION_MAX_IMAGE_SIGNATURE_LENGTH,
+        ),
         coverEmoji: truncateText(summary.coverEmoji, 8, "📝"),
         coverGradient: truncateText(summary.coverGradient, POST_SUMMARY_SESSION_MAX_GRADIENT_LENGTH),
         tags: normalizeSessionTags(summary.tags),
@@ -378,6 +382,9 @@
       const categoryColor = normalizeCategoryColor(post.categoryColor);
       const readTime = post.readTime || "";
       const coverImage = post.coverImage || null;
+      const coverImageSignature = sharedContent.normalizeImageProxySignature(
+        post.coverImageSignature,
+      );
       const coverEmoji = post.coverEmoji || "📝";
       const cachedCategory = categoryPresentationCache.get(normalizeSearchText(category));
       const coverGradient = post.coverGradient || cachedCategory?.coverGradient || gradientForCategory(category);
@@ -393,6 +400,7 @@
         date: post.date || "",
         readTime,
         coverImage,
+        coverImageSignature,
         coverEmoji,
         coverGradient,
         tags,

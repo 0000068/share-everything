@@ -49,7 +49,7 @@ function parseLine(rawLine) {
 
 export function parseDotEnvSource(source) {
   return String(source || "")
-    .replace(/^﻿/, "")
+    .replace(/^\uFEFF/, "")
     .split(/\r?\n/)
     .map(parseLine)
     .filter(Boolean);

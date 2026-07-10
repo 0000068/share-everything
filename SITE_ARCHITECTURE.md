@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v8.4
+> Version: v8.5
 > Updated: 2026-06-27
 
 ## 1. Overview
@@ -34,7 +34,23 @@ Notion Database
           -> localStorage bookmarks
 ```
 
-## 2. Version v8.4 Highlights
+## 2. Release Highlights
+
+### Version v8.5 Highlights
+
+v8.5 is a production-boundary and executable-quality release. It closes the image response defects found by the July audit, makes proxy authorization explicit, and turns architecture/static quality expectations into CI gates.
+
+- **Signed image sources**. `server/image-source-policy.js` derives a domain-separated HMAC key from a minimum-32-byte `IMAGE_PROXY_SIGNING_SECRET` or, as a zero-configuration fallback, `NOTION_TOKEN`. An explicitly weak dedicated secret fails closed. Public summaries and mapped image blocks carry signatures; `/api/image` and `/api/cover` reject unsigned, tampered, duplicated, or extra-query requests before DNS and upstream I/O. Unsigned legacy browser payloads use direct HTTPS images rather than an open proxy.
+- **Transport separated from handlers**. DNS resolution, private-address checks, validated-IP pinning, redirects, timeouts, and bounded reads live in `server/image-proxy.js`. `api/cover.js` no longer imports `api/image.js.__internal`; the architecture gate now prohibits API-to-API handler dependencies.
+- **Real raster validation**. `server/image-format.js` recognizes PNG, JPEG, GIF, WebP, AVIF/HEIF, BMP, TIFF, and ICO bytes. A remote server cannot obtain a cacheable 200 response merely by claiming an image MIME, and active SVG/XML remains rejected.
+- **Correct error representation**. Public JSON errors explicitly set `application/json; charset=utf-8` and clear stale entity/variance headers. Image success headers are emitted only after body validation or cover conversion succeeds.
+- **Bounded origin work**. `server/request-guard.js` supplies bounded fixed-window per-client limits and fail-fast concurrency gates. CDN hits bypass function work; uncached raw fetches and Sharp transforms have separate budgets.
+- **Standards-based cover negotiation**. Automatic AVIF/WebP/JPEG selection respects relative `Accept` quality, exact exclusions override wildcards, unsupported negotiations return 406, and explicit `format` requests do not emit `Vary: Accept`.
+- **Executable code-quality gates**. ESLint 10 models browser scripts, CommonJS services, and ESM tooling separately. `scripts/architecture-check.mjs` rejects circular production dependencies and browser/server/API boundary violations. Both run inside `npm run check` and the Node 22/24 CI matrix.
+- **Cross-platform browser CI**. Linux Chrome runs strict DOM/layout/behavior contracts with pixel diff disabled, while the Windows local release check retains the platform-specific pixel baseline. The workflow grants only read access, disables persisted checkout credentials, and pins reviewed checkout/setup-node releases by full SHA.
+- **Release metadata synchronized**. Runtime and tooling dependency patches, static asset keys (`20260710-v85`), package metadata, README, fix tracking, and this document now describe v8.5.
+
+### Version v8.4 Highlights
 
 v8.4 is a cache-key consistency follow-up from the v8.3 audit. It also adds the cover-image performance pipeline from the follow-up image-loading audit.
 
@@ -45,7 +61,7 @@ v8.4 is a cache-key consistency follow-up from the v8.3 audit. It also adds the 
 - **Image proxy stays the safe original-image path**. `api/image.js` continues to own remote image SSRF validation and streams known-size original images after SVG/XML signature sniffing; `/api/cover` reuses that safety core before optimizing bytes.
 - **Release metadata synchronized**. Static CSS/JS entry URLs, `js/app.js` imports, package metadata, README, `FIX_TODO.md`, and this architecture document now describe v8.4.
 
-## 2.1 Version v8.3 Highlights
+### Version v8.3 Highlights
 
 v8.3 is a public route and listing-state hardening pass surfaced by a full line-by-line audit. It changes URL canonicalization and invalid-input handling, with no visual layout changes.
 
@@ -57,7 +73,7 @@ v8.3 is a public route and listing-state hardening pass surfaced by a full line-
 - Smoke checks cover invalid public post ids, strict pagination parsing, bookmark hash prefix handling, default listing query cleanup, empty-query bookmark routes, and raw control-character regression checks.
 - Static CSS/JS entry URLs used the `20260607-v83` cache key.
 
-## 2.2 Version v8.2 Highlights
+### Version v8.2 Highlights
 
 v8.2 is a security and correctness hardening pass surfaced by a full code audit. No runtime rendering or visual changes.
 
@@ -67,7 +83,7 @@ v8.2 is a security and correctness hardening pass surfaced by a full code audit.
 - **List query hardened**. `server/post-service.js` `queryDatabasePages` guards `data.results` with `Array.isArray`, matching `server/block-service.js`, so a malformed upstream page payload cannot throw mid-pagination.
 - Static CSS/JS/SVG entry URLs use the `20260529-v82` cache key.
 
-## 2.3 Version v8.1 Highlights
+### Version v8.1 Highlights
 
 v8.1 is a project-infrastructure release: source-of-truth GitHub repo migrated from `aihkibq-ux/Share-everything` to `0000068/share-everything`, with corresponding CI hardening. Runtime, API, and rendering code are byte-identical to v7.9; user-observable production behaviour did not change.
 
@@ -78,7 +94,7 @@ v8.1 is a project-infrastructure release: source-of-truth GitHub repo migrated f
 - **Engines invariant preserved**. `package.json` `"engines": { "node": ">=22" }` stays per the contract asserted by `scripts/smoke-check.mjs`. An early exploration locked it to `"22.x"` to silence a Vercel build warning; the smoke gate forced a revert. Vercel project's Node.js Version setting moved 24.x → 22.x to remove the override warning without touching the contract.
 - Static CSS/JS/SVG entry URLs use the `20260528-v81` cache key.
 
-## 2.4 Version v7.9 Highlights
+### Version v7.9 Highlights
 
 v7.9 is a code-quality pass that fixes one production behavior gap and hardens several internal invariants. No visual changes.
 
@@ -95,7 +111,7 @@ v7.9 is a code-quality pass that fixes one production behavior gap and hardens s
 - **Tags defensive normalization**: `js/notion-content.js` `mapNotionPage` runs Notion multi_select names through `normalizePostTags` so any nullish or empty entries are filtered before downstream rendering.
 - Static CSS/JS/SVG entry URLs used the `20260521-v79` cache key.
 
-## 2.1 Version v7.8 Highlights
+### Version v7.8 Highlights
 
 v7.8 rebalanced mobile overview cards based on real-device feedback. Dock kept exactly at v7.7 (user said previous was good).
 
@@ -105,7 +121,7 @@ v7.8 rebalanced mobile overview cards based on real-device feedback. Dock kept e
 - Strictly mobile-scoped change: no desktop CSS modified.
 - Static CSS/JS/SVG entry URLs used the `20260516-v78` cache key.
 
-## 2.1 Version v7.7 Highlights
+### Version v7.7 Highlights
 
 v7.7 dials back v7.6 based on real-device feedback: card aspect less aggressive portrait, dock taller and rounder.
 
@@ -116,7 +132,7 @@ v7.7 dials back v7.6 based on real-device feedback: card aspect less aggressive 
 - Strictly mobile-scoped change: no desktop CSS modified.
 - Static CSS/JS/SVG entry URLs use the `20260516-v77` cache key.
 
-## 2.1 Version v7.6 Highlights
+### Version v7.6 Highlights
 
 v7.6 refines v7.5 based on real-device feedback: mobile cards become properly portrait, and the bottom dock regains a unified container without going back to v7.4's heavy styling.
 
@@ -126,7 +142,7 @@ v7.6 refines v7.5 based on real-device feedback: mobile cards become properly po
 - Strictly mobile-scoped change: no desktop CSS modified.
 - Static CSS/JS/SVG entry URLs use the `20260516-v76` cache key so deployed browsers fetch the refreshed mobile UI promptly.
 
-## 2.1 Version v7.5 Highlights
+### Version v7.5 Highlights
 
 v7.5 simplifies the mobile overview bottom dock and tightens the card grid aspect, both strictly mobile-scoped — no desktop CSS changed.
 
@@ -136,7 +152,7 @@ v7.5 simplifies the mobile overview bottom dock and tightens the card grid aspec
 - Both the `@media` block and the `html.is-mobile-device-viewport` fallback receive both changes via `mobile:fallbacks` derivation.
 - Static CSS/JS/SVG entry URLs use the `20260516-v75` cache key so deployed browsers fetch the refreshed mobile UI promptly.
 
-## 2.1 Version v7.4 Highlights
+### Version v7.4 Highlights
 
 v7.4 retunes the mobile home center glow to a softer, more cyan-tinted halo that wraps the title area without over-saturating it. Strictly mobile-scoped — desktop hero rendering is untouched.
 
@@ -146,7 +162,7 @@ v7.4 retunes the mobile home center glow to a softer, more cyan-tinted halo that
 - The mobile home visual baseline is refreshed (`scripts/visual-baselines/mobile-home.png`). The desktop baseline is intentionally not regenerated since the desktop view did not change.
 - Static CSS/JS/SVG entry URLs use the `20260516-v74` cache key so deployed browsers fetch the refreshed glow promptly.
 
-## 2.1 Version v7.3 Highlights
+### Version v7.3 Highlights
 
 v7.3 focuses on the mobile visual system after the v7.0–v7.2 hardening work.
 
@@ -156,7 +172,7 @@ v7.3 focuses on the mobile visual system after the v7.0–v7.2 hardening work.
 - Mobile smoke and visual regression contracts now lock the compact bookmark/control sizing.
 - Static CSS/JS/SVG entry URLs use the `20260516-v73` cache key so deployed browsers fetch the refreshed build promptly.
 
-## 2.1 Version v7.2 Highlights
+### Version v7.2 Highlights
 
 v7.2 closes three small but real defense / clarity gaps left after v7.0–v7.1.
 
@@ -165,7 +181,7 @@ v7.2 closes three small but real defense / clarity gaps left after v7.0–v7.1.
 - `js/bookmark.js` renames `BOOKMARK_METADATA_VERSION` to `BOOKMARK_METADATA_HYDRATION_GENERATION` and documents that the constant is a "force refresh on read" trigger, not a real schema version (there is no migration logic). The stored `metadataVersion` field is left untouched for backward compatibility with existing entries in users' localStorage.
 - Static CSS/JS/SVG entry URLs use the `20260516-v72` cache key so deployed browsers fetch the refreshed build promptly.
 
-## 2.2 Version v7.1 Highlights
+### Version v7.1 Highlights
 
 v7.1 reduces SSR article-template work by parsing `post.html` once per render path and applying accumulated DOM patches in one pass.
 
@@ -174,7 +190,7 @@ v7.1 reduces SSR article-template work by parsing `post.html` once per render pa
 - The string-input helper wrappers stay testable for smoke checks, while the live success path uses the editor directly.
 - Static CSS/JS/SVG entry URLs use the `20260516-v71` cache key so deployed browsers fetch the refreshed build promptly.
 
-## 2.3 Version v7.0 Highlights
+### Version v7.0 Highlights
 
 v7.0 removes the hand-maintained mobile fallback CSS debt by deriving compatibility rules from the real touch media queries.
 
@@ -183,7 +199,7 @@ v7.0 removes the hand-maintained mobile fallback CSS debt by deriving compatibil
 - The generated fallback keeps base `768px`, `540px`, and `360px` cascades explicit instead of flattening narrow overrides into broad fallback rules.
 - Static CSS/JS/SVG entry URLs use the `20260516-v70` cache key so deployed browsers fetch the refreshed build promptly.
 
-## 2.1 Version v6.9 Highlights
+### Version v6.9 Highlights
 
 v6.9 closes the final audit-polish items around inert script data blocks, selector escaping, and local API parity.
 
@@ -192,7 +208,7 @@ v6.9 closes the final audit-polish items around inert script data blocks, select
 - `js/bookmark.js` has a complete `CSS.escape` fallback for older browser engines, and `scripts/local-server.mjs` now forwards parsed request bodies to API handlers.
 - Static CSS/JS/SVG entry URLs use the `20260516-v69` cache key so deployed browsers fetch the refreshed build promptly.
 
-## 2.1 Version v6.8 Highlights
+### Version v6.8 Highlights
 
 v6.8 expands shared category color sanitization to carefully support modern CSS Color Level 4 values.
 
@@ -201,7 +217,7 @@ v6.8 expands shared category color sanitization to carefully support modern CSS 
 - Client cards, SSR article shells, and server category presentation all share the same color sanitizer.
 - Static CSS/JS/SVG entry URLs use the `20260516-v68` cache key so deployed browsers fetch the refreshed build promptly.
 
-## 2.1 Version v6.7 Highlights
+### Version v6.7 Highlights
 
 v6.7 moves SSR article template mutation from regex replacements to parse5-backed DOM source ranges.
 
@@ -210,7 +226,7 @@ v6.7 moves SSR article template mutation from regex replacements to parse5-backe
 - The smoke harness injects parse5 into CommonJS module tests so the same helper paths run under the VM-based checks.
 - Static CSS/JS/SVG entry URLs use the `20260516-v67` cache key so deployed browsers fetch the refreshed build promptly.
 
-## 2.1 Version v6.6 Highlights
+### Version v6.6 Highlights
 
 v6.6 migrates static metadata injection to a parse5-backed DOM workflow while keeping committed HTML formatting stable.
 
@@ -219,7 +235,7 @@ v6.6 migrates static metadata injection to a parse5-backed DOM workflow while ke
 - Manifest generation remains part of the same check path so standalone metadata stays synchronized.
 - Static CSS/JS/SVG entry URLs use the `20260516-v66` cache key so deployed browsers fetch the refreshed build promptly.
 
-## 2.1 Version v6.5 Highlights
+### Version v6.5 Highlights
 
 v6.5 makes SSR CSP delivery single-source: response headers carry nonce-bearing policy, while static meta stays as a fallback-only policy.
 
@@ -228,7 +244,7 @@ v6.5 makes SSR CSP delivery single-source: response headers carry nonce-bearing 
 - Security policy comments document the static-meta and `frame-ancestors` split.
 - Static CSS/JS/SVG entry URLs use the `20260516-v65` cache key so deployed browsers fetch the refreshed build promptly.
 
-## 2.1 Version v6.4 Highlights
+### Version v6.4 Highlights
 
 v6.4 turns visual regression into a golden-image workflow so mobile and desktop rendering changes are caught at the screenshot level.
 
@@ -237,7 +253,7 @@ v6.4 turns visual regression into a golden-image workflow so mobile and desktop 
 - Mobile halo coverage moved from brittle CSS byte checks to full-page screenshot comparison.
 - Static CSS/JS/SVG entry URLs use the `20260516-v64` cache key so deployed browsers fetch the refreshed build promptly.
 
-## 2.1 Version v6.3 Highlights
+### Version v6.3 Highlights
 
 v6.3 consolidates HTML attribute escaping for server-side rendering and release tooling while making browser module dependency failures easier to diagnose.
 
@@ -246,7 +262,7 @@ v6.3 consolidates HTML attribute escaping for server-side rendering and release 
 - Smoke checks cover the new helper modules so escape behavior stays syntax-checked.
 - Static CSS/JS/SVG entry URLs use the `20260516-v63` cache key so deployed browsers fetch the refreshed build promptly.
 
-## 2.1 Version v6.2 Highlights
+### Version v6.2 Highlights
 
 v6.2 aligns category gradient sanitization across server and browser rendering and refreshes release documentation guardrails.
 
@@ -255,7 +271,7 @@ v6.2 aligns category gradient sanitization across server and browser rendering a
 - Smoke checks now assert that release metadata stays synchronized across package, TODO, and architecture files.
 - Static CSS/JS/SVG entry URLs use the `20260516-v62` cache key so deployed browsers fetch the synchronized build promptly.
 
-## 2.1 Version v6.1 Highlights
+### Version v6.1 Highlights
 
 v6.1 refines the mobile home halo shape after the v6.0 release: the center glow now reads as a broad horizontal blue spread around the title/search controls instead of a vertical beam.
 
@@ -264,7 +280,7 @@ v6.1 refines the mobile home halo shape after the v6.0 release: the center glow 
 - `scripts/smoke-check/mobile-layout.mjs` names and enforces the horizontal-ellipse contract so later edits do not reintroduce the cropped vertical-circle look.
 - Static CSS/JS/SVG entry URLs use the `20260515-halo-v61` cache key so deployed browsers and CDNs fetch the corrected v6.1 halo promptly.
 
-## 2.1 Version v6.0 Highlights
+### Version v6.0 Highlights
 
 v6.0 finishes the mobile home visual pass by removing the visible blue spotlight disc, adds standalone mobile launch metadata for the no-address-bar composition, and hardens the release checks that caught the Node 22 failure.
 
@@ -275,7 +291,7 @@ v6.0 finishes the mobile home visual pass by removing the visible blue spotlight
 - Runtime polish fixes from the review are included: active-page nonce preservation for JSON-LD sync, validated session-cache timestamps, literal-safe metadata replacement callbacks, and `.claude/` ignored as local tooling state.
 - Static CSS/JS/SVG entry URLs use the `20260515-v60` cache key so deployed browsers and CDNs fetch the v6.0 visual assets promptly.
 
-## 2.2 Version v5.10 Highlights
+### Version v5.10 Highlights
 
 v5.10 dissolves the visible disc edge in the mobile home hero glow and adds a smoke-check parity contract that prevents mobile CSS fallback drift.
 
@@ -283,7 +299,7 @@ v5.10 dissolves the visible disc edge in the mobile home hero glow and adds a sm
 - `scripts/smoke-check/mobile-layout.mjs` now requires (a) byte-exact `background` equality between the two mobile blocks and (b) the gradient must contain `transparent 100%` (the prior `transparent 70%` is rejected). Regressing the disc edge or splitting the two blocks again will fail CI.
 - Static CSS/JS/SVG entry URLs use the `20260515-v510` cache key so browsers and CDNs fetch the wider glow without serving v5.9's narrow disc through the `stale-while-revalidate` window.
 
-## 2.3 Version v5.9 Highlights
+### Version v5.9 Highlights
 
 v5.9 completed the mobile home visual restoration and landed the full post-v5.7 cross-review backlog — 39 phased fixes plus 4 audit-stage corrections — in a single release.
 
@@ -302,7 +318,7 @@ v5.9 completed the mobile home visual restoration and landed the full post-v5.7 
 - Public client payloads no longer expose or regenerate `_searchText`; server-side search text stays non-enumerable and internal.
 - Server-side Notion block rendering now has a configurable total block budget, bounded recursive fan-out, and single-flight failure cooldowns.
 - Browser-side post summary caching and `sessionStorage` cleanup are bounded and throttled to reduce repeated tab-sync work.
-- Release verification runs the smoke suite and strict visual regression in parallel as the local release contract. GitHub Actions currently runs the smoke gate across Node 22 and 24 with stale workflow cancellation; the cross-platform visual baseline gap remains tracked in `FIX_TODO.md` B-3.
+- Release verification runs the fast quality gate and strict visual regression in parallel as the local release contract. GitHub Actions runs the fast gate across Node 22 and 24, then requires a Linux Chrome DOM/layout/behavior contract with platform-dependent pixel diff disabled; Windows pixel baselines remain a separate local release check.
 - `FIX_TODO.md` is the single authoritative repair status document; summary documents point back to it instead of carrying duplicate stale checklists.
 - Mobile pages now disable the particle canvas entirely after real-device frame-rate checks, while desktop home keeps the 350-particle animation.
 - Blog cover placeholders no longer render the notebook emoji; slow or failed covers fall back to quiet gradients.
@@ -525,7 +541,7 @@ Client-side `notion-api.js` keeps a short bounded in-memory post-list response c
 - Static pages use CSP meta tags generated from `server/security-policy.js`.
 - SSR article pages send CSP through response headers; JSON-LD and initial post data remain inert script data blocks without nonce attributes.
 - `connect-src` remains same-origin so browser data requests continue through semantic API routes.
-- `/api/image` only accepts `https:` upstream URLs, rejects localhost/private literal hosts and private DNS results, pins the validated DNS answer to the actual HTTPS request through a custom lookup, validates every redirect hop manually, enforces image content types, limits image size, applies a timeout, and sends `X-Content-Type-Options: nosniff`. `/api/cover` reuses this upstream safety path before Sharp optimization and rejects unsupported widths/formats with `no-store`.
+- `/api/image` and `/api/cover` require HMAC-authorized published sources before upstream I/O. Shared transport policy accepts only `https:`, rejects credentials and private/non-public literal or DNS addresses, pins validated DNS answers to the HTTPS request, revalidates every redirect, and bounds initial DNS plus all subsequent network work, redirects, and bytes. Both GET and HEAD validate real raster signatures; cover HEAD executes the same bounded transform as GET before returning headers. Cover conversion additionally bounds decoded pixels and Sharp concurrency. Successful responses are cacheable, while all authorization, negotiation, validation, and upstream failures are JSON with `no-store`.
 - Embed iframes intentionally use a permissive sandbox subset (`allow-scripts`, `allow-same-origin`, popups, forms, and presentation) so trusted providers such as YouTube, Bilibili, Vimeo, Figma, Loom, and CodePen can render; this is a deliberate usability tradeoff, while page-level `frame-src`, same-origin API boundaries, and `frame-ancestors 'none'` still constrain where embeds can load and how this site can be framed.
 - Public error details are hidden unless `EXPOSE_PUBLIC_ERROR_DETAILS=true` is set for local debugging.
 
@@ -562,6 +578,10 @@ Client-side `notion-api.js` keeps a short bounded in-memory post-list response c
 |   |-- render-service.js
 |   |-- notion-config.js
 |   |-- category-navigation.js
+|   |-- image-source-policy.js
+|   |-- image-proxy.js
+|   |-- image-format.js
+|   |-- request-guard.js
 |   |-- public-content.js
 |   `-- security-policy.js
 |-- js/
@@ -589,6 +609,7 @@ Client-side `notion-api.js` keeps a short bounded in-memory post-list response c
 |   `-- post-page.css
 `-- scripts/
     |-- local-server.mjs
+    |-- architecture-check.mjs
     |-- smoke-check.mjs
     |-- smoke-check/
     |   |-- blog-page.mjs
@@ -739,6 +760,10 @@ actual behavior:
 - `server/block-service.js` owns recursive block fetching with pagination, child-fetch concurrency limits, and a per-post total block budget.
 - `server/cache-store.js` owns reusable TTL slots, LRU TTL caches, single-flight loading with optional error cooldowns, and pending request maps.
 - `server/render-service.js` owns SSR post HTML rendering, canonical post URLs, and article structured data preparation.
+- `server/image-source-policy.js` owns image-source canonicalization and HMAC authorization, including signature decoration of public summaries and mapped image blocks.
+- `server/image-proxy.js` owns outbound HTTPS/DNS/redirect policy and bounded response reads; it contains no API response semantics.
+- `server/image-format.js` owns declared MIME normalization and real raster byte-signature detection.
+- `server/request-guard.js` owns bounded per-instance client rate state, client-key extraction, and fail-fast concurrency gates.
 
 `server/notion-config.js` owns environment and site-origin normalization, checked-in
 `site.config.json` loading, Notion path-id encoding, numeric env parsing, and the shared
@@ -818,9 +843,15 @@ Optional:
 | `NOTION_REQUEST_TIMEOUT_MS` | `12000` | Server-side Notion request timeout |
 | `NOTION_BLOCK_CHILD_CONCURRENCY` | `4` | Concurrent child block fetches |
 | `NOTION_BLOCK_TOTAL_LIMIT` | `2000` | Maximum recursive Notion blocks loaded for one post |
-| `IMAGE_PROXY_TIMEOUT_MS` | `10000` | Remote image proxy request timeout |
+| `IMAGE_PROXY_TIMEOUT_MS` | `10000` | Whole remote phase timeout, including initial DNS |
 | `IMAGE_PROXY_MAX_BYTES` | `8388608` | Remote image proxy response size limit |
 | `IMAGE_PROXY_MAX_REDIRECTS` | `4` | Remote image proxy redirect hop limit |
+| `IMAGE_PROXY_SIGNING_SECRET` | `NOTION_TOKEN`-derived | Stable server-only HMAC secret; explicit values require at least 32 UTF-8 bytes |
+| `IMAGE_PROXY_RATE_LIMIT_PER_MINUTE` | `180` | Per-client raw proxy origin requests per hot instance and minute |
+| `IMAGE_PROXY_RATE_LIMIT_MAX_CLIENTS` | `2048` | Maximum bounded client entries retained by one hot instance |
+| `IMAGE_PROXY_MAX_CONCURRENT_REQUESTS` | `8` | Maximum concurrent raw image origin requests per instance |
+| `COVER_IMAGE_RATE_LIMIT_PER_MINUTE` | `90` | Per-client cover conversion origin requests per hot instance and minute |
+| `COVER_IMAGE_MAX_CONCURRENT_REQUESTS` | `2` | Maximum concurrent Sharp cover conversions per instance |
 | `EXPOSE_PUBLIC_ERROR_DETAILS` | `false` | Expose upstream error detail for local debugging only |
 
 The server exposes the entire configured Notion database. This is the deliberate long-term project policy and matches v2.5 behavior. Keep drafts in a separate Notion database; `Status`, `Public`, and similar public/published fields are ignored by the runtime.
@@ -841,14 +872,14 @@ Category navigation is Notion-driven. The server reads the resolved `Category` /
 
 ## 14. Checks
 
-`scripts/inject-site-meta.mjs --check` and `scripts/smoke-check.mjs` together make up the `npm.cmd run check` entrypoint, which is the GitHub Actions gate across the Node 22/24 matrix for push and pull request validation. `npm.cmd run verify:release` runs the smoke suite and `visual-regression.mjs` with `VISUAL_STRICT=1` in parallel as the local release contract while the cross-platform visual baseline gap remains tracked in `FIX_TODO.md` B-3. Shared harness utilities and heavier domain checks live in focused modules under `scripts/smoke-check/`:
+`npm.cmd run check` runs ESLint, `scripts/architecture-check.mjs`, generated mobile CSS verification, static metadata verification, and the smoke suite. GitHub Actions executes that gate across Node 22/24, audits the dependency tree for high-severity advisories, then runs a strict Linux Chrome browser contract with `VISUAL_SKIP_DIFF=1` so platform-neutral layout/behavior is protected without comparing Windows font pixels. `npm.cmd run verify:release` keeps the full Windows pixel baseline as the local release contract. Shared harness utilities and heavier domain checks live in focused modules under `scripts/smoke-check/`:
 
 - `harness.mjs` for VM/module loading helpers, fake DOM primitives, and common assertions.
 - `api-contracts.mjs` for final API handler payload contracts such as `/api/posts-data` category presentation metadata.
 - `blog-page.mjs` for blog listing, filtering, bookmark hash, and pagination behavior.
 - `content-modules.mjs` for shared Notion content module boundaries and renderer helpers.
 - `notion-api-client.mjs` for browser-side Notion client summary caching and session fallback behavior.
-- `image-proxy.mjs` for `/api/image` SSRF, MIME, size, redirect, streaming, `/api/cover` thumbnail generation, and method checks.
+- `image-proxy.mjs` for HMAC source authorization, strict query keys, raster magic bytes, JSON error MIME, SSRF, rate/concurrency guards, streaming, cover negotiation/encoding, and method checks.
 - `public-content-notion.mjs` for public error mapping and server-side Notion data behavior.
 - `routing-vercel.mjs` for disabled legacy proxy, robots, sitemap, and Vercel header rules.
 - `server-modules.mjs` for Notion server module boundaries, configuration, category navigation, and cache helpers.
@@ -869,9 +900,9 @@ The smoke suite currently covers:
 - Notion block and inline equation rendering through MathML instead of visible TeX code.
 - Real-mobile gating for mobile-only CSS, particle density, bookmark control placement, and the article dock safe-area layout.
 - Blog cover click layering.
-- Remote display image proxying.
-- `/api/image` private-host/DNS validation, pinned lookup behavior, redirect-hop validation, cache headers, streaming binary response behavior, SVG/XML body sniffing, and method guard.
-- `/api/cover` width validation, Accept-based WebP generation, long edge caching, and method guard.
+- Signed remote display image proxying with unsigned legacy direct-HTTPS fallback.
+- `/api/image` HMAC/query authorization, raster signatures, private-host/DNS validation, pinned lookup behavior, redirect-hop validation, bounded origin work, cache headers, streaming behavior, and method guard.
+- `/api/cover` signature, width, weighted Accept/406 negotiation, real encoding, JSON error headers, bounded Sharp work, long edge caching, and method guard.
 - API `405` and `no-store` behavior.
 - Public content error mapping and `Retry-After` propagation.
 - Sitemap behavior.
@@ -890,7 +921,13 @@ The smoke suite currently covers:
 ## 16. Latest Verification
 
 ```powershell
-npm.cmd run check
+npm.cmd test
+npm.cmd run verify:release
+npm.cmd audit --audit-level=low
+npm.cmd audit --omit=dev
+npm.cmd outdated --long
+npm.cmd ci --dry-run
+git diff --check
 ```
 
-Result: passed.
+Result: all passed and were repeated immediately before commit on 2026-07-10. ESLint reported zero warnings; the architecture gate checked 43 production modules with no missing imports, boundary violations, or cycles; strict browser/pixel regression passed; both dependency audits reported 0 vulnerabilities; direct dependencies were current; the clean-install lockfile dry-run and diff whitespace check passed. `origin/main` was fetched first and showed `0 0` divergence from local `HEAD`. The optional Notion live check safely skipped because local integration credentials were not present.

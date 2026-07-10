@@ -2,6 +2,23 @@
 
 All notable changes to this project are tracked here.
 
+## 8.5.0 - 2026-07-10
+
+Image boundary, response correctness, architecture, and executable quality-gate hardening release.
+
+- Split image transport and policy concerns out of the API handlers into `server/image-proxy.js`, `server/image-source-policy.js`, `server/image-format.js`, and `server/request-guard.js`; `/api/image` and `/api/cover` are now transport adapters rather than sharing handler internals.
+- Remote image proxy URLs now carry server-issued HMAC signatures. Public post summaries and mapped image blocks receive signatures server-side, unsigned legacy payloads safely fall back to direct HTTPS images, duplicate/extra query fields are rejected, and proxy requests fail closed when no signing key is configured or an explicit secret is shorter than 32 UTF-8 bytes.
+- Added bounded per-client origin rate limits and per-instance concurrency gates for raw image fetches and Sharp cover transforms. The timeout now includes initial DNS resolution; non-public special-use IP ranges, each redirect target, bytes, decoded pixels, and validated DNS pinning remain enforced.
+- Replaced MIME-header trust with real raster signatures for PNG, JPEG, GIF, WebP, AVIF/HEIF, BMP, TIFF, and ICO. Arbitrary or SVG/XML bytes claiming an image MIME now receive a non-cacheable 415 response.
+- Fixed image failure responses so JSON errors always use `application/json; charset=utf-8` and cannot retain stale image `Content-Type`, `Content-Length`, or `Vary` headers. Cover success headers are written only after validation and Sharp conversion succeeds.
+- Cover `Accept` negotiation now respects relative quality values, returns 406 when every supported format is refused, and omits `Vary: Accept` for an explicit `format` request.
+- HEAD requests now fetch and validate the real GET representation; cover HEAD also runs the bounded transform, so it cannot report cacheable success for bytes that GET would reject.
+- Added ESLint 10 with browser/CommonJS/ESM-aware globals, made lint part of `npm run check`, removed dead code found by the new gate, and marked the deployment package private to prevent accidental npm publication.
+- Added `scripts/architecture-check.mjs` to reject circular production dependencies and enforce browser/server/API boundaries. The Notion compatibility surface no longer carries test-only dead imports.
+- GitHub Actions now runs a strict cross-platform Chrome layout contract in addition to the Node 22/24 fast gate; platform-sensitive pixel diffs remain part of the local strict release check. Workflow permissions are read-only, checkout credentials are not persisted, and reviewed checkout v7.0.0/setup-node v6.4.0 releases are pinned by full commit SHA.
+- Upgraded `sharp` to 0.35.3, `postcss` to 8.5.16, and `postcss-selector-parser` to 7.1.4; added ESLint 10.6.0 and `globals` 17.7.0. Full dependency audit remains clear.
+- Static CSS/JS entry URLs and `js/app.js` module imports use the `20260710-v85` cache key; package and release documentation are synchronized to 8.5.0.
+
 ## 8.4.0 - 2026-06-27
 
 Cover-loading performance release plus the v8.3 audit cache-key follow-up.

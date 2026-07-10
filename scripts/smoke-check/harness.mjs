@@ -382,6 +382,10 @@ function createApiResponseRecorder() {
       this.headers.set(String(name).toLowerCase(), String(value));
       return this;
     },
+    removeHeader(name) {
+      this.headers.delete(String(name).toLowerCase());
+      return this;
+    },
     getHeader(name) {
       return this.headers.get(String(name).toLowerCase());
     },
@@ -390,6 +394,9 @@ function createApiResponseRecorder() {
       return this;
     },
     json(payload) {
+      if (!this.getHeader("content-type")) {
+        this.setHeader("Content-Type", "application/json; charset=utf-8");
+      }
       this.jsonBody = payload;
       this.headersSent = true;
       this.ended = true;

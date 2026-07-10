@@ -31,7 +31,6 @@
     let isDisposed = false;
     let bookmarkBindings = [];
     let backClickHandler = null;
-    let bookmarkControlsVisible = false;
     let statusAnnouncementHandle = null;
     let activeBookmarkPostId = null;
     let bookmarksUpdatedHandler = null;
@@ -120,8 +119,6 @@
     }
 
     function setBookmarkControlsVisible(isVisible) {
-      bookmarkControlsVisible = isVisible;
-
       bookmarkElements.forEach((element) => {
         if (!isVisible) {
           element.style.display = "none";

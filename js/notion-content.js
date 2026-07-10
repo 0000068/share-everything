@@ -89,6 +89,7 @@
     buildCoverImageUrl,
     getUrlHostname,
     isLikelyEphemeralAssetUrl,
+    normalizeImageProxySignature,
     resolveCoverImageUrl,
     resolveDisplayImageUrl,
     resolveEmbeddableUrl,
@@ -139,6 +140,7 @@
     { path: "contentUrl.buildCoverImageUrl", value: buildCoverImageUrl, kind: "function" },
     { path: "contentUrl.getUrlHostname", value: getUrlHostname, kind: "function" },
     { path: "contentUrl.isLikelyEphemeralAssetUrl", value: isLikelyEphemeralAssetUrl, kind: "function" },
+    { path: "contentUrl.normalizeImageProxySignature", value: normalizeImageProxySignature, kind: "function" },
     { path: "contentUrl.resolveDisplayImageUrl", value: resolveDisplayImageUrl, kind: "function" },
     { path: "contentUrl.resolveEmbeddableUrl", value: resolveEmbeddableUrl, kind: "function" },
     { path: "contentUrl.resolveProxiedDisplayImageUrl", value: resolveProxiedDisplayImageUrl, kind: "function" },
@@ -688,7 +690,7 @@
     const className = display ? "post-math post-math-display" : "post-math post-math-inline";
     const displayAttribute = display ? ' display="block"' : "";
     const label = escapeHtml(source);
-    let bodyHtml = "";
+    let bodyHtml;
     try {
       bodyHtml = wrapMathRow(parseLatexFragment(source));
     } catch (error) {
@@ -1161,7 +1163,9 @@
       quote: (block, { childrenHtml }) => `<blockquote>${block.text || ""}${childrenHtml}</blockquote>`,
       divider: (block, { childrenHtml }) => `<hr>${childrenHtml}`,
       image: (block, { baseOrigin, childrenHtml, options }) => {
-        const safeImageUrl = resolveProxiedDisplayImageUrl(block.url, baseOrigin);
+        const safeImageUrl = resolveProxiedDisplayImageUrl(block.url, baseOrigin, {
+          signature: block.imageProxySignature,
+        });
         if (!safeImageUrl) return childrenHtml;
         const captionHtml = renderFigureCaption(block.captionHtml, block.caption, "post-figure-caption");
         return `<figure class="post-figure post-figure-image"><img class="post-figure-media" src="${escapeHtml(safeImageUrl)}" alt="${escapeHtml(block.caption)}" ${getPostImageLoadingAttributes(options)}>${captionHtml}</figure>${childrenHtml}`;
@@ -1204,7 +1208,7 @@
       : childrenHtml;
   }
 
-  const { renderPostArticle, renderPostTags } = createPostArticleRenderer({
+  const { renderPostArticle } = createPostArticleRenderer({
     DEFAULT_CATEGORY_COLOR,
     escapeHtml,
     getCategoryColor,
@@ -1291,6 +1295,7 @@
     isLikelyEphemeralAssetUrl,
     mapNotionBlock,
     mapNotionPage,
+    normalizeImageProxySignature,
     renderMathExpression,
     renderPostArticle,
     renderBlocks,
