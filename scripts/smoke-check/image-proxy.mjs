@@ -1,3 +1,5 @@
+import { EventEmitter } from "node:events";
+
 export async function runImageProxyChecks(context) {
   const {
     assert,
@@ -28,16 +30,42 @@ export async function runImageProxyChecks(context) {
   function loadSignedModule(relativePath, sandboxOverrides = {}, envOverrides = {}) {
     return withEnvOverrides({ ...signingEnv, ...envOverrides }, () => {
       const sourcePolicy = loadCommonJsModule("server/image-source-policy.js");
+      const rawHandler = loadCommonJsModule(relativePath, [], sandboxOverrides);
+      const requestPath = relativePath === "api/cover.js" ? "/api/cover" : "/api/image";
       return {
-        handler: loadCommonJsModule(relativePath, [], sandboxOverrides),
+        handler(req, res) {
+          if (typeof req?.url === "string" && req.url) return rawHandler(req, res);
+
+          const params = new URLSearchParams();
+          const query = req?.query || {};
+          const preferredKeys = relativePath === "api/cover.js"
+            ? ["format", "src", "sig", "w"]
+            : ["src", "sig"];
+          const orderedEntries = [
+            ...preferredKeys
+              .filter((key) => Object.prototype.hasOwnProperty.call(query, key))
+              .map((key) => [key, query[key]]),
+            ...Object.entries(query).filter(([key]) => !preferredKeys.includes(key)),
+          ];
+          orderedEntries.forEach(([key, value]) => {
+            if (Array.isArray(value)) value.forEach((entry) => params.append(key, entry));
+            else if (typeof value === "string") params.append(key, value);
+          });
+          const search = params.toString();
+          return rawHandler({
+            ...req,
+            url: `${requestPath}${search ? `?${search}` : ""}`,
+          }, res);
+        },
         sign: sourcePolicy.createImageSourceSignature,
       };
     });
   }
 
   expectIncludes(apiCoverJs, "COVER_IMAGE_WIDTHS", "cover endpoint should constrain supported thumbnail widths");
-  expectIncludes(apiCoverJs, "readAcceptedQuality", "cover endpoint should negotiate explicit Accept quality values");
+  expectNotIncludes(apiCoverJs, '"Vary", "Accept"', "cover endpoint should use explicit formats instead of Accept-varying cache keys");
   expectIncludes(apiCoverJs, "optimizeCoverImage", "cover endpoint should generate real resized image assets");
+  expectIncludes(apiCoverJs, "outputPipeline.destroy", "cover endpoint should cancel Sharp work after client disconnects");
   expectIncludes(apiCoverJs, "sharp.strategy.attention", "cover endpoint should use content-aware crop positioning");
   expectIncludes(apiCoverJs, "../server/image-proxy", "cover endpoint should reuse the shared image fetch service");
   expectIncludes(apiImageJs, "../server/image-proxy", "image endpoint should delegate SSRF and upstream I/O to the shared service");
@@ -141,6 +169,28 @@ export async function runImageProxyChecks(context) {
     false,
     "an explicitly configured weak signing secret should fail closed instead of silently changing keys",
   );
+  const previousSigningSecret = "smoke-test-previous-signing-secret-v0";
+  const previousSigningPolicy = withEnvOverrides({
+    IMAGE_PROXY_SIGNING_SECRET: previousSigningSecret,
+    IMAGE_PROXY_SIGNING_SECRET_PREVIOUS: null,
+    NOTION_TOKEN: null,
+  }, () => loadCommonJsModule("server/image-source-policy.js"));
+  const previousSignature = previousSigningPolicy.createImageSourceSignature(signedSource);
+  const rotatingSigningPolicy = withEnvOverrides({
+    IMAGE_PROXY_SIGNING_SECRET: signingEnv.IMAGE_PROXY_SIGNING_SECRET,
+    IMAGE_PROXY_SIGNING_SECRET_PREVIOUS: previousSigningSecret,
+    NOTION_TOKEN: null,
+  }, () => loadCommonJsModule("server/image-source-policy.js"));
+  assert.equal(
+    rotatingSigningPolicy.verifyImageSourceSignature(signedSource, previousSignature),
+    true,
+    "image signing-key rotation should accept the immediately previous key during cache migration",
+  );
+  assert.notEqual(
+    rotatingSigningPolicy.createImageSourceSignature(signedSource),
+    previousSignature,
+    "new image signatures should always use the current signing key",
+  );
   const signedSummary = signedPolicy.withCoverImageSignature({ coverImage: signedSource });
   assert.equal(
     signedPolicy.verifyImageSourceSignature(signedSource, signedSummary.coverImageSignature),
@@ -169,6 +219,66 @@ export async function runImageProxyChecks(context) {
   assert.equal(gate.tryAcquire(), null, "concurrency gates should fail fast when saturated");
   releaseGate();
   assert.equal(typeof gate.tryAcquire(), "function", "concurrency capacity should return after release");
+
+  const requestLifecycleHelpers = loadCommonJsModule("server/request-lifecycle.js");
+  const lifecycleRequest = new EventEmitter();
+  const lifecycleResponse = new EventEmitter();
+  lifecycleResponse.writableEnded = false;
+  lifecycleResponse.finished = false;
+  const requestLifecycle = requestLifecycleHelpers.createRequestLifecycle(
+    lifecycleRequest,
+    lifecycleResponse,
+  );
+  lifecycleRequest.emit("aborted");
+  assert.equal(requestLifecycle.signal.aborted, true, "client disconnects should abort upstream image work");
+  assert.equal(requestLifecycle.abortKind, "client");
+  requestLifecycle.dispose();
+
+  const deadlineRequest = new EventEmitter();
+  const deadlineResponse = new EventEmitter();
+  deadlineResponse.writableEnded = false;
+  deadlineResponse.finished = false;
+  const deadlineLifecycle = requestLifecycleHelpers.createRequestLifecycle(
+    deadlineRequest,
+    deadlineResponse,
+    { timeoutMs: 10, timeoutMessage: "Image request timed out" },
+  );
+  await new Promise((resolve) => {
+    deadlineLifecycle.signal.addEventListener("abort", resolve, { once: true });
+  });
+  assert.equal(
+    deadlineLifecycle.abortKind,
+    "timeout",
+    "request deadlines must keep the invocation alive until otherwise-handleless upstream work is aborted",
+  );
+  assert.equal(deadlineLifecycle.signal.reason?.code, "request_timeout");
+  deadlineLifecycle.dispose();
+
+  let discardedResponseDestroyed = false;
+  const discardProxyHelpers = loadCommonJsModule("server/image-proxy.js", [], {
+    __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
+    __IMAGE_PROXY_HTTPS_REQUEST__: (_url, _options, callback) => {
+      const response = new EventEmitter();
+      response.statusCode = 415;
+      response.headers = {};
+      response.destroy = () => {
+        discardedResponseDestroyed = true;
+        response.destroyed = true;
+      };
+      const request = new EventEmitter();
+      request.end = () => callback(response);
+      request.destroy = () => {};
+      return request;
+    },
+  });
+  const discardSource = await discardProxyHelpers.normalizeSourceUrl(signedSource);
+  const discardResponse = await discardProxyHelpers.fetchImageResponse(discardSource);
+  discardResponse.discardBody();
+  assert.equal(
+    discardedResponseDestroyed,
+    true,
+    "discarding a rejected upstream response should destroy it instead of draining an orphan download",
+  );
 
   let imageProxyFetchUrl = "";
   let imageProxyLookupAddress = "";
@@ -200,18 +310,28 @@ export async function runImageProxyChecks(context) {
   });
   const imageProxySuccessRes = createApiResponseRecorder();
   const successfulImageUrl = "https://assets.example.com/cover.png";
+  const successfulImageSignature = successfulImageModule.sign(successfulImageUrl);
   await successfulImageModule.handler({
     method: "GET",
     headers: { "x-forwarded-for": "203.0.113.10" },
     query: {
       src: successfulImageUrl,
-      sig: successfulImageModule.sign(successfulImageUrl),
+      sig: successfulImageSignature,
     },
+    url: `/api/image?${new URLSearchParams([
+      ["src", successfulImageUrl],
+      ["sig", successfulImageSignature],
+    ])}`,
   }, imageProxySuccessRes);
   assert.equal(imageProxySuccessRes.statusCode, 200);
   assert.equal(imageProxyFetchUrl, successfulImageUrl);
   assert.equal(imageProxyLookupAddress, "93.184.216.34");
   assert.equal(imageProxySuccessRes.getHeader("content-type"), "image/png");
+  assert.equal(
+    imageProxySuccessRes.getHeader("content-length"),
+    String(coverSourcePng.byteLength),
+    "streamed image responses should preserve a validated Content-Length so truncation is detectable",
+  );
   assert.ok(imageProxySuccessRes.getHeader("cache-control")?.includes("s-maxage=604800"));
   assert.equal(Buffer.compare(imageProxySuccessRes.textBody, coverSourcePng), 0);
   const imageProxyHeadRes = createApiResponseRecorder();
@@ -227,6 +347,83 @@ export async function runImageProxyChecks(context) {
   assert.equal(imageProxyHeadRes.getHeader("content-type"), "image/png");
   assert.equal(imageProxyHeadRes.getHeader("content-length"), String(coverSourcePng.byteLength));
   assert.equal(imageProxyHeadRes.textBody, "", "HEAD should validate the GET representation without returning its body");
+
+  const mismatchedLengthImageModule = loadSignedModule("api/image.js", {
+    __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
+    __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
+      body: coverSourcePng,
+      headers: {
+        "content-type": "image/png",
+        "content-length": String(coverSourcePng.byteLength + 1),
+      },
+    }),
+  });
+  const mismatchedLengthRes = createApiResponseRecorder();
+  await mismatchedLengthImageModule.handler({
+    method: "GET",
+    headers: { "x-forwarded-for": "203.0.113.13" },
+    query: {
+      src: successfulImageUrl,
+      sig: mismatchedLengthImageModule.sign(successfulImageUrl),
+    },
+  }, mismatchedLengthRes);
+  assert.equal(mismatchedLengthRes.statusCode, 502);
+  assert.equal(mismatchedLengthRes.getHeader("content-type"), "application/json; charset=utf-8");
+  assert.equal(
+    mismatchedLengthRes.getHeader("cache-control"),
+    "no-store",
+    "a length-mismatched upstream body must not become a cacheable image response",
+  );
+
+  const overrunLengthImageModule = loadSignedModule("api/image.js", {
+    __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
+    __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
+      body: coverSourcePng,
+      headers: {
+        "content-type": "image/png",
+        "content-length": String(coverSourcePng.byteLength - 1),
+      },
+    }),
+  });
+  const overrunLengthRes = createApiResponseRecorder();
+  await overrunLengthImageModule.handler({
+    method: "GET",
+    headers: { "x-forwarded-for": "203.0.113.15" },
+    query: {
+      src: successfulImageUrl,
+      sig: overrunLengthImageModule.sign(successfulImageUrl),
+    },
+  }, overrunLengthRes);
+  assert.equal(overrunLengthRes.statusCode, 502, "an upstream body that overruns Content-Length should fail closed");
+  assert.equal(overrunLengthRes.getHeader("cache-control"), "no-store");
+
+  const interruptedImageBody = Buffer.concat([coverSourcePng, Buffer.alloc(320)]);
+  const interruptedImageModule = loadSignedModule("api/image.js", {
+    __IMAGE_PROXY_DNS_LOOKUP__: publicImageDnsLookup,
+    __IMAGE_PROXY_HTTPS_REQUEST__: createImageRequestMock({
+      body: interruptedImageBody,
+      headers: {
+        "content-type": "image/png",
+        "content-length": String(interruptedImageBody.byteLength),
+      },
+      responseError: new Error("upstream stream interrupted"),
+    }),
+  });
+  const interruptedImageRes = createApiResponseRecorder();
+  await interruptedImageModule.handler({
+    method: "GET",
+    headers: { "x-forwarded-for": "203.0.113.14" },
+    query: {
+      src: successfulImageUrl,
+      sig: interruptedImageModule.sign(successfulImageUrl),
+    },
+  }, interruptedImageRes);
+  assert.equal(interruptedImageRes.statusCode, 200);
+  assert.equal(
+    interruptedImageRes.destroyed,
+    true,
+    "an upstream failure after success headers must abort the downstream response instead of completing a cacheable partial 200",
+  );
 
   let unsignedFetchCount = 0;
   const unsignedImageModule = loadSignedModule("api/image.js", {
@@ -270,6 +467,33 @@ export async function runImageProxyChecks(context) {
   }, nonCanonicalSourceRes);
   assert.equal(nonCanonicalSourceRes.statusCode, 400, "non-canonical source variants should not fragment the cache key");
   assert.equal(unsignedFetchCount, 0);
+
+  const signedImageSource = unsignedImageModule.sign(successfulImageUrl);
+  const canonicalImageParams = new URLSearchParams([
+    ["src", successfulImageUrl],
+    ["sig", signedImageSource],
+  ]);
+  const reorderedImageUrlRes = createApiResponseRecorder();
+  await unsignedImageModule.handler({
+    method: "GET",
+    headers: {},
+    query: { src: successfulImageUrl, sig: signedImageSource },
+    url: `/api/image?sig=${encodeURIComponent(signedImageSource)}&src=${encodeURIComponent(successfulImageUrl)}`,
+  }, reorderedImageUrlRes);
+  assert.equal(reorderedImageUrlRes.statusCode, 400, "raw image query order should have one canonical CDN key");
+  const nonCanonicalEncodingImageRes = createApiResponseRecorder();
+  await unsignedImageModule.handler({
+    method: "GET",
+    headers: {},
+    query: { src: successfulImageUrl, sig: signedImageSource },
+    url: `/api/image?${canonicalImageParams.toString().replaceAll("%2F", "%2f")}`,
+  }, nonCanonicalEncodingImageRes);
+  assert.equal(
+    nonCanonicalEncodingImageRes.statusCode,
+    400,
+    "equivalent percent-encoding variants should not fragment the image CDN key",
+  );
+  assert.equal(unsignedFetchCount, 0, "noncanonical raw image URLs should be rejected before upstream I/O");
 
   const strictQueryRes = createApiResponseRecorder();
   await unsignedImageModule.handler({
@@ -359,25 +583,34 @@ export async function runImageProxyChecks(context) {
     }),
   });
   const coverProxySuccessRes = createApiResponseRecorder();
+  const successfulCoverSignature = successfulCoverModule.sign(successfulImageUrl);
   await successfulCoverModule.handler({
     method: "GET",
     headers: { accept: "image/avif;q=0.4,image/webp;q=1,image/*;q=0.2" },
     query: {
+      format: "webp",
       src: successfulImageUrl,
-      sig: successfulCoverModule.sign(successfulImageUrl),
+      sig: successfulCoverSignature,
       w: "320",
     },
+    url: `/api/cover?${new URLSearchParams([
+      ["format", "webp"],
+      ["src", successfulImageUrl],
+      ["sig", successfulCoverSignature],
+      ["w", "320"],
+    ])}`,
   }, coverProxySuccessRes);
   assert.equal(coverProxySuccessRes.statusCode, 200);
-  assert.equal(coverProxySuccessRes.getHeader("content-type"), "image/webp", "higher Accept quality should beat server format preference");
+  assert.equal(coverProxySuccessRes.getHeader("content-type"), "image/webp", "explicit format should select the output codec");
   assert.ok(coverProxySuccessRes.getHeader("cache-control")?.includes("s-maxage=2592000"));
-  assert.equal(coverProxySuccessRes.getHeader("vary"), "Accept");
+  assert.equal(coverProxySuccessRes.getHeader("vary"), undefined);
   assert.equal(coverProxySuccessRes.textBody.subarray(8, 12).toString("ascii"), "WEBP");
   const coverProxyHeadRes = createApiResponseRecorder();
   await successfulCoverModule.handler({
     method: "HEAD",
     headers: { accept: "image/webp", "x-forwarded-for": "203.0.113.12" },
     query: {
+      format: "webp",
       src: successfulImageUrl,
       sig: successfulCoverModule.sign(successfulImageUrl),
       w: "320",
@@ -393,12 +626,39 @@ export async function runImageProxyChecks(context) {
     method: "GET",
     headers: { accept: "image/webp" },
     query: {
+      format: "webp",
       src: successfulImageUrl,
       sig: successfulCoverModule.sign(successfulImageUrl),
       w: ["320", "640"],
     },
   }, duplicateCoverParameterRes);
   assert.equal(duplicateCoverParameterRes.statusCode, 400, "duplicate optional cover parameters should be rejected");
+  const canonicalCoverSignature = successfulCoverModule.sign(successfulImageUrl);
+  const reorderedCoverUrlRes = createApiResponseRecorder();
+  await successfulCoverModule.handler({
+    method: "GET",
+    headers: { accept: "image/webp" },
+    query: {
+      format: "webp",
+      src: successfulImageUrl,
+      sig: canonicalCoverSignature,
+      w: "320",
+    },
+    url: `/api/cover?w=320&sig=${encodeURIComponent(canonicalCoverSignature)}&src=${encodeURIComponent(successfulImageUrl)}&format=webp`,
+  }, reorderedCoverUrlRes);
+  assert.equal(reorderedCoverUrlRes.statusCode, 400, "raw cover query order should have one canonical CDN key");
+  const implicitWidthCoverRes = createApiResponseRecorder();
+  await successfulCoverModule.handler({
+    method: "GET",
+    headers: { accept: "image/webp" },
+    query: {
+      format: "webp",
+      src: successfulImageUrl,
+      sig: canonicalCoverSignature,
+    },
+    url: `/api/cover?src=${encodeURIComponent(successfulImageUrl)}&sig=${encodeURIComponent(canonicalCoverSignature)}`,
+  }, implicitWidthCoverRes);
+  assert.equal(implicitWidthCoverRes.statusCode, 400, "cover width should be explicit so the default has one CDN key");
   for (const nonCanonicalQuery of [
     { w: "0320" },
     { w: "" },
@@ -410,6 +670,7 @@ export async function runImageProxyChecks(context) {
       method: "GET",
       headers: { accept: "image/webp" },
       query: {
+        format: "webp",
         src: successfulImageUrl,
         sig: successfulCoverModule.sign(successfulImageUrl),
         ...nonCanonicalQuery,
@@ -437,18 +698,18 @@ export async function runImageProxyChecks(context) {
   assert.equal(explicitJpegRes.getHeader("vary"), undefined, "explicit formats should not retain a stale Accept variance");
   assert.deepEqual([...explicitJpegRes.textBody.subarray(0, 3)], [0xff, 0xd8, 0xff]);
 
-  const coverNotAcceptableRes = createApiResponseRecorder();
+  const missingFormatRes = createApiResponseRecorder();
   await successfulCoverModule.handler({
     method: "GET",
-    headers: { accept: "image/avif;q=0,image/webp;q=0,image/jpeg;q=0" },
+    headers: { accept: "image/webp" },
     query: {
       src: successfulImageUrl,
       sig: successfulCoverModule.sign(successfulImageUrl),
       w: "320",
     },
-  }, coverNotAcceptableRes);
-  assert.equal(coverNotAcceptableRes.statusCode, 406);
-  assert.equal(coverNotAcceptableRes.getHeader("content-type"), "application/json; charset=utf-8");
+  }, missingFormatRes);
+  assert.equal(missingFormatRes.statusCode, 400, "cover format should be explicit so Accept cannot fragment CDN keys");
+  assert.equal(missingFormatRes.getHeader("content-type"), "application/json; charset=utf-8");
 
   const invalidRasterBody = Buffer.from('{"error":"not an image"}');
   const invalidRasterImageModule = loadSignedModule("api/image.js", {
@@ -499,6 +760,7 @@ export async function runImageProxyChecks(context) {
     method: "GET",
     headers: { accept: "image/webp" },
     query: {
+      format: "webp",
       src: successfulImageUrl,
       sig: invalidCoverModule.sign(successfulImageUrl),
       w: "320",
@@ -513,6 +775,7 @@ export async function runImageProxyChecks(context) {
     method: "HEAD",
     headers: { accept: "image/webp" },
     query: {
+      format: "webp",
       src: successfulImageUrl,
       sig: invalidCoverModule.sign(successfulImageUrl),
       w: "320",

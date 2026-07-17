@@ -8,6 +8,9 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { diffPng } from "./lib/pixel-diff.mjs";
+import { runNamedCleanupTasks } from "./lib/cleanup-tasks.mjs";
+import { VISUAL_SCENARIOS } from "./lib/visual-scenarios.mjs";
+import { VISUAL_POST_ID } from "./fixtures/visual-api-fixtures.mjs";
 
 const rootDir = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
 const host = "127.0.0.1";
@@ -23,36 +26,79 @@ const siteConfig = JSON.parse(fs.readFileSync(path.join(rootDir, "site.config.js
 const siteName = typeof siteConfig.siteName === "string" && siteConfig.siteName.trim()
   ? siteConfig.siteName.trim()
   : "Share Everything";
+const SEMANTIC_READY_TIMEOUT_MS = 12_000;
+const SEMANTIC_READY_POLL_MS = 100;
+const FINITE_MOTION_TIMEOUT_MS = 4_000;
 
 const scenarios = [
   {
-    name: "mobile-home",
+    name: VISUAL_SCENARIOS.mobileHome,
     path: "/",
+    readiness: "home",
     viewport: { width: 390, height: 844, mobile: true },
     check: checkMobileHome,
   },
   {
-    name: "mobile-blog",
-    path: "/blog.html",
+    name: VISUAL_SCENARIOS.mobileBlog,
+    path: "/__visual/blog.html",
+    readiness: "blog",
     viewport: { width: 390, height: 844, mobile: true },
     check: checkMobileBlog,
   },
   {
-    name: "mobile-post-empty",
+    name: VISUAL_SCENARIOS.mobilePostContent,
+    path: `/__visual/post.html?id=${VISUAL_POST_ID}`,
+    readiness: "post-content",
+    viewport: { width: 390, height: 844, mobile: true },
+    check: checkMobilePostContent,
+  },
+  {
+    name: VISUAL_SCENARIOS.mobilePostEmpty,
     path: "/__visual/post.html",
+    readiness: "post-empty",
     viewport: { width: 390, height: 844, mobile: true },
     check: checkMobilePostEmpty,
   },
   {
-    name: "desktop-home",
+    name: VISUAL_SCENARIOS.desktopHome,
     path: "/",
+    readiness: "home",
     viewport: { width: 1280, height: 720, mobile: false },
     check: checkDesktopHome,
+    afterCaptureCheck: checkFinePointerNarrowHomeReflow,
+  },
+  {
+    name: VISUAL_SCENARIOS.desktopBlogContent,
+    path: "/__visual/blog.html",
+    readiness: "blog",
+    viewport: { width: 1280, height: 720, mobile: false },
+    check: checkDesktopBlogContent,
+    afterCaptureCheck: checkFinePointerNarrowBlogReflow,
+  },
+  {
+    name: VISUAL_SCENARIOS.desktopPostContent,
+    path: `/__visual/post.html?id=${VISUAL_POST_ID}`,
+    readiness: "post-content",
+    viewport: { width: 1280, height: 720, mobile: false },
+    check: checkDesktopPostContent,
   },
 ];
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function removeTemporaryDirectory(directory, { attempts = 80, retryDelayMs = 250 } = {}) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      fs.rmSync(directory, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      const isTransientWindowsLock = ["EBUSY", "ENOTEMPTY", "EPERM"].includes(error?.code);
+      if (!isTransientWindowsLock || attempt === attempts) throw error;
+      await sleep(retryDelayMs);
+    }
+  }
 }
 
 function getFreePort() {
@@ -191,7 +237,10 @@ function buildBrowserBaseArgs({ profileDir, viewport, mobile = false } = {}) {
     "--disable-accelerated-2d-canvas",
     "--disable-accelerated-video-decode",
     "--disable-background-networking",
+    "--disable-background-mode",
+    "--disable-component-update",
     "--disable-default-apps",
+    "--disable-domain-reliability",
     "--disable-extensions",
     "--disable-dev-shm-usage",
     "--disable-sync",
@@ -226,85 +275,161 @@ function buildBrowserBaseArgs({ profileDir, viewport, mobile = false } = {}) {
 async function startBrowser(debugPort) {
   const executable = findBrowserExecutable();
   const profileDir = path.join(os.tmpdir(), `share-everything-visual-profile-${debugPort}`);
-  fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
-  fs.mkdirSync(profileDir, { recursive: true });
-
-  const child = spawn(executable, [
-    ...buildBrowserBaseArgs({ profileDir }),
-    `--remote-debugging-address=${host}`,
-    `--remote-debugging-port=${debugPort}`,
-    "about:blank",
-  ], {
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-
+  let child = null;
   let output = "";
-  child.stdout.on("data", (chunk) => {
-    output += chunk.toString();
-  });
-  child.stderr.on("data", (chunk) => {
-    output += chunk.toString();
-  });
+  try {
+    await removeTemporaryDirectory(profileDir);
+    fs.mkdirSync(profileDir, { recursive: true });
 
-  await waitForHttpOk(`http://${host}:${debugPort}/json/version`);
+    child = spawn(executable, [
+      ...buildBrowserBaseArgs({ profileDir }),
+      `--remote-debugging-address=${host}`,
+      `--remote-debugging-port=${debugPort}`,
+      "about:blank",
+    ], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
 
-  return {
-    child,
-    getOutput: () => output.trim(),
-    stop: async () => {
-      await stopProcess(child);
-      fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
-    },
-  };
+    child.stdout.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+
+    const earlyBrowserFailure = new Promise((_, reject) => {
+      child.once("error", reject);
+      child.once("exit", (code, signal) => {
+        reject(new Error(`Browser exited before CDP became ready: code=${code} signal=${signal}`));
+      });
+    });
+    const versionResponse = await Promise.race([
+      waitForHttpOk(`http://${host}:${debugPort}/json/version`),
+      earlyBrowserFailure,
+    ]);
+    const browserWebSocketUrl = JSON.parse(versionResponse.body).webSocketDebuggerUrl;
+    if (!browserWebSocketUrl) {
+      throw new Error("Chrome DevTools version response did not include a browser WebSocket URL");
+    }
+
+    let stopPromise = null;
+    return {
+      child,
+      getOutput: () => output.trim(),
+      stop: () => {
+        stopPromise ||= (async () => {
+          if (child.exitCode === null) {
+            const client = createDevToolsClient(browserWebSocketUrl);
+            try {
+              await client.connect();
+              await client.command("Browser.close", {}, 2_000).catch(() => {});
+            } catch {
+              // The process fallback below still provides bounded cleanup when the
+              // DevTools socket has already closed or browser startup was partial.
+            } finally {
+              client.close();
+            }
+          }
+          await cleanupBrowserResources(child, profileDir);
+        })();
+        return stopPromise;
+      },
+    };
+  } catch (startupError) {
+    try {
+      await cleanupBrowserResources(child, profileDir);
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [startupError, cleanupError],
+        `Browser startup failed and cleanup was incomplete: ${startupError.message}`,
+        { cause: cleanupError },
+      );
+    }
+    throw startupError;
+  }
 }
 
 async function runCommandLineScreenshot({ executable, url, outputPath, viewport }) {
   const profileDir = path.join(os.tmpdir(), `share-everything-visual-cli-${Date.now()}-${Math.random().toString(16).slice(2)}`);
-  fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
-  fs.mkdirSync(profileDir, { recursive: true });
-
-  const child = spawn(executable, [
-    ...buildBrowserBaseArgs({
-      profileDir,
-      viewport,
-      mobile: viewport.mobile,
-    }),
-    "--run-all-compositor-stages-before-draw",
-    "--virtual-time-budget=2500",
-    `--screenshot=${outputPath}`,
-    url,
-  ], {
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-
+  let child = null;
   let output = "";
-  child.stdout.on("data", (chunk) => {
-    output += chunk.toString();
-  });
-  child.stderr.on("data", (chunk) => {
-    output += chunk.toString();
-  });
+  let operationError = null;
+  let cleanupError = null;
+  let screenshotBytes = null;
+  try {
+    try {
+      await removeTemporaryDirectory(profileDir);
+      fs.mkdirSync(profileDir, { recursive: true });
 
-  const exitCode = await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      child.kill("SIGKILL");
-      reject(new Error(`Timed out capturing screenshot for ${url}`));
-    }, 20_000);
+      child = spawn(executable, [
+        ...buildBrowserBaseArgs({
+          profileDir,
+          viewport,
+          mobile: viewport.mobile,
+        }),
+        "--run-all-compositor-stages-before-draw",
+        "--virtual-time-budget=2500",
+        `--screenshot=${outputPath}`,
+        url,
+      ], {
+        stdio: ["ignore", "pipe", "pipe"],
+      });
 
-    child.on("exit", (code) => {
-      clearTimeout(timer);
-      resolve(code);
-    });
-  });
+      child.stdout.on("data", (chunk) => {
+        output += chunk.toString();
+      });
+      child.stderr.on("data", (chunk) => {
+        output += chunk.toString();
+      });
 
-  fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
-  if (exitCode !== 0) {
-    throw new Error(`Browser screenshot command failed for ${url} with code ${exitCode}\n${output}`);
+      const exitCode = await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          try {
+            child.kill("SIGKILL");
+          } catch {
+            // The shared finally cleanup below still performs bounded teardown.
+          }
+          reject(new Error(`Timed out capturing screenshot for ${url}`));
+        }, 20_000);
+
+        child.once("error", (error) => {
+          clearTimeout(timer);
+          reject(error);
+        });
+        child.once("exit", (code) => {
+          clearTimeout(timer);
+          resolve(code);
+        });
+      });
+
+      if (exitCode !== 0) {
+        throw new Error(`Browser screenshot command failed for ${url} with code ${exitCode}\n${output}`);
+      }
+
+      const stats = fs.statSync(outputPath);
+      assert.ok(stats.size > 10_000, `${path.basename(outputPath)} screenshot should not be blank`);
+      screenshotBytes = stats.size;
+    } catch (error) {
+      operationError = error;
+    }
+  } finally {
+    try {
+      await cleanupBrowserResources(child, profileDir);
+    } catch (error) {
+      cleanupError = error;
+    }
   }
 
-  const stats = fs.statSync(outputPath);
-  assert.ok(stats.size > 10_000, `${path.basename(outputPath)} screenshot should not be blank`);
-  return stats.size;
+  if (operationError && cleanupError) {
+    throw new AggregateError(
+      [operationError, cleanupError],
+      `Screenshot capture failed and cleanup was incomplete: ${operationError.message}`,
+      { cause: cleanupError },
+    );
+  }
+  if (operationError) throw operationError;
+  if (cleanupError) throw cleanupError;
+  return screenshotBytes;
 }
 
 async function runCommandLineFallback({ appOrigin }) {
@@ -331,22 +456,114 @@ async function runCommandLineFallback({ appOrigin }) {
 
 function stopProcess(child) {
   return new Promise((resolve) => {
-    if (!child || child.killed || child.exitCode != null) {
+    if (!child || child.exitCode != null) {
       resolve();
       return;
     }
 
-    const timer = setTimeout(() => {
-      child.kill("SIGKILL");
-      resolve();
-    }, 2000);
-
-    child.once("exit", () => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       resolve();
-    });
-    child.kill();
+    };
+    const timer = setTimeout(() => {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        // The process is already gone or cannot receive another signal.
+      }
+      finish();
+    }, 2000);
+
+    child.once("exit", finish);
+    child.once("error", finish);
+    try {
+      child.kill();
+    } catch {
+      finish();
+    }
   });
+}
+
+function runBoundedCleanupCommand(executable, args, timeoutMs = 10_000) {
+  return new Promise((resolve) => {
+    let cleanupProcess;
+    try {
+      cleanupProcess = spawn(executable, args, {
+        stdio: "ignore",
+        windowsHide: true,
+      });
+    } catch {
+      resolve(false);
+      return;
+    }
+
+    let settled = false;
+    const finish = (succeeded) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(succeeded);
+    };
+    const timer = setTimeout(() => {
+      try {
+        cleanupProcess.kill("SIGKILL");
+      } catch {
+        // The bounded cleanup command has already exited.
+      }
+      finish(false);
+    }, timeoutMs);
+
+    cleanupProcess.once("error", () => finish(false));
+    cleanupProcess.once("exit", (code) => finish(code === 0));
+  });
+}
+
+async function stopWindowsBrowserProcesses(child, profileDir) {
+  if (process.platform !== "win32") return;
+
+  const systemRoot = process.env.SystemRoot || "C:\\Windows";
+  if (child?.pid) {
+    await runBoundedCleanupCommand(
+      path.join(systemRoot, "System32", "taskkill.exe"),
+      ["/PID", String(child.pid), "/T", "/F"],
+    );
+  }
+
+  const escapedProfileDir = profileDir.replaceAll("'", "''");
+  const cleanupScript = [
+    `$profile = '${escapedProfileDir}'`,
+    "$browserNames = @('chrome.exe', 'msedge.exe', 'chromium.exe', 'chromium-browser.exe')",
+    "Get-CimInstance Win32_Process | Where-Object { $browserNames -contains $_.Name -and $_.CommandLine -like ('*' + $profile + '*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
+  ].join("\n");
+  const encodedCleanupScript = Buffer.from(cleanupScript, "utf16le").toString("base64");
+  await runBoundedCleanupCommand(
+    path.join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
+    ["-NoProfile", "-NonInteractive", "-EncodedCommand", encodedCleanupScript],
+  );
+}
+
+async function cleanupBrowserResources(child, profileDir) {
+  const cleanupErrors = [];
+  try {
+    await stopWindowsBrowserProcesses(child, profileDir);
+    await stopProcess(child);
+    await stopWindowsBrowserProcesses(null, profileDir);
+  } catch (error) {
+    cleanupErrors.push(error);
+  }
+
+  try {
+    await removeTemporaryDirectory(profileDir);
+  } catch (error) {
+    cleanupErrors.push(error);
+  }
+
+  if (cleanupErrors.length > 0) {
+    throw new AggregateError(cleanupErrors, `Failed to clean browser resources for ${profileDir}`);
+  }
 }
 
 function markVisualRegressionFailure(error) {
@@ -379,6 +596,11 @@ function compareWithBaseline(name, bytes) {
 
   const baselinePath = path.join(rootDir, "scripts/visual-baselines", `${name}.png`);
   if (!fs.existsSync(baselinePath)) {
+    const message = `Missing visual baseline: ${baselinePath}. Run npm run visual:approve only after reviewing the captured screenshots.`;
+    if (isStrictVisualMode()) {
+      throw markVisualRegressionFailure(new Error(message));
+    }
+    console.warn(message);
     return null;
   }
 
@@ -612,6 +834,31 @@ async function createPage(debugPort) {
   return client;
 }
 
+function createScenarioSeed(name) {
+  let seed = 0x811c9dc5;
+  for (const character of String(name || "visual")) {
+    seed ^= character.codePointAt(0);
+    seed = Math.imul(seed, 0x01000193);
+  }
+  return seed >>> 0;
+}
+
+async function installDeterministicVisualRuntime(client, scenarioName) {
+  const seed = createScenarioSeed(scenarioName);
+  await client.command("Page.addScriptToEvaluateOnNewDocument", {
+    source: `(() => {
+      let state = ${seed};
+      Math.random = () => {
+        state = (state + 0x6d2b79f5) >>> 0;
+        let value = state;
+        value = Math.imul(value ^ (value >>> 15), value | 1);
+        value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+        return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+      };
+    })();`,
+  });
+}
+
 async function configureViewport(client, viewport) {
   await client.command("Emulation.setDeviceMetricsOverride", {
     width: viewport.width,
@@ -647,11 +894,26 @@ async function configureViewport(client, viewport) {
   }
 }
 
+async function configureFinePointerViewport(client, viewport) {
+  await client.command("Emulation.setEmulatedMedia", {
+    media: "screen",
+    features: [
+      { name: "hover", value: "hover" },
+      { name: "any-hover", value: "hover" },
+      { name: "pointer", value: "fine" },
+      { name: "any-pointer", value: "fine" },
+    ],
+  });
+  await client.command("Emulation.setTouchEmulationEnabled", {
+    enabled: false,
+  });
+  await configureViewport(client, viewport);
+}
+
 async function navigate(client, url) {
   const loadEvent = client.waitForEvent("Page.loadEventFired", 15_000);
   await client.command("Page.navigate", { url });
   await loadEvent;
-  await sleep(900);
 }
 
 async function evaluate(client, expression) {
@@ -671,6 +933,189 @@ async function evaluate(client, expression) {
   }
 
   return result.result?.value;
+}
+
+function buildReadinessExpression(readiness) {
+  if (readiness === "home") {
+    return `(() => {
+      const title = document.querySelector(".hero-title");
+      const search = document.querySelector(".hero-search");
+      const actions = document.querySelector(".hero-cta-group");
+      const canvas = document.getElementById("particles-canvas");
+      const ready = document.body?.dataset.page === "index"
+        && Boolean(title?.textContent.trim())
+        && Boolean(search)
+        && Boolean(actions)
+        && Boolean(canvas);
+      return {
+        ready,
+        page: document.body?.dataset.page || "",
+        title: title?.textContent.trim() || "",
+        hasSearch: Boolean(search),
+        hasActions: Boolean(actions),
+        hasCanvas: Boolean(canvas),
+      };
+    })()`;
+  }
+
+  if (readiness === "blog") {
+    return `(() => {
+      const grid = document.getElementById("blogGrid");
+      const cards = [...(grid?.querySelectorAll(".blog-card") || [])];
+      const busy = grid?.getAttribute("aria-busy") || "missing";
+      const settledCardCount = cards.slice(0, 3).filter((card) => {
+        const style = getComputedStyle(card);
+        const hasActiveMotion = card.getAnimations().some((animation) => (
+          animation.playState !== "finished" && animation.playState !== "idle"
+        ));
+        return card.classList.contains("visible")
+          && Number.parseFloat(style.opacity) >= 0.999
+          && !hasActiveMotion;
+      }).length;
+      const ready = document.body?.dataset.page === "blog"
+        && busy === "false"
+        && cards.length >= 3
+        && settledCardCount === 3
+        && cards.slice(0, 3).every((card) => Boolean(card.querySelector(".blog-card-title")?.textContent.trim()));
+      return {
+        ready,
+        page: document.body?.dataset.page || "",
+        busy,
+        cardCount: cards.length,
+        settledCardCount,
+      };
+    })()`;
+  }
+
+  if (readiness === "post-content") {
+    return `(() => {
+      const article = document.getElementById("postArticle");
+      const title = article?.querySelector(".post-title");
+      const content = article?.querySelector(".post-content");
+      const skeleton = document.getElementById("postSkeleton");
+      const empty = document.getElementById("postEmpty");
+      const skeletonDisplay = skeleton ? getComputedStyle(skeleton).display : "missing";
+      const emptyDisplay = empty ? getComputedStyle(empty).display : "missing";
+      const blockCount = content?.children.length || 0;
+      const ready = document.body?.dataset.page === "post"
+        && title?.textContent.trim() === "从第一原则改善加载体验"
+        && blockCount >= 8
+        && Boolean(content?.querySelector(".post-callout"))
+        && Boolean(content?.querySelector("pre code"))
+        && skeletonDisplay === "none"
+        && emptyDisplay === "none";
+      return {
+        ready,
+        page: document.body?.dataset.page || "",
+        title: title?.textContent.trim() || "",
+        blockCount,
+        skeletonDisplay,
+        emptyDisplay,
+      };
+    })()`;
+  }
+
+  if (readiness === "post-empty") {
+    return `(() => {
+      const article = document.getElementById("postArticle");
+      const skeleton = document.getElementById("postSkeleton");
+      const empty = document.getElementById("postEmpty");
+      const skeletonDisplay = skeleton ? getComputedStyle(skeleton).display : "missing";
+      const emptyDisplay = empty ? getComputedStyle(empty).display : "missing";
+      const ready = document.body?.dataset.page === "post"
+        && Boolean(article)
+        && skeletonDisplay === "none"
+        && emptyDisplay !== "none"
+        && emptyDisplay !== "missing";
+      return {
+        ready,
+        page: document.body?.dataset.page || "",
+        hasArticle: Boolean(article),
+        skeletonDisplay,
+        emptyDisplay,
+      };
+    })()`;
+  }
+
+  throw new Error(`Unknown visual readiness contract: ${readiness}`);
+}
+
+async function waitForSemanticReadiness(client, readiness, timeoutMs = SEMANTIC_READY_TIMEOUT_MS) {
+  const expression = buildReadinessExpression(readiness);
+  const deadline = Date.now() + timeoutMs;
+  let lastState = null;
+
+  while (Date.now() < deadline) {
+    lastState = await evaluate(client, expression);
+    if (lastState?.ready) return lastState;
+    await sleep(SEMANTIC_READY_POLL_MS);
+  }
+
+  throw new Error(
+    `Timed out waiting for visual readiness '${readiness}' after ${timeoutMs}ms: ${JSON.stringify(lastState)}`,
+  );
+}
+
+async function waitForFiniteCssMotion(client) {
+  return evaluate(client, `(async () => {
+    const finiteAnimations = document.getAnimations({ subtree: true }).filter((animation) => {
+      const isCssAnimation = typeof CSSAnimation === "undefined"
+        ? typeof animation.animationName === "string"
+        : animation instanceof CSSAnimation;
+      const isCssTransition = typeof CSSTransition === "undefined"
+        ? typeof animation.transitionProperty === "string"
+        : animation instanceof CSSTransition;
+      const iterations = animation.effect?.getTiming?.().iterations;
+      return (isCssAnimation || isCssTransition)
+        && iterations !== Infinity
+        && animation.playState !== "finished"
+        && animation.playState !== "idle";
+    });
+    if (finiteAnimations.length === 0) {
+      return { count: 0, timedOut: false };
+    }
+
+    let timeoutId = null;
+    const result = await Promise.race([
+      Promise.allSettled(finiteAnimations.map((animation) => animation.finished))
+        .then(() => ({ timedOut: false })),
+      new Promise((resolve) => {
+        timeoutId = setTimeout(() => resolve({ timedOut: true }), ${FINITE_MOTION_TIMEOUT_MS});
+      }),
+    ]);
+    if (timeoutId !== null) clearTimeout(timeoutId);
+    return { count: finiteAnimations.length, timedOut: result.timedOut };
+  })()`);
+}
+
+async function stabilizeInfiniteCssMotion(client) {
+  const state = await evaluate(client, `(() => {
+    const failures = [];
+    const animations = document.getAnimations({ subtree: true }).filter((animation) => (
+      animation.effect?.getTiming?.().iterations === Infinity
+      && animation.playState !== "idle"
+    ));
+
+    animations.forEach((animation) => {
+      try {
+        animation.pause();
+        animation.currentTime = 0;
+      } catch (error) {
+        failures.push(error?.message || String(error));
+      }
+    });
+    // Resolve styles after assigning a common timeline position so screenshot
+    // capture cannot race a pending animation update.
+    document.documentElement.getBoundingClientRect();
+    return { count: animations.length, failures };
+  })()`);
+
+  assert.deepEqual(
+    state?.failures || [],
+    [],
+    "infinite CSS animations should stabilize at one deterministic screenshot phase",
+  );
+  return state;
 }
 
 async function captureScreenshot(client, name) {
@@ -754,25 +1199,8 @@ async function checkMobileHome(client, viewport) {
 
 async function checkMobileBlog(client, viewport) {
   const metrics = await evaluate(client, `(() => {
-    let card = document.querySelector(".blog-card");
-    const grid = document.getElementById("blogGrid") || document.body;
-    if (!card) {
-      grid.innerHTML = [
-        '<article class="blog-card visible" role="listitem">',
-        '  <div class="blog-card-cover"></div>',
-        '  <div class="blog-card-body">',
-        '    <div class="blog-card-category">精选</div>',
-        '    <h3 class="blog-card-title">深究注意力</h3>',
-        '    <div class="blog-card-meta">',
-        '      <button type="button" class="card-bookmark-btn" aria-label="收藏文章">',
-        '        <svg viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>',
-        '      </button>',
-        '    </div>',
-        '  </div>',
-        '</article>',
-      ].join("");
-      card = document.querySelector(".blog-card");
-    }
+    const card = document.querySelector(".blog-card");
+    if (!card) throw new Error("visual blog fixture did not render a real card");
 
     const title = card.querySelector(".blog-card-title");
     const category = card.querySelector(".blog-card-category");
@@ -786,6 +1214,7 @@ async function checkMobileBlog(client, viewport) {
 
     return {
       htmlClass: document.documentElement.className,
+      cardCount: document.querySelectorAll(".blog-card").length,
       scrollWidth: document.documentElement.scrollWidth,
       titleRect: {
         top: titleRect.top,
@@ -813,6 +1242,7 @@ async function checkMobileBlog(client, viewport) {
   })()`);
 
   assert.ok(metrics.htmlClass.includes("is-mobile-device-viewport"), "mobile blog should use the mobile compatibility class");
+  assert.ok(metrics.cardCount >= 3, "mobile blog should render the deterministic fixture through blog-page.js");
   assert.ok(metrics.scrollWidth <= viewport.width + 1, "mobile blog should not create horizontal overflow");
   assertRectInsideViewport(metrics.cardRect, viewport, "mobile blog card");
   assertRectInsideViewport(metrics.titleRect, viewport, "mobile blog title");
@@ -827,6 +1257,42 @@ async function checkMobileBlog(client, viewport) {
   assert.ok(Math.abs(titleCenter - buttonCenter) <= 14, "mobile blog title and bookmark should stay on the same visual row");
   assert.equal(metrics.canvasDisabled, "true", "mobile blog particles should be disabled");
   assert.equal(metrics.canvasDisplay, "none", "mobile blog particle canvas should not render");
+}
+
+async function checkMobilePostContent(client, viewport) {
+  const metrics = await evaluate(client, `(() => {
+    const article = document.getElementById("postArticle");
+    const title = article.querySelector(".post-title");
+    const content = article.querySelector(".post-content");
+    const empty = document.getElementById("postEmpty");
+    const skeleton = document.getElementById("postSkeleton");
+    if (!title || !content) throw new Error("visual post fixture did not render the real article renderer");
+    const articleRect = article.getBoundingClientRect();
+    const titleRect = title.getBoundingClientRect();
+    return {
+      htmlClass: document.documentElement.className,
+      scrollWidth: document.documentElement.scrollWidth,
+      articleRect: { left: articleRect.left, right: articleRect.right, width: articleRect.width, height: articleRect.height },
+      titleRect: { left: titleRect.left, right: titleRect.right, width: titleRect.width, height: titleRect.height },
+      title: title.textContent.trim(),
+      paragraphCount: content.querySelectorAll("p").length,
+      hasCallout: Boolean(content.querySelector(".post-callout")),
+      hasCode: Boolean(content.querySelector("pre code")),
+      emptyDisplay: getComputedStyle(empty).display,
+      skeletonDisplay: getComputedStyle(skeleton).display,
+    };
+  })()`);
+
+  assert.ok(metrics.htmlClass.includes("is-mobile-device-viewport"), "mobile full post should use the mobile compatibility class");
+  assert.ok(metrics.scrollWidth <= viewport.width + 1, "mobile full post should not create horizontal overflow");
+  assertRectInsideViewport(metrics.articleRect, viewport, "mobile full post article");
+  assertRectInsideViewport(metrics.titleRect, viewport, "mobile full post title");
+  assert.equal(metrics.title, "从第一原则改善加载体验", "mobile full post should render fixture metadata");
+  assert.ok(metrics.paragraphCount >= 2, "mobile full post should render representative article paragraphs");
+  assert.equal(metrics.hasCallout, true, "mobile full post should render rich callout content");
+  assert.equal(metrics.hasCode, true, "mobile full post should render code content");
+  assert.equal(metrics.emptyDisplay, "none", "mobile full post should hide the empty state");
+  assert.equal(metrics.skeletonDisplay, "none", "mobile full post should hide the skeleton after loading");
 }
 
 async function checkMobilePostEmpty(client, viewport) {
@@ -907,14 +1373,145 @@ async function checkDesktopHome(client, viewport) {
   assert.ok(metrics.canvasChanged, "desktop particles should remain animated");
 }
 
+async function checkFinePointerNarrowHomeReflow(client) {
+  const viewport = { width: 320, height: 720, mobile: false };
+  await configureFinePointerViewport(client, viewport);
+  const metrics = await evaluate(client, `(async () => {
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const title = document.querySelector(".hero-title");
+    if (!title) throw new Error("fine-pointer narrow home contract requires the hero title");
+    const titleRect = title.getBoundingClientRect();
+    return {
+      finePointer: matchMedia("(hover: hover) and (pointer: fine)").matches,
+      touchFirst: matchMedia("(hover: none) and (pointer: coarse)").matches,
+      narrowViewport: matchMedia("(max-width: 360px)").matches,
+      htmlClass: document.documentElement.className,
+      rootScrollWidth: document.documentElement.scrollWidth,
+      titleClientWidth: title.clientWidth,
+      titleScrollWidth: title.scrollWidth,
+      titleWhiteSpace: getComputedStyle(title).whiteSpace,
+      titleRect: { left: titleRect.left, right: titleRect.right, width: titleRect.width, height: titleRect.height },
+    };
+  })()`);
+
+  assert.equal(metrics.finePointer, true, "320 CSS px home contract should emulate a fine pointer");
+  assert.equal(metrics.touchFirst, false, "fine-pointer home contract should not match touch-first media features");
+  assert.equal(metrics.narrowViewport, true, "fine-pointer home contract should match the ultra-narrow geometry breakpoint");
+  assert.ok(!metrics.htmlClass.includes("is-mobile-device-viewport"), "fine-pointer narrow home should not need the touch compatibility class");
+  assert.ok(metrics.rootScrollWidth <= viewport.width + 1, "fine-pointer 320px home should not hide horizontal overflow");
+  assert.ok(metrics.titleScrollWidth <= metrics.titleClientWidth + 1, "fine-pointer 320px home title text must fit its content box");
+  assert.equal(metrics.titleWhiteSpace, "normal", "fine-pointer 320px home title should allow a safe line break when needed");
+  assertRectInsideViewport(metrics.titleRect, viewport, "fine-pointer narrow home title");
+}
+
+async function checkDesktopBlogContent(client, viewport) {
+  const metrics = await evaluate(client, `(() => {
+    const cards = [...document.querySelectorAll(".blog-card")];
+    if (cards.length < 3) throw new Error("desktop visual blog fixture did not render all cards");
+    return {
+      htmlClass: document.documentElement.className,
+      scrollWidth: document.documentElement.scrollWidth,
+      cardRects: cards.slice(0, 3).map((card) => {
+        const rect = card.getBoundingClientRect();
+        return { left: rect.left, right: rect.right, width: rect.width, height: rect.height };
+      }),
+      titleTexts: cards.slice(0, 3).map((card) => card.querySelector(".blog-card-title")?.textContent.trim()),
+    };
+  })()`);
+
+  assert.ok(!metrics.htmlClass.includes("is-mobile-device-viewport"), "desktop blog should not use the mobile compatibility class");
+  assert.ok(metrics.scrollWidth <= viewport.width + 1, "desktop blog should not create horizontal overflow");
+  metrics.cardRects.forEach((rect, index) => assertRectInsideViewport(rect, viewport, `desktop blog card ${index + 1}`));
+  assert.equal(new Set(metrics.titleTexts).size, 3, "desktop blog should render distinct real fixture cards");
+}
+
+async function checkFinePointerNarrowBlogReflow(client) {
+  const viewport = { width: 320, height: 720, mobile: false };
+  await configureFinePointerViewport(client, viewport);
+
+  const metrics = await evaluate(client, `(async () => {
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const grid = document.getElementById("blogGrid");
+    const cards = [...(grid?.querySelectorAll(".blog-card") || [])].slice(0, 3);
+    if (!grid || cards.length < 3) throw new Error("fine-pointer narrow blog contract requires three cards");
+    const gridRect = grid.getBoundingClientRect();
+    const cardRects = cards.map((card) => {
+      const rect = card.getBoundingClientRect();
+      return { left: rect.left, right: rect.right, top: rect.top, width: rect.width, height: rect.height };
+    });
+    return {
+      finePointer: matchMedia("(hover: hover) and (pointer: fine)").matches,
+      touchFirst: matchMedia("(hover: none) and (pointer: coarse)").matches,
+      narrowViewport: matchMedia("(max-width: 768px)").matches,
+      htmlClass: document.documentElement.className,
+      scrollWidth: document.documentElement.scrollWidth,
+      bodyScrollWidth: document.body.scrollWidth,
+      gridColumns: getComputedStyle(grid).gridTemplateColumns,
+      gridRect: { left: gridRect.left, right: gridRect.right, width: gridRect.width, height: gridRect.height },
+      cardRects,
+    };
+  })()`);
+
+  assert.equal(metrics.finePointer, true, "320 CSS px browser contract should emulate a fine pointer");
+  assert.equal(metrics.touchFirst, false, "fine-pointer browser contract should not match touch-first media features");
+  assert.equal(metrics.narrowViewport, true, "fine-pointer browser contract should match the geometry breakpoint");
+  assert.ok(!metrics.htmlClass.includes("is-mobile-device-viewport"), "fine-pointer narrow blog should not need the touch compatibility class");
+  assert.ok(metrics.scrollWidth <= viewport.width + 1, "fine-pointer 320px blog should not overflow the root viewport");
+  assert.ok(metrics.bodyScrollWidth <= viewport.width + 1, "fine-pointer 320px blog should not overflow the body");
+  assert.equal(metrics.gridColumns.trim().split(/\s+/).length, 2, "fine-pointer 320px blog should reflow to two minmax(0, 1fr) columns");
+  assertRectInsideViewport(metrics.gridRect, viewport, "fine-pointer narrow blog grid");
+  metrics.cardRects.forEach((rect, index) => {
+    assertRectInsideViewport(rect, viewport, `fine-pointer narrow blog card ${index + 1}`);
+    assert.ok(rect.width > 0 && rect.width < 160, `fine-pointer narrow blog card ${index + 1} should shrink below the old 340px minimum`);
+  });
+  assert.ok(Math.abs(metrics.cardRects[0].top - metrics.cardRects[1].top) < 1, "fine-pointer narrow blog should keep two cards in the first row");
+}
+
+async function checkDesktopPostContent(client, viewport) {
+  const metrics = await evaluate(client, `(() => {
+    const article = document.getElementById("postArticle");
+    const title = article.querySelector(".post-title");
+    const content = article.querySelector(".post-content");
+    if (!title || !content) throw new Error("desktop visual post fixture did not render the article");
+    const articleRect = article.getBoundingClientRect();
+    const titleRect = title.getBoundingClientRect();
+    return {
+      htmlClass: document.documentElement.className,
+      scrollWidth: document.documentElement.scrollWidth,
+      articleRect: { left: articleRect.left, right: articleRect.right, width: articleRect.width, height: articleRect.height },
+      titleRect: { left: titleRect.left, right: titleRect.right, width: titleRect.width, height: titleRect.height },
+      contentBlocks: content.children.length,
+      title: title.textContent.trim(),
+    };
+  })()`);
+
+  assert.ok(!metrics.htmlClass.includes("is-mobile-device-viewport"), "desktop full post should not use the mobile compatibility class");
+  assert.ok(metrics.scrollWidth <= viewport.width + 1, "desktop full post should not create horizontal overflow");
+  assertRectInsideViewport(metrics.articleRect, viewport, "desktop full post article");
+  assertRectInsideViewport(metrics.titleRect, viewport, "desktop full post title");
+  assert.ok(metrics.articleRect.width >= 640, "desktop full post should retain a readable content measure");
+  assert.ok(metrics.contentBlocks >= 8, "desktop full post should render the complete representative fixture");
+  assert.equal(metrics.title, "从第一原则改善加载体验", "desktop full post should render fixture metadata");
+}
+
 async function runScenario({ debugPort, appOrigin, scenario }) {
   const client = await createPage(debugPort);
   try {
     await configureViewport(client, scenario.viewport);
+    await installDeterministicVisualRuntime(client, scenario.name);
     await navigate(client, `${appOrigin}${scenario.path}`);
     try {
+      await waitForSemanticReadiness(client, scenario.readiness);
+      const motionState = await waitForFiniteCssMotion(client);
+      if (motionState.timedOut) {
+        const message = `Timed out waiting for ${motionState.count} finite CSS animations/transitions`;
+        if (isStrictVisualMode()) throw new Error(message);
+        console.warn(message);
+      }
       await scenario.check(client, scenario.viewport);
+      await stabilizeInfiniteCssMotion(client);
       const bytes = await captureScreenshot(client, scenario.name);
+      await scenario.afterCaptureCheck?.(client);
       return { name: scenario.name, screenshotBytes: bytes };
     } catch (error) {
       throw markVisualRegressionFailure(error);
@@ -926,6 +1523,11 @@ async function runScenario({ debugPort, appOrigin, scenario }) {
 
 async function main() {
   fs.mkdirSync(outputDir, { recursive: true });
+  for (const scenario of scenarios) {
+    fs.rmSync(path.join(outputDir, `${scenario.name}.png`), { force: true });
+    fs.rmSync(path.join(outputDir, `${scenario.name}.diff.png`), { force: true });
+  }
+  fs.rmSync(path.join(outputDir, "report.json"), { force: true });
 
   const appPort = await getFreePort();
   const debugPort = await getFreePort();
@@ -933,6 +1535,7 @@ async function main() {
   const localServer = startLocalServer(appPort);
   let browser = null;
 
+  let operationError = null;
   try {
     await waitForHttpOk(`${appOrigin}/`);
     let results = [];
@@ -1002,11 +1605,28 @@ async function main() {
     if (diagnostics) {
       console.error(diagnostics);
     }
-    throw error;
-  } finally {
-    await browser?.stop?.();
-    await localServer.stop();
+    operationError = error;
   }
+
+  let cleanupError = null;
+  try {
+    await runNamedCleanupTasks([
+      { name: "browser", run: () => browser?.stop?.() },
+      { name: "local server", run: () => localServer.stop() },
+    ], "Visual regression cleanup failed");
+  } catch (error) {
+    cleanupError = error;
+  }
+
+  if (operationError && cleanupError) {
+    throw new AggregateError(
+      [operationError, cleanupError],
+      `Visual regression failed and cleanup was incomplete: ${operationError.message}`,
+      { cause: operationError },
+    );
+  }
+  if (operationError) throw operationError;
+  if (cleanupError) throw cleanupError;
 }
 
 await main();

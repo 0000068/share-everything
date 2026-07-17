@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 export async function runBlogPageChecks(context) {
   const {
     assert,
@@ -6,9 +8,28 @@ export async function runBlogPageChecks(context) {
     createClassList,
     loadBrowserScript,
     notionContentHelpers,
+    notionContentSharedHelpers,
+    notionContentUrlHelpers,
+    notionContentUtilsHelpers,
     parseBookmarkListingHashMock,
     registeredPages,
   } = context;
+
+const listingContentGlobals = Object.freeze({
+  NotionContentShared: notionContentSharedHelpers,
+  NotionContentUrl: notionContentUrlHelpers,
+  NotionContentUtils: notionContentUtilsHelpers,
+});
+
+const blogPageSource = readFileSync(new URL("../../js/blog-page.js", import.meta.url), "utf8");
+assert.ok(
+  !/确认线上已部署\s+v\d/i.test(blogPageSource),
+  "blog failure guidance should not hard-code a release version that can drift",
+);
+assert.ok(
+  blogPageSource.includes("请确认线上已部署最新版本，并检查 Vercel 的 Notion 环境变量"),
+  "blog failure guidance should use version-independent deployment diagnostics",
+);
 
 const blogFiltersEl = new FakeElement();
 const blogSearchEl = new FakeElement();
@@ -47,7 +68,7 @@ loadBrowserScript("js/blog-page.js", {
     location: blogLocation,
     history: blogHistory,
     scrollTo: () => {},
-    NotionContent: notionContentHelpers,
+    ...listingContentGlobals,
     NotionAPI: {
       escapeHtml: (value) => String(value ?? ""),
       getCategoryColor: () => ({ bg: "#000", color: "#fff", border: "#222" }),
@@ -204,7 +225,7 @@ loadBrowserScript("js/blog-page.js", {
     location: dirtyQueryLocation,
     history: dirtyQueryHistory,
     scrollTo: () => {},
-    NotionContent: notionContentHelpers,
+    ...listingContentGlobals,
     NotionAPI: {
       escapeHtml: (value) => String(value ?? ""),
       getCategoryColor: () => ({ bg: "#000", color: "#fff", border: "#222" }),
@@ -315,7 +336,7 @@ loadBrowserScript("js/blog-page.js", {
     location: defaultQueryLocation,
     history: defaultQueryHistory,
     scrollTo: () => {},
-    NotionContent: notionContentHelpers,
+    ...listingContentGlobals,
     NotionAPI: {
       escapeHtml: (value) => String(value ?? ""),
       getCategoryColor: () => ({ bg: "#000", color: "#fff", border: "#222" }),
@@ -381,6 +402,166 @@ assert.equal(
   "blog page should remove default category, empty search, and first-page params from canonical listing URLs",
 );
 defaultQueryCleanup?.();
+
+async function runOutOfRangeListingFixture({ initialPage, failFirstPage = false }) {
+  const fixtureRegisteredPages = new Map();
+  const fixtureFilters = new FakeElement();
+  const fixtureSearch = new FakeElement();
+  const fixtureGrid = new FakeElement();
+  const fixtureEmpty = new FakeElement();
+  const fixturePagination = new FakeElement();
+  const fixtureStatus = new FakeElement();
+  const fixtureTitle = new FakeElement();
+  const fixtureLocation = new URL(
+    `https://example.com/blog.html${initialPage > 1 ? `?page=${initialPage}` : ""}`,
+  );
+  const assignedUrls = [];
+  fixtureLocation.assign = (url) => {
+    const href = new URL(url, fixtureLocation.href).href;
+    assignedUrls.push(href);
+    fixtureLocation.href = href;
+  };
+  const replaceCalls = [];
+  const fixtureHistory = {
+    pushState(_state, _title, nextUrl) {
+      fixtureLocation.href = new URL(String(nextUrl), fixtureLocation.href).href;
+    },
+    replaceState(_state, _title, nextUrl) {
+      replaceCalls.push(String(nextUrl));
+      fixtureLocation.href = new URL(String(nextUrl), fixtureLocation.href).href;
+    },
+  };
+  const queryPages = [];
+
+  loadBrowserScript("js/blog-page.js", {
+    window: {
+      location: fixtureLocation,
+      history: fixtureHistory,
+      scrollTo: () => {},
+      ...listingContentGlobals,
+      NotionAPI: {
+        escapeHtml: (value) => String(value ?? ""),
+        getCategoryColor: () => ({ bg: "#000", color: "#fff", border: "#222" }),
+        getCategories: () => [{ name: allCategory, emoji: "📚" }],
+        getPageSize: () => 9,
+        async queryPosts({ page }) {
+          queryPages.push(page);
+          if (page > 1 || failFirstPage) {
+            const error = new Error("Requested post-list page is out of range");
+            error.status = 404;
+            error.code = "public_page_out_of_range";
+            throw error;
+          }
+          return {
+            results: [],
+            categories: [{ name: allCategory, label: allCategory, emoji: "📚" }],
+            total: 0,
+            totalPages: 1,
+            currentPage: 1,
+          };
+        },
+      },
+      PageRuntime: {
+        register(pageId, pageModule) {
+          fixtureRegisteredPages.set(pageId, pageModule);
+        },
+      },
+      SiteUtils: {
+        rememberBlogReturnUrl: () => {},
+        sanitizeCoverBackground: (value, fallback) => value || fallback,
+        resolveDisplayImageUrl: (value) => value,
+        sanitizeImageUrl: (value) => value,
+        buildPostPath: (postId) => `/posts/${postId}`,
+        buildBookmarkListingUrl: buildBookmarkListingUrlMock,
+        parseBookmarkListingHash: parseBookmarkListingHashMock,
+      },
+      updateSeoMeta: () => {},
+      UIEffects: { initBlogCardReveal: () => null },
+      requestAnimationFrame: () => 1,
+      cancelAnimationFrame: () => {},
+    },
+    document: {
+      getElementById(id) {
+        return {
+          blogFilters: fixtureFilters,
+          blogSearch: fixtureSearch,
+          blogGrid: fixtureGrid,
+          emptyState: fixtureEmpty,
+          pagination: fixturePagination,
+          blogStatus: fixtureStatus,
+        }[id] || null;
+      },
+      querySelector(selector) {
+        return selector === ".page-title" ? fixtureTitle : null;
+      },
+      querySelectorAll: () => [],
+      createElement: () => new FakeElement(),
+    },
+    globals: {
+      console: { ...console, error() {} },
+    },
+  });
+
+  const cleanup = fixtureRegisteredPages.get("blog")?.init?.();
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  return {
+    assignedUrls,
+    cleanup,
+    empty: fixtureEmpty,
+    location: fixtureLocation,
+    queryPages,
+    replaceCalls,
+  };
+}
+
+const recoveredOutOfRangeListing = await runOutOfRangeListingFixture({ initialPage: 7 });
+assert.deepEqual(
+  recoveredOutOfRangeListing.queryPages,
+  [7, 1],
+  "a stale historical listing page should retry only once on the canonical first page",
+);
+assert.equal(
+  recoveredOutOfRangeListing.replaceCalls.at(-1),
+  "/blog.html",
+  "out-of-range recovery should replace the stale page URL with the canonical overview URL",
+);
+assert.equal(
+  recoveredOutOfRangeListing.location.href,
+  "https://example.com/blog.html",
+  "out-of-range recovery should leave history and rendered first-page state aligned",
+);
+recoveredOutOfRangeListing.cleanup?.();
+
+const failedFirstPageListing = await runOutOfRangeListingFixture({
+  initialPage: 1,
+  failFirstPage: true,
+});
+assert.deepEqual(
+  failedFirstPageListing.queryPages,
+  [1],
+  "an out-of-range first-page response must not enter an automatic retry loop",
+);
+assert.match(
+  failedFirstPageListing.empty.innerHTML,
+  /data-empty-action="overview"[^>]*>返回总览</,
+  "an anomalous first-page range error should expose an explicit overview action",
+);
+failedFirstPageListing.empty.dispatch("click", {
+  target: {
+    dataset: { emptyAction: "overview" },
+    closest(selector) {
+      return selector === "[data-empty-action]" ? this : null;
+    },
+  },
+});
+assert.deepEqual(
+  failedFirstPageListing.assignedUrls,
+  ["https://example.com/blog.html"],
+  "the overview action should hard-reload when the listing is already at canonical first-page state",
+);
+failedFirstPageListing.cleanup?.();
+
 const paginationRegisteredPages = new Map();
 const paginationFiltersEl = new FakeElement();
 const paginationSearchEl = new FakeElement();
@@ -429,7 +610,7 @@ loadBrowserScript("js/blog-page.js", {
     location: paginationLocation,
     history: paginationHistory,
     scrollTo: (options) => paginationScrollCalls.push(options),
-    NotionContent: notionContentHelpers,
+    ...listingContentGlobals,
     NotionAPI: {
       escapeHtml: (value) => String(value ?? ""),
       getCategoryColor: () => ({ bg: "#000", color: "#fff", border: "#222" }),
@@ -441,18 +622,36 @@ loadBrowserScript("js/blog-page.js", {
       queryPosts: async ({ page }) => {
         paginationQueryPages.push(page);
         return {
-          results: [{
-            id: "pagination-window-post",
-            title: "Pagination window",
-            excerpt: "A fixture that keeps the listing non-empty.",
-            category: "AI",
-            date: "2026-05-14",
-            readTime: "1 min",
-            coverImage: `https://cdn.example.com/cover-${page}.jpg`,
-            coverEmoji: "📝",
-            coverGradient: "linear-gradient(135deg, #111111, #222222)",
-            tags: ["Pagination"],
-          }],
+          results: [
+            {
+              id: "pagination-window-post",
+              title: "Pagination window",
+              excerpt: "A fixture that keeps the listing non-empty.",
+              category: "AI",
+              date: "2026-05-14",
+              readTime: "1 min",
+              coverImage: `https://cdn.example.com/cover-${page}.jpg`,
+              coverEmoji: "📝",
+              coverGradient: "linear-gradient(135deg, #111111, #222222)",
+              tags: ["Pagination"],
+            },
+            {
+              id: "pagination-window-post-secondary",
+              title: "Pagination secondary cover",
+              coverImage: `https://cdn.example.com/cover-${page}-secondary.jpg`,
+              coverEmoji: "📝",
+              coverGradient: "linear-gradient(135deg, #111111, #222222)",
+              tags: [],
+            },
+            {
+              id: "pagination-window-post-tertiary",
+              title: "Pagination tertiary cover",
+              coverImage: `https://cdn.example.com/cover-${page}-tertiary.jpg`,
+              coverEmoji: "📝",
+              coverGradient: "linear-gradient(135deg, #111111, #222222)",
+              tags: [],
+            },
+          ],
           categories: [
             { name: "All", label: "All", emoji: "📚" },
             { name: "AI", label: "AI Lab", emoji: "🤖" },
@@ -511,6 +710,26 @@ await new Promise((resolve) => setTimeout(resolve, 0));
 const paginationHtml = paginationEl.innerHTML;
 const paginationButtonCount = (paginationHtml.match(/<button\b/g) || []).length;
 const numberedPageButtonCount = (paginationHtml.match(/aria-label="第 \d+ 页"/g) || []).length;
+assert.equal(
+  (paginationGridEl.innerHTML.match(/loading="eager"/g) || []).length,
+  1,
+  "blog page should eager-load only the first LCP cover candidate",
+);
+assert.equal(
+  (paginationGridEl.innerHTML.match(/fetchpriority="high"/g) || []).length,
+  1,
+  "blog page should assign high fetch priority to only the first cover",
+);
+assert.equal(
+  (paginationGridEl.innerHTML.match(/loading="lazy"/g) || []).length,
+  2,
+  "blog page should lazy-load covers after the first card",
+);
+assert.equal(
+  (paginationGridEl.innerHTML.match(/fetchpriority="auto"/g) || []).length,
+  2,
+  "blog page should leave non-LCP cover fetch priority at auto",
+);
 assert.equal(
   paginationQueryPages.at(0),
   25,
@@ -624,7 +843,7 @@ loadBrowserScript("js/blog-page.js", {
     location: legacyBookmarkLocation,
     history: legacyBookmarkHistory,
     scrollTo: () => {},
-    NotionContent: notionContentHelpers,
+    ...listingContentGlobals,
     NotionAPI: {
       escapeHtml: (value) => String(value ?? ""),
       getCategoryColor: () => ({ bg: "#000", color: "#fff", border: "#222" }),
@@ -718,7 +937,7 @@ loadBrowserScript("js/blog-page.js", {
     location: emptyBookmarkQueryLocation,
     history: emptyBookmarkQueryHistory,
     scrollTo: () => {},
-    NotionContent: notionContentHelpers,
+    ...listingContentGlobals,
     BookmarkManager: {
       getAll: () => [],
       isBookmarked: () => false,
@@ -826,7 +1045,7 @@ loadBrowserScript("js/blog-page.js", {
     location: bookmarkHashLocation,
     history: bookmarkHashHistory,
     scrollTo: () => {},
-    NotionContent: notionContentHelpers,
+    ...listingContentGlobals,
     BookmarkManager: {
       getAll: () => bookmarkHashEntries,
       isBookmarked: () => true,
@@ -922,6 +1141,447 @@ assert.equal(
   bookmarkHashUpdateHandlers.size,
   0,
   "blog page should remove cross-tab bookmark listeners during cleanup",
+);
+
+const abortRegisteredPages = new Map();
+const abortFiltersEl = new FakeElement();
+const abortSearchEl = new FakeElement();
+const abortGridEl = new FakeElement();
+const abortEmptyEl = new FakeElement();
+const abortPaginationEl = new FakeElement();
+const abortStatusEl = new FakeElement();
+const abortLocation = new URL("https://example.com/blog.html");
+const abortSignals = [];
+loadBrowserScript("js/blog-page.js", {
+  window: {
+    location: abortLocation,
+    history: {
+      pushState() {},
+      replaceState() {},
+    },
+    scrollTo: () => {},
+    ...listingContentGlobals,
+    NotionAPI: {
+      escapeHtml: (value) => String(value ?? ""),
+      getCategoryColor: () => ({ bg: "#000", color: "#fff", border: "#222" }),
+      getCategories: () => [
+        { name: allCategory, emoji: "📚" },
+        { name: "Tech", emoji: "🧠" },
+      ],
+      getPageSize: () => 9,
+      queryPosts(query, { signal } = {}) {
+        abortSignals.push(signal);
+        return new Promise(() => {});
+      },
+    },
+    PageRuntime: {
+      register(pageId, pageModule) {
+        abortRegisteredPages.set(pageId, pageModule);
+      },
+    },
+    SiteUtils: {
+      rememberBlogReturnUrl: () => {},
+      sanitizeCoverBackground: (value, fallback) => value || fallback,
+      resolveDisplayImageUrl: (value) => value,
+      sanitizeImageUrl: (value) => value,
+      buildPostPath: (postId) => `/posts/${postId}`,
+      buildBookmarkListingUrl: buildBookmarkListingUrlMock,
+      parseBookmarkListingHash: parseBookmarkListingHashMock,
+    },
+    updateSeoMeta: () => {},
+    UIEffects: { initBlogCardReveal: () => null },
+    requestAnimationFrame: () => 1,
+    cancelAnimationFrame: () => {},
+  },
+  document: {
+    getElementById(id) {
+      return {
+        blogFilters: abortFiltersEl,
+        blogSearch: abortSearchEl,
+        blogGrid: abortGridEl,
+        emptyState: abortEmptyEl,
+        pagination: abortPaginationEl,
+        blogStatus: abortStatusEl,
+      }[id] || null;
+    },
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    createElement: () => new FakeElement(),
+  },
+});
+const abortCleanup = abortRegisteredPages.get("blog")?.init?.();
+assert.equal(abortSignals.length, 1, "blog page should start its initial remote request immediately");
+assert.equal(abortSignals[0]?.aborted, false, "blog page should pass a live AbortSignal to NotionAPI");
+abortFiltersEl.dispatch("click", {
+  target: {
+    dataset: { category: "Tech" },
+    closest(selector) {
+      return selector === ".filter-btn" ? this : null;
+    },
+  },
+});
+assert.equal(abortSignals.length, 2, "blog page should start a replacement request after filter changes");
+assert.equal(abortSignals[0]?.aborted, true, "blog page should abort the stale listing request");
+assert.equal(abortSignals[1]?.aborted, false, "blog page should keep the replacement request active");
+abortCleanup?.();
+assert.equal(abortSignals[1]?.aborted, true, "blog page cleanup should abort the active listing request");
+
+function createFakeClock() {
+  let now = 0;
+  let nextId = 1;
+  const tasks = new Map();
+
+  return {
+    setTimeout(callback, delay = 0) {
+      const id = nextId;
+      nextId += 1;
+      tasks.set(id, { callback, dueAt: now + Math.max(0, Number(delay) || 0) });
+      return id;
+    },
+    clearTimeout(id) {
+      tasks.delete(id);
+    },
+    advanceBy(duration) {
+      const target = now + duration;
+      while (true) {
+        const nextTask = Array.from(tasks.entries())
+          .filter(([, task]) => task.dueAt <= target)
+          .sort((left, right) => left[1].dueAt - right[1].dueAt || left[0] - right[0])[0];
+        if (!nextTask) break;
+        const [id, task] = nextTask;
+        tasks.delete(id);
+        now = task.dueAt;
+        task.callback();
+      }
+      now = target;
+    },
+  };
+}
+
+function createBookmarkHydrationPageHarness(bookmarkManager, clock) {
+  const pages = new Map();
+  const handlers = new Map();
+  const location = new URL("https://example.com/blog.html#bookmarks");
+  const elements = {
+    blogFilters: new FakeElement(),
+    blogSearch: new FakeElement(),
+    blogGrid: new FakeElement(),
+    emptyState: new FakeElement(),
+    pagination: new FakeElement(),
+    blogStatus: new FakeElement(),
+  };
+
+  loadBrowserScript("js/blog-page.js", {
+    window: {
+      location,
+      history: {
+        pushState() {},
+        replaceState() {},
+      },
+      scrollTo: () => {},
+      setTimeout: clock.setTimeout,
+      clearTimeout: clock.clearTimeout,
+      ...listingContentGlobals,
+      BookmarkManager: {
+        getAll: () => [],
+        isBookmarked: () => false,
+        toggleById: () => null,
+        ...bookmarkManager,
+      },
+      PageRuntime: {
+        register(pageId, pageModule) {
+          pages.set(pageId, pageModule);
+        },
+      },
+      SiteUtils: {
+        rememberBlogReturnUrl: () => {},
+        sanitizeCoverBackground: (value, fallback) => value || fallback,
+        resolveShareImageUrl: (value) => value,
+        resolveDisplayImageUrl: (value) => value,
+        sanitizeImageUrl: (value) => value,
+        buildPostPath: (postId) => `/posts/${postId}`,
+        buildBookmarkListingUrl: buildBookmarkListingUrlMock,
+        parseBookmarkListingHash: parseBookmarkListingHashMock,
+      },
+      updateSeoMeta: () => {},
+      UIEffects: { initBlogCardReveal: () => null },
+      requestAnimationFrame: () => 1,
+      cancelAnimationFrame: () => {},
+      addEventListener(type, handler) {
+        if (!handlers.has(type)) handlers.set(type, new Set());
+        handlers.get(type).add(handler);
+      },
+      removeEventListener(type, handler) {
+        handlers.get(type)?.delete(handler);
+      },
+    },
+    document: {
+      getElementById: (id) => elements[id] || null,
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      createElement: () => new FakeElement(),
+    },
+    globals: {
+      setTimeout: clock.setTimeout,
+      clearTimeout: clock.clearTimeout,
+    },
+  });
+
+  const cleanup = pages.get("blog")?.init?.();
+  return {
+    cleanup,
+    dispatch(type) {
+      handlers.get(type)?.forEach((handler) => handler());
+    },
+    listenerCount(type) {
+      return handlers.get(type)?.size || 0;
+    },
+  };
+}
+
+async function flushBookmarkHydrationTasks() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+const retryBookmarkEntry = {
+  id: "bookmark-hydration-retry",
+  title: "Retry bookmark hydration",
+  excerpt: "Keep retryable metadata refreshes live.",
+  category: "Tech",
+  date: "2026-07-17",
+  readTime: "1 min",
+  coverImage: null,
+  coverEmoji: "📝",
+  coverGradient: "linear-gradient(135deg, #111111, #222222)",
+  tags: [],
+};
+
+const onlineRetryClock = createFakeClock();
+let onlineRetryIsStale = true;
+let onlineRetryCalls = 0;
+const onlineRetryHarness = createBookmarkHydrationPageHarness({
+  getDisplayEntries: () => [retryBookmarkEntry],
+  hasStaleMetadata: () => onlineRetryIsStale,
+  async hydrateMissingMetadata() {
+    onlineRetryCalls += 1;
+    if (onlineRetryCalls === 1) return false;
+    onlineRetryIsStale = false;
+    return true;
+  },
+}, onlineRetryClock);
+await flushBookmarkHydrationTasks();
+assert.equal(onlineRetryCalls, 1, "bookmark metadata hydration should make one initial attempt");
+onlineRetryHarness.dispatch("online");
+await flushBookmarkHydrationTasks();
+assert.equal(
+  onlineRetryCalls,
+  2,
+  "an online event should immediately retry a failed bookmark hydration without reloading the page",
+);
+onlineRetryHarness.dispatch("online");
+await flushBookmarkHydrationTasks();
+assert.equal(
+  onlineRetryCalls,
+  2,
+  "online events should not refresh bookmark metadata again after every stale entry has recovered",
+);
+onlineRetryHarness.cleanup?.();
+assert.equal(
+  onlineRetryHarness.listenerCount("online"),
+  0,
+  "blog page cleanup should remove the bookmark hydration online listener",
+);
+
+const partialRetryClock = createFakeClock();
+let partialRetryIsStale = true;
+let partialRetryCalls = 0;
+const partialRetryHarness = createBookmarkHydrationPageHarness({
+  getDisplayEntries: () => [retryBookmarkEntry],
+  hasStaleMetadata: () => partialRetryIsStale,
+  async hydrateMissingMetadata() {
+    partialRetryCalls += 1;
+    if (partialRetryCalls === 1) return true;
+    partialRetryIsStale = false;
+    return true;
+  },
+}, partialRetryClock);
+await flushBookmarkHydrationTasks();
+assert.equal(
+  partialRetryCalls,
+  1,
+  "a partial hydration should re-render without immediately starting a request loop",
+);
+partialRetryClock.advanceBy(4_999);
+await flushBookmarkHydrationTasks();
+assert.equal(partialRetryCalls, 1, "partial hydration retries should honor their bounded backoff");
+partialRetryClock.advanceBy(1);
+await flushBookmarkHydrationTasks();
+assert.equal(
+  partialRetryCalls,
+  2,
+  "remaining stale bookmarks should retry after the initial backoff window",
+);
+partialRetryClock.advanceBy(60_000);
+await flushBookmarkHydrationTasks();
+assert.equal(
+  partialRetryCalls,
+  2,
+  "successful retry completion should cancel further automatic hydration attempts",
+);
+partialRetryHarness.cleanup?.();
+
+const bookmarkToggleClock = createFakeClock();
+const bookmarkToggleRegisteredPages = new Map();
+const bookmarkToggleFiltersEl = new FakeElement();
+const bookmarkToggleSearchEl = new FakeElement();
+const bookmarkToggleGridEl = new FakeElement();
+const bookmarkToggleEmptyEl = new FakeElement();
+const bookmarkTogglePaginationEl = new FakeElement();
+const bookmarkToggleStatusEl = new FakeElement();
+const bookmarkToggleHandlers = new Set();
+const bookmarkToggleLocation = new URL("https://example.com/blog.html#bookmarks");
+const bookmarkToggleEntry = {
+  id: "bookmark-animation-post",
+  title: "Bookmark animation",
+  excerpt: "Wait for the button animation before removing this card.",
+  category: "Tech",
+  date: "2026-07-17",
+  readTime: "1 min",
+  coverImage: null,
+  coverEmoji: "📝",
+  coverGradient: "linear-gradient(135deg, #111111, #222222)",
+  tags: [],
+};
+let bookmarkToggleEntries = [bookmarkToggleEntry];
+let bookmarkToggleReadCount = 0;
+const bookmarkToggleManager = {
+  getAll() {
+    bookmarkToggleReadCount += 1;
+    return bookmarkToggleEntries;
+  },
+  isBookmarked: (postId) => bookmarkToggleEntries.some((entry) => entry.id === postId),
+  toggleById(postId) {
+    const wasBookmarked = this.isBookmarked(postId);
+    bookmarkToggleEntries = bookmarkToggleEntries.filter((entry) => entry.id !== postId);
+    bookmarkToggleHandlers.forEach((handler) => handler());
+    return !wasBookmarked;
+  },
+  hasLegacyMetadata: () => false,
+};
+loadBrowserScript("js/blog-page.js", {
+  window: {
+    location: bookmarkToggleLocation,
+    history: {
+      pushState() {},
+      replaceState() {},
+    },
+    scrollTo: () => {},
+    setTimeout: bookmarkToggleClock.setTimeout,
+    clearTimeout: bookmarkToggleClock.clearTimeout,
+    ...listingContentGlobals,
+    BookmarkManager: bookmarkToggleManager,
+    PageRuntime: {
+      register(pageId, pageModule) {
+        bookmarkToggleRegisteredPages.set(pageId, pageModule);
+      },
+    },
+    SiteUtils: {
+      rememberBlogReturnUrl: () => {},
+      sanitizeCoverBackground: (value, fallback) => value || fallback,
+      resolveDisplayImageUrl: (value) => value,
+      sanitizeImageUrl: (value) => value,
+      buildPostPath: (postId) => `/posts/${postId}`,
+      buildBookmarkListingUrl: buildBookmarkListingUrlMock,
+      parseBookmarkListingHash: parseBookmarkListingHashMock,
+    },
+    updateSeoMeta: () => {},
+    UIEffects: { initBlogCardReveal: () => null },
+    requestAnimationFrame: () => 1,
+    cancelAnimationFrame: () => {},
+    addEventListener(type, handler) {
+      if (type === "bookmarks:updated") bookmarkToggleHandlers.add(handler);
+    },
+    removeEventListener(type, handler) {
+      if (type === "bookmarks:updated") bookmarkToggleHandlers.delete(handler);
+    },
+  },
+  document: {
+    getElementById(id) {
+      return {
+        blogFilters: bookmarkToggleFiltersEl,
+        blogSearch: bookmarkToggleSearchEl,
+        blogGrid: bookmarkToggleGridEl,
+        emptyState: bookmarkToggleEmptyEl,
+        pagination: bookmarkTogglePaginationEl,
+        blogStatus: bookmarkToggleStatusEl,
+      }[id] || null;
+    },
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    createElement: () => new FakeElement(),
+  },
+  globals: {
+    setTimeout: bookmarkToggleClock.setTimeout,
+    clearTimeout: bookmarkToggleClock.clearTimeout,
+  },
+});
+const bookmarkToggleCleanup = bookmarkToggleRegisteredPages.get("blog")?.init?.();
+await Promise.resolve();
+await Promise.resolve();
+const bookmarkReadsAfterInitialRender = bookmarkToggleReadCount;
+const bookmarkButton = {
+  classList: createClassList(),
+  dataset: {
+    bookmarkId: "bookmark-animation-post",
+    bookmarkTitle: "Bookmark animation",
+  },
+  offsetWidth: 24,
+  closest(selector) {
+    return selector === ".card-bookmark-btn" ? this : null;
+  },
+  setAttribute() {},
+};
+bookmarkToggleGridEl.dispatch("click", {
+  target: bookmarkButton,
+  preventDefault() {},
+  stopPropagation() {},
+});
+assert.equal(
+  bookmarkToggleReadCount,
+  bookmarkReadsAfterInitialRender,
+  "bookmark view should suppress its own synchronous update event until the removal animation ends",
+);
+bookmarkToggleClock.advanceBy(299);
+await Promise.resolve();
+assert.equal(
+  bookmarkToggleReadCount,
+  bookmarkReadsAfterInitialRender,
+  "bookmark view should keep the removed card mounted for the full animation window",
+);
+bookmarkToggleClock.advanceBy(1);
+await Promise.resolve();
+assert.equal(
+  bookmarkToggleReadCount,
+  bookmarkReadsAfterInitialRender + 1,
+  "bookmark view should render exactly once after the removal animation",
+);
+
+bookmarkToggleEntries = [bookmarkToggleEntry];
+bookmarkToggleGridEl.dispatch("click", {
+  target: bookmarkButton,
+  preventDefault() {},
+  stopPropagation() {},
+});
+const bookmarkReadsBeforeCleanup = bookmarkToggleReadCount;
+bookmarkToggleCleanup?.();
+bookmarkToggleClock.advanceBy(300);
+await Promise.resolve();
+assert.equal(
+  bookmarkToggleReadCount,
+  bookmarkReadsBeforeCleanup,
+  "blog page cleanup should cancel delayed bookmark renders",
 );
 
 }

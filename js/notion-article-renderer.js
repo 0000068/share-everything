@@ -1,24 +1,20 @@
 (function (root, factory) {
-  const exported = factory();
+  const sharedContent = typeof module === "object" && module.exports
+    ? require("./notion-content-shared")
+    : root?.NotionContentShared;
+  const exported = factory(sharedContent || {});
 
   if (typeof module === "object" && module.exports) {
     module.exports = exported;
   } else if (root) {
     root.NotionArticleRenderer = exported;
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, () => {
-  const CALENDAR_ICON_SVG =
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
-    + '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>'
-    + '<line x1="16" y1="2" x2="16" y2="6"></line>'
-    + '<line x1="8" y1="2" x2="8" y2="6"></line>'
-    + '<line x1="3" y1="10" x2="21" y2="10"></line>'
-    + "</svg>";
-  const CLOCK_ICON_SVG =
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
-    + '<circle cx="12" cy="12" r="10"></circle>'
-    + '<polyline points="12 6 12 12 16 14"></polyline>'
-    + "</svg>";
+})(typeof globalThis !== "undefined" ? globalThis : this, (sharedContent = {}) => {
+  const { CALENDAR_ICON_SVG, CLOCK_ICON_SVG } = sharedContent;
+
+  if (typeof CALENDAR_ICON_SVG !== "string" || typeof CLOCK_ICON_SVG !== "string") {
+    throw new Error("notion-content-shared.js must load before notion-article-renderer.js");
+  }
 
   function createPostArticleRenderer({
     DEFAULT_CATEGORY_COLOR,

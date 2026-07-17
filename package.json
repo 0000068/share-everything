@@ -1,6 +1,7 @@
 {
   "name": "share-everything",
-  "version": "8.5.0",
+  "version": "8.6.0",
+  "packageManager": "npm@11.9.0",
   "type": "commonjs",
   "private": true,
   "license": "MIT",
@@ -12,9 +13,11 @@
     "vanilla-js"
   ],
   "engines": {
-    "node": ">=22"
+    "node": "^22.13.0 || ^24.0.0"
   },
   "scripts": {
+    "assets:stamp": "node scripts/stamp-asset-version.mjs",
+    "assets:sync": "npm run mobile:fallbacks && npm run meta:inject && npm run assets:stamp",
     "architecture:check": "node scripts/architecture-check.mjs",
     "check": "npm run lint && npm run architecture:check && node scripts/build-mobile-fallbacks.mjs --check && node scripts/inject-site-meta.mjs --check && node scripts/smoke-check.mjs",
     "dev": "node scripts/local-server.mjs",
@@ -30,10 +33,10 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "eslint": "10.6.0",
+    "eslint": "10.7.0",
     "globals": "17.7.0",
     "parse5": "8.0.1",
-    "postcss": "8.5.16",
+    "postcss": "8.5.19",
     "postcss-selector-parser": "7.1.4"
   },
   "dependencies": {

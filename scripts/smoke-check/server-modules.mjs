@@ -81,6 +81,16 @@ export function runServerModuleChecks(context) {
     "next-key",
     "cache-store.js should retain the newest entry after LRU overflow pruning",
   );
+  assert.equal(
+    serverCacheStoreHelpers.readRetryAfterMs({ retryAfter: "2.5" }, 1_000),
+    2_500,
+    "cache-store.js should convert Retry-After seconds into a cooldown duration",
+  );
+  assert.equal(
+    serverCacheStoreHelpers.readRetryAfterMs({ retryAfter: "Thu, 01 Jan 1970 00:00:05 GMT" }, 1_000),
+    4_000,
+    "cache-store.js should support HTTP-date Retry-After values",
+  );
   const categoryNavigationHarness = serverCategoryNavigationHelpers.createCategoryNavigation({
     featured: {
       name: "\u7cbe\u9009",

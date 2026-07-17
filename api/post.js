@@ -1,8 +1,10 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const { hasCanonicalRequestSearch } = require("../server/canonical-query");
 
 const {
   buildArticleStructuredData,
+  buildPostPath,
   buildPostUrl,
   escapeHtml,
   fetchPublicPost,
@@ -22,12 +24,38 @@ const {
 } = require("../server/public-content");
 const { escapeHtmlAttribute } = require("../server/html-escape");
 const { applyHtmlSecurityHeaders, createCspNonce } = require("../server/security-policy");
+const { createRequestLifecycle } = require("../server/request-lifecycle");
 
 let templatePromise = null;
 let parse5Promise = null;
 const IS_DEVELOPMENT = process.env.NODE_ENV === "development";
 const HEAD_META_BLOCK_START = "<!--SSR_HEAD_META_START-->";
 const HEAD_META_BLOCK_END = "<!--SSR_HEAD_META_END-->";
+const POST_HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=300, stale-while-revalidate=600";
+const POST_CANONICAL_REDIRECT_CACHE_CONTROL = "public, max-age=86400, s-maxage=604800";
+
+function shouldRedirectToCanonicalPost(req, routeId) {
+  let requestUrl = null;
+  if (typeof req?.url === "string" && req.url) {
+    try {
+      requestUrl = new URL(req.url, "https://local.invalid");
+    } catch {
+      return true;
+    }
+  }
+
+  if (requestUrl?.pathname === "/post.html") return true;
+  if (requestUrl?.pathname === "/api/post") {
+    return !hasCanonicalRequestSearch(req, [["id", routeId]]);
+  }
+  if (requestUrl?.pathname.startsWith("/posts/")) {
+    return requestUrl.pathname !== buildPostPath(routeId)
+      || !hasCanonicalRequestSearch(req, []);
+  }
+
+  return req.query?.id !== routeId
+    || Object.keys(req.query || {}).some((key) => key !== "id");
+}
 
 function formatFallbackTitle(title, siteName) {
   return `${title} - ${siteName}`;
@@ -399,6 +427,7 @@ function buildInitialPostPayload(post) {
     date: post.date,
     readTime: post.readTime,
     coverImage: post.coverImage,
+    coverImageSignature: post.coverImageSignature,
     coverEmoji: post.coverEmoji,
     coverGradient: post.coverGradient,
     tags: Array.isArray(post.tags) ? post.tags : [],
@@ -481,10 +510,17 @@ module.exports = async function handler(req, res) {
     return undefined;
   }
 
-  const routeId = readPublicPostId(req.query.id);
+  const routeId = readPublicPostId(req.query?.id);
   const siteOrigin = getSiteOrigin();
   const siteName = getSiteName();
   const defaultShareImageUrl = `${siteOrigin}${DEFAULT_SHARE_IMAGE_PATH}`;
+
+  if (routeId && shouldRedirectToCanonicalPost(req, routeId)) {
+    res.setHeader("Location", buildPostPath(routeId));
+    res.setHeader("Cache-Control", POST_CANONICAL_REDIRECT_CACHE_CONTROL);
+    applyHtmlSecurityHeaders(res);
+    return res.status(308).end();
+  }
 
   let html = await getTemplate();
 
@@ -502,9 +538,10 @@ module.exports = async function handler(req, res) {
     return res.status(404).send(html);
   }
 
+  const lifecycle = createRequestLifecycle(req, res);
   try {
     const scriptNonce = createCspNonce();
-    const post = await fetchPublicPost(routeId);
+    const post = await fetchPublicPost(routeId, { signal: lifecycle.signal });
     const postUrl = buildPostUrl(post.id);
     const pageTitle = formatPostTitle(post.title, siteName);
     const pageDescription = post.excerpt || post.title;
@@ -533,10 +570,11 @@ module.exports = async function handler(req, res) {
     html = editor.apply();
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Cache-Control", POST_HTML_CACHE_CONTROL);
     applyHtmlSecurityHeaders(res, { scriptNonce });
     return res.status(200).send(html);
   } catch (error) {
+    if (lifecycle.abortKind === "client") return undefined;
     const status = getPublicPostErrorStatus(error);
     const fallback = status === 404 ? buildNotFoundContent(siteName) : buildUnavailableContent(siteName);
     if (status !== 404) {
@@ -553,5 +591,7 @@ module.exports = async function handler(req, res) {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     applyHtmlSecurityHeaders(res);
     return res.status(status).send(html);
+  } finally {
+    lifecycle.dispose();
   }
 };

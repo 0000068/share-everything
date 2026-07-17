@@ -2,6 +2,7 @@
 // implementation and test helpers live in their owning server modules.
 const {
   buildArticleStructuredData,
+  buildPostPath,
   buildPostUrl,
   renderPostContent,
 } = require("./render-service");
@@ -17,6 +18,7 @@ const {
 } = require("./notion-client");
 const { getSiteName } = require("./notion-config");
 const {
+  PUBLIC_SEARCH_QUERY_MAX_LENGTH,
   buildCategoryPresentation,
   buildPublicCategories,
   decoratePostSummary,
@@ -24,11 +26,17 @@ const {
   queryPublicPages,
   queryPublicPosts,
 } = require("./post-service");
+const {
+  ALL_CATEGORY,
+  PUBLIC_CATEGORY_QUERY_MAX_LENGTH,
+} = require("./category-navigation");
 
 module.exports = {
+  ALL_CATEGORY,
   buildArticleStructuredData,
   buildCategoryPresentation,
   buildPublicCategories,
+  buildPostPath,
   buildPostUrl,
   decoratePostSummary,
   escapeHtml,
@@ -37,6 +45,8 @@ module.exports = {
   getDatabaseId,
   getSiteName,
   getSiteOrigin,
+  PUBLIC_CATEGORY_QUERY_MAX_LENGTH,
+  PUBLIC_SEARCH_QUERY_MAX_LENGTH,
   queryPublicPages,
   queryPublicPosts,
   renderPostArticle,

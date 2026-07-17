@@ -5,18 +5,20 @@
 (() => {
   const BookmarkManager = (() => {
     const BOOKMARK_KEY = "bookmarked_posts";
-    // Incrementing this value forces every client to re-hydrate Notion metadata
-    // for previously-bookmarked posts on next access. This is NOT a real schema
-    // version — there is no migration logic, just "stored entry lags hydration
-    // generation → fetch fresh data on read". The stored property is still
-    // named `metadataVersion` for backward compatibility with existing entries
-    // in users' localStorage; do not rename the field.
-    const BOOKMARK_METADATA_HYDRATION_GENERATION = 5;
+    // The generation handles one-time record migrations. The freshness window
+    // separately bounds how long volatile cover signatures may be reused after
+    // a signing-key rotation. Keep it aligned with NotionAPI's summary-cache
+    // TTL so an expired bookmark refresh cannot be satisfied indefinitely by
+    // the same stale session summary.
+    const BOOKMARK_METADATA_HYDRATION_GENERATION = 6;
+    const BOOKMARK_METADATA_FRESHNESS_MS = 1000 * 60 * 30;
+    const BOOKMARK_METADATA_FUTURE_CLOCK_SKEW_MS = 1000 * 60 * 5;
     const siteUtils = window.SiteUtils || {};
     const resolveDisplayImageUrl = siteUtils.resolveDisplayImageUrl;
     const sanitizeImageUrl = siteUtils.sanitizeImageUrl;
     const sanitizeCoverBackground = siteUtils.sanitizeCoverBackground;
     const normalizeImageProxySignature = siteUtils.normalizeImageProxySignature;
+    const normalizePostId = siteUtils.normalizePostId;
     let bookmarksCache = null;
     let metadataHydrationPromise = null;
     let storageSyncTimer = null;
@@ -49,10 +51,22 @@
       return null;
     }
 
+    function normalizeBookmarkId(value) {
+      const legacyId = normalizeText(value).trim();
+      if (!legacyId) return "";
+
+      const canonicalId = typeof normalizePostId === "function"
+        ? normalizePostId(legacyId)
+        : null;
+      // Preserve non-Notion legacy/test ids exactly as before. Valid Notion
+      // UUIDs converge to the compact lowercase route/cache representation.
+      return canonicalId || legacyId;
+    }
+
     function normalizeBookmark(entry) {
       if (!entry || typeof entry !== "object") return null;
 
-      const id = normalizeText(entry.id).trim();
+      const id = normalizeBookmarkId(entry.id);
       if (!id) return null;
 
       const title = normalizeText(entry.title);
@@ -61,6 +75,10 @@
       const metadataVersion = Number.isFinite(Number(entry.metadataVersion))
         ? Number(entry.metadataVersion)
         : 1;
+      const rawMetadataRefreshedAt = Number(entry.metadataRefreshedAt);
+      const metadataRefreshedAt = Number.isFinite(rawMetadataRefreshedAt) && rawMetadataRefreshedAt > 0
+        ? rawMetadataRefreshedAt
+        : 0;
 
       return {
         id,
@@ -81,8 +99,23 @@
             : null,
         tags,
         metadataVersion,
+        metadataRefreshedAt,
         timestamp: Number.isFinite(Number(entry.timestamp)) ? Number(entry.timestamp) : Date.now(),
       };
+    }
+
+    function normalizeBookmarkCollection(value) {
+      if (!Array.isArray(value)) return [];
+
+      const seenIds = new Set();
+      const normalized = [];
+      for (const entry of value) {
+        const bookmark = normalizeBookmark(entry);
+        if (!bookmark || seenIds.has(bookmark.id)) continue;
+        seenIds.add(bookmark.id);
+        normalized.push(bookmark);
+      }
+      return normalized;
     }
 
     function readBookmarks() {
@@ -90,9 +123,7 @@
 
       try {
         const parsed = JSON.parse(localStorage.getItem(BOOKMARK_KEY) || "[]");
-        bookmarksCache = Array.isArray(parsed)
-          ? parsed.map(normalizeBookmark).filter(Boolean)
-          : [];
+        bookmarksCache = normalizeBookmarkCollection(parsed);
       } catch (error) {
         bookmarksCache = [];
       }
@@ -104,10 +135,75 @@
       return [...readBookmarks()];
     }
 
+    function getCurrentPostSummary(id) {
+      try {
+        return window.NotionAPI?.getPostSummary?.(id) || null;
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function normalizeVolatileCoverMetadata(source) {
+      return {
+        coverImage: normalizePersistentCoverImage(source?.coverImage),
+        coverImageSignature:
+          typeof normalizeImageProxySignature === "function"
+            ? normalizeImageProxySignature(source?.coverImageSignature)
+            : "",
+      };
+    }
+
+    function mergeVolatileCoverMetadata(bookmark, source) {
+      return {
+        ...bookmark,
+        ...normalizeVolatileCoverMetadata(source),
+      };
+    }
+
+    function hasVolatileCoverMetadataChanged(bookmark, source) {
+      const current = normalizeVolatileCoverMetadata(bookmark);
+      const latest = normalizeVolatileCoverMetadata(source);
+      return (
+        current.coverImage !== latest.coverImage ||
+        current.coverImageSignature !== latest.coverImageSignature
+      );
+    }
+
+    function hasExpiredMetadata(bookmark, now = Date.now()) {
+      if (Number(bookmark?.metadataVersion || 0) < BOOKMARK_METADATA_HYDRATION_GENERATION) {
+        return true;
+      }
+
+      const refreshedAt = Number(bookmark?.metadataRefreshedAt || 0);
+      if (!Number.isFinite(refreshedAt) || refreshedAt <= 0) return true;
+      if (refreshedAt > now + BOOKMARK_METADATA_FUTURE_CLOCK_SKEW_MS) return true;
+      return now - refreshedAt >= BOOKMARK_METADATA_FRESHNESS_MS;
+    }
+
+    function getDisplayEntries() {
+      return readBookmarks().map((bookmark) => {
+        const currentSummary = getCurrentPostSummary(bookmark.id);
+        if (currentSummary) {
+          return mergeVolatileCoverMetadata(bookmark, currentSummary);
+        }
+
+        if (hasExpiredMetadata(bookmark)) {
+          // An expired signature must not keep producing permanent proxy 403s.
+          // Keep the persisted record untouched so offline users retain the
+          // bookmark and its gradient/emoji fallback until hydration succeeds.
+          return {
+            ...bookmark,
+            coverImage: null,
+            coverImageSignature: "",
+          };
+        }
+
+        return { ...bookmark };
+      });
+    }
+
     function save(bookmarks) {
-      const nextBookmarks = Array.isArray(bookmarks)
-        ? bookmarks.map(normalizeBookmark).filter(Boolean)
-        : [];
+      const nextBookmarks = normalizeBookmarkCollection(bookmarks);
 
       try {
         localStorage.setItem(BOOKMARK_KEY, JSON.stringify(nextBookmarks));
@@ -129,16 +225,26 @@
     }
 
     function isBookmarked(id) {
-      return readBookmarks().some((bookmark) => bookmark.id === id);
+      const normalizedId = normalizeBookmarkId(id);
+      return Boolean(
+        normalizedId && readBookmarks().some((bookmark) => bookmark.id === normalizedId)
+      );
     }
 
     function needsMetadataHydration(bookmark) {
-      return Number(bookmark?.metadataVersion || 0) < BOOKMARK_METADATA_HYDRATION_GENERATION;
+      if (hasExpiredMetadata(bookmark)) return true;
+      const currentSummary = getCurrentPostSummary(bookmark?.id);
+      return Boolean(
+        currentSummary && hasVolatileCoverMetadataChanged(bookmark, currentSummary)
+      );
     }
 
-    function hasLegacyMetadata() {
+    function hasStaleMetadata() {
       return readBookmarks().some(needsMetadataHydration);
     }
+
+    // Backward-compatible alias for older page bundles during atomic deploys.
+    const hasLegacyMetadata = hasStaleMetadata;
 
     function parseSerializedTags(value) {
       if (typeof value !== "string" || !value.trim()) return [];
@@ -150,7 +256,10 @@
       }
     }
 
-    function createBookmarkEntry(source, { timestamp = Date.now() } = {}) {
+    function createBookmarkEntry(
+      source,
+      { timestamp = Date.now(), metadataRefreshedAt = Date.now() } = {},
+    ) {
       return normalizeBookmark({
         id: source?.id,
         title: source?.title || "",
@@ -164,6 +273,7 @@
         coverGradient: source?.coverGradient || null,
         tags: Array.isArray(source?.tags) ? source.tags : [],
         metadataVersion: BOOKMARK_METADATA_HYDRATION_GENERATION,
+        metadataRefreshedAt,
         timestamp,
       });
     }
@@ -200,13 +310,19 @@
     }
 
     function toggle(post) {
+      const postId = normalizeBookmarkId(post?.id);
+      if (!postId) return null;
+
       let bookmarks = getAll();
-      const exists = bookmarks.some((bookmark) => bookmark.id === post.id);
+      const exists = bookmarks.some((bookmark) => bookmark.id === postId);
 
       if (exists) {
-        bookmarks = bookmarks.filter((bookmark) => bookmark.id !== post.id);
+        bookmarks = bookmarks.filter((bookmark) => bookmark.id !== postId);
       } else {
-        const normalizedBookmark = createBookmarkEntry(post);
+        const normalizedBookmark = createBookmarkEntry({
+          ...post,
+          id: postId,
+        });
         if (!normalizedBookmark) return null;
         bookmarks.unshift(normalizedBookmark);
       }
@@ -217,24 +333,34 @@
     }
 
     function toggleById(postId) {
+      const normalizedPostId = normalizeBookmarkId(postId);
+      if (!normalizedPostId) return null;
+
       let bookmarks = getAll();
-      const exists = bookmarks.some((bookmark) => bookmark.id === postId);
+      const exists = bookmarks.some((bookmark) => bookmark.id === normalizedPostId);
       let didPersist = false;
 
       if (exists) {
-        bookmarks = bookmarks.filter((bookmark) => bookmark.id !== postId);
+        bookmarks = bookmarks.filter((bookmark) => bookmark.id !== normalizedPostId);
         didPersist = true;
       } else {
-        const cachedSummary = window.NotionAPI?.getPostSummary?.(postId);
+        const cachedSummary = window.NotionAPI?.getPostSummary?.(normalizedPostId);
         if (cachedSummary) {
-          const normalizedBookmark = createBookmarkEntry(cachedSummary);
+          const normalizedBookmark = createBookmarkEntry({
+            ...cachedSummary,
+            id: normalizedPostId,
+          });
           if (normalizedBookmark) {
             bookmarks.unshift(normalizedBookmark);
             didPersist = true;
           }
         } else {
-          const card = document.querySelector(`[data-post-id="${escapeSelectorValue(postId)}"]`);
-          const normalizedBookmark = createBookmarkEntry(buildCardBookmarkSource(card, postId));
+          const card = document.querySelector(
+            `[data-post-id="${escapeSelectorValue(normalizedPostId)}"]`,
+          );
+          const normalizedBookmark = createBookmarkEntry(
+            buildCardBookmarkSource(card, normalizedPostId),
+          );
           if (normalizedBookmark) {
             bookmarks.unshift(normalizedBookmark);
             didPersist = true;
@@ -253,7 +379,9 @@
         return metadataHydrationPromise;
       }
 
-      if (typeof window.NotionAPI?.getPost !== "function") {
+      const getPost = window.NotionAPI?.getPost;
+      const getPostSummary = window.NotionAPI?.getPostSummary;
+      if (typeof getPost !== "function" && typeof getPostSummary !== "function") {
         return false;
       }
 
@@ -271,10 +399,10 @@
         const hydratedById = new Map();
 
         for (const bookmark of pendingHydration) {
-          let source = window.NotionAPI?.getPostSummary?.(bookmark.id) || null;
-          if (!source) {
+          let source = getCurrentPostSummary(bookmark.id);
+          if (!source && typeof getPost === "function") {
             try {
-              source = await window.NotionAPI.getPost(bookmark.id);
+              source = await getPost.call(window.NotionAPI, bookmark.id);
             } catch (error) {
               source = null;
             }
@@ -289,6 +417,7 @@
             ...source,
           }, {
             timestamp: bookmark.timestamp,
+            metadataRefreshedAt: Date.now(),
           });
 
           if (!hydratedBookmark) {
@@ -306,9 +435,26 @@
         // value — picks up any toggle() that landed during hydration.
         bookmarksCache = null;
         const currentBookmarks = getAll();
-        const merged = currentBookmarks.map((entry) => (
-          hydratedById.get(entry.id) || entry
-        ));
+        const merged = currentBookmarks.map((entry) => {
+          const hydratedEntry = hydratedById.get(entry.id);
+          if (!hydratedEntry) return entry;
+
+          // Another tab may finish a newer metadata refresh after this tab has
+          // already received its response but before this merge reaches
+          // localStorage. Never relabel that newer record with this older
+          // response merely because our write happens last.
+          if (entry.metadataRefreshedAt > hydratedEntry.metadataRefreshedAt) {
+            return entry;
+          }
+
+          // A remove-then-readd of the same id during the request is a new user
+          // action. Refresh its server metadata, but never restore the older
+          // ordering timestamp captured before the network await.
+          return {
+            ...hydratedEntry,
+            timestamp: entry.timestamp,
+          };
+        });
 
         if (!save(merged)) {
           return false;
@@ -325,21 +471,14 @@
     function refreshBookmarksFromSerializedValue(value) {
       try {
         const parsed = JSON.parse(value || "[]");
-        bookmarksCache = Array.isArray(parsed)
-          ? parsed.map(normalizeBookmark).filter(Boolean)
-          : [];
+        bookmarksCache = normalizeBookmarkCollection(parsed);
       } catch (error) {
         bookmarksCache = [];
       }
     }
 
-    const BOOKMARK_SNAPSHOT_FIELD_SEPARATOR = "\u0000";
-    const BOOKMARK_SNAPSHOT_ENTRY_SEPARATOR = "\u0001";
-
     function bookmarkSnapshotKey(entries) {
-      return (entries || [])
-        .map((entry) => `${entry.id}${BOOKMARK_SNAPSHOT_FIELD_SEPARATOR}${entry.timestamp}`)
-        .join(BOOKMARK_SNAPSHOT_ENTRY_SEPARATOR);
+      return JSON.stringify(Array.isArray(entries) ? entries : []);
     }
 
     function scheduleStorageBookmarksUpdated() {
@@ -364,7 +503,9 @@
 
     return {
       getAll,
+      getDisplayEntries,
       isBookmarked,
+      hasStaleMetadata,
       hasLegacyMetadata,
       hydrateMissingMetadata,
       toggle,

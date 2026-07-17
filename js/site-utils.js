@@ -12,6 +12,7 @@
   const BLOG_RETURN_URL_STORAGE_KEY = "spa:last-blog-url";
   const BOOKMARK_HASH_PREFIX = "#bookmarks";
   const PUBLIC_SEARCH_QUERY_MAX_LENGTH = 256;
+  const NOTION_POST_ID_PATTERN = /^(?:[a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i;
   const MOBILE_DEVICE_QUERY = "(max-width: 768px) and (hover: none) and (pointer: coarse)";
   const MOBILE_DEVICE_CLASS = "is-mobile-device-viewport";
   const MOBILE_DEVICE_WIDTH = 768;
@@ -59,6 +60,10 @@
 
   function hasTouchInput() {
     const nav = window.navigator || {};
+    const hasFinePointer = createMediaQueryList("(pointer: fine)").matches
+      || createMediaQueryList("(any-pointer: fine)").matches;
+    if (hasFinePointer) return false;
+
     return Boolean(nav.maxTouchPoints > 0 || "ontouchstart" in window);
   }
 
@@ -200,15 +205,26 @@
   }
 
   function normalizePostId(value) {
-    if (value == null) return null;
-    const normalized = String(value).trim();
-    return normalized || null;
+    if (typeof value !== "string") return null;
+    const normalized = value.trim();
+    return NOTION_POST_ID_PATTERN.test(normalized)
+      ? normalized.replace(/-/g, "").toLowerCase()
+      : null;
+  }
+
+  function normalizePostIdComparisonKey(value) {
+    return normalizePostId(value) || "";
+  }
+
+  function arePostIdsEquivalent(left, right) {
+    const leftKey = normalizePostIdComparisonKey(left);
+    return Boolean(leftKey) && leftKey === normalizePostIdComparisonKey(right);
   }
 
   function getPostIdFromUrl(url = window.location.href) {
     try {
       const resolved = new URL(url, window.location.origin);
-      const pathMatch = resolved.pathname.match(/^\/posts\/([^/?#]+)/);
+      const pathMatch = resolved.pathname.match(/^\/posts\/([^/?#]+)\/?$/);
       if (pathMatch?.[1]) {
         return normalizePostId(decodeURIComponent(pathMatch[1]));
       }
@@ -225,7 +241,7 @@
 
   function buildPostPath(postId) {
     const normalizedPostId = normalizePostId(postId);
-    return normalizedPostId ? `/posts/${encodeURIComponent(normalizedPostId)}` : "/post.html";
+    return normalizedPostId ? `/posts/${normalizedPostId}` : "/post.html";
   }
 
   function buildPostUrl(postId) {
@@ -368,6 +384,7 @@
   }
 
   window.SiteUtils = Object.freeze({
+    arePostIdsEquivalent,
     buildBookmarkListingHash,
     buildBookmarkListingUrl,
     buildPostPath,
@@ -380,9 +397,11 @@
     isBlogPageUrl,
     isLikelyEphemeralAssetUrl,
     isMobileDeviceViewport,
+    isNarrowViewport,
     normalizeImageProxySignature,
     normalizePageNumber,
     normalizePostId,
+    normalizePostIdComparisonKey,
     parseBookmarkListingHash,
     rememberBlogReturnUrl,
     buildCoverImageSrcSet,

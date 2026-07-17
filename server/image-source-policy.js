@@ -21,6 +21,10 @@ function readSigningSecret() {
   return normalizeSigningSecret(process.env.NOTION_TOKEN);
 }
 
+function readPreviousSigningSecret() {
+  return normalizeSigningSecret(process.env.IMAGE_PROXY_SIGNING_SECRET_PREVIOUS);
+}
+
 function deriveSigningKey(secret) {
   if (!secret) return null;
   return crypto
@@ -31,6 +35,7 @@ function deriveSigningKey(secret) {
 }
 
 const IMAGE_PROXY_SIGNING_KEY = deriveSigningKey(readSigningSecret());
+const IMAGE_PROXY_PREVIOUS_SIGNING_KEY = deriveSigningKey(readPreviousSigningSecret());
 
 function canonicalizeImageSource(candidate, baseUrl) {
   if (typeof candidate !== "string" || !candidate.trim()) return "";
@@ -45,27 +50,33 @@ function canonicalizeImageSource(candidate, baseUrl) {
   }
 }
 
-function createImageSourceSignature(candidate) {
+function createImageSourceSignatureWithKey(candidate, signingKey) {
   const canonicalSource = canonicalizeImageSource(candidate);
-  if (!canonicalSource || !IMAGE_PROXY_SIGNING_KEY) return "";
+  if (!canonicalSource || !signingKey) return "";
 
   return crypto
-    .createHmac("sha256", IMAGE_PROXY_SIGNING_KEY)
+    .createHmac("sha256", signingKey)
     .update(`image-source:${IMAGE_PROXY_SIGNATURE_VERSION}\0${canonicalSource}`, "utf8")
     .digest("base64url");
+}
+
+function createImageSourceSignature(candidate) {
+  return createImageSourceSignatureWithKey(candidate, IMAGE_PROXY_SIGNING_KEY);
 }
 
 function verifyImageSourceSignature(candidate, signature) {
   const normalizedSignature = typeof signature === "string" ? signature : "";
   if (!IMAGE_SIGNATURE_PATTERN.test(normalizedSignature)) return false;
 
-  const expectedSignature = createImageSourceSignature(candidate);
-  if (!expectedSignature || expectedSignature.length !== normalizedSignature.length) return false;
-
-  return crypto.timingSafeEqual(
-    Buffer.from(expectedSignature, "ascii"),
-    Buffer.from(normalizedSignature, "ascii"),
-  );
+  return [IMAGE_PROXY_SIGNING_KEY, IMAGE_PROXY_PREVIOUS_SIGNING_KEY]
+    .filter(Boolean)
+    .some((signingKey) => {
+      const expectedSignature = createImageSourceSignatureWithKey(candidate, signingKey);
+      return expectedSignature.length === normalizedSignature.length && crypto.timingSafeEqual(
+        Buffer.from(expectedSignature, "ascii"),
+        Buffer.from(normalizedSignature, "ascii"),
+      );
+    });
 }
 
 function isImageProxySigningConfigured() {

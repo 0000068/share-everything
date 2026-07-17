@@ -10,6 +10,7 @@ const {
   rejectUnsupportedReadMethod,
   serializePublicError,
 } = require("../server/public-content");
+const { createRequestLifecycle } = require("../server/request-lifecycle");
 
 const SITEMAP_CACHE_CONTROL = "public, max-age=0, s-maxage=300, stale-while-revalidate=600";
 
@@ -34,9 +35,10 @@ module.exports = async function handler(req, res) {
     return undefined;
   }
 
+  const lifecycle = createRequestLifecycle(req, res);
   try {
     const siteOrigin = getSiteOrigin();
-    const posts = await queryPublicPages();
+    const posts = await queryPublicPages({}, { signal: lifecycle.signal });
     const entries = [
       formatUrlEntry(`${siteOrigin}/`, { changefreq: "daily", priority: 1.0 }),
       formatUrlEntry(`${siteOrigin}/blog.html`, { changefreq: "daily", priority: 0.9 }),
@@ -53,6 +55,7 @@ module.exports = async function handler(req, res) {
     res.setHeader("Cache-Control", SITEMAP_CACHE_CONTROL);
     return res.status(200).send(xml);
   } catch (error) {
+    if (lifecycle.abortKind === "client") return undefined;
     const status = getPublicContentErrorStatus(error);
     logServerError("Failed to generate sitemap", error);
 
@@ -63,5 +66,7 @@ module.exports = async function handler(req, res) {
         status === 500 ? "Sitemap unavailable" : "Sitemap request failed",
       ),
     );
+  } finally {
+    lifecycle.dispose();
   }
 };

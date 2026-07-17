@@ -3,7 +3,11 @@ const {
   encodeNotionPathId,
   normalizePositiveNumber,
 } = require("./notion-config");
-const { requestNotionJson } = require("./notion-client");
+const {
+  createNotionRequestError,
+  parseNotionPaginationResponse,
+  requestNotionJson,
+} = require("./notion-client");
 
 const MAX_BLOCK_RECURSION_DEPTH = 10;
 const MAX_PAGINATION_ROUNDS = 50;
@@ -33,6 +37,14 @@ function createBlockFetchContext() {
   };
 }
 
+function createIncompleteContentError(message, resourceType = "block") {
+  return createNotionRequestError(message, {
+    status: 502,
+    code: "notion_content_incomplete",
+    resourceType,
+  });
+}
+
 function warnBlockTotalLimit(context, blockId) {
   if (context.didWarnTotalLimit) {
     return;
@@ -45,7 +57,7 @@ function warnBlockTotalLimit(context, blockId) {
   );
 }
 
-async function fetchNestedBlockChildren(blocks, depth, context) {
+async function fetchNestedBlockChildren(blocks, depth, context, requestOptions) {
   let nextIndex = 0;
   const workerCount = Math.min(BLOCK_CHILD_WORKER_COUNT, blocks.length);
 
@@ -60,7 +72,12 @@ async function fetchNestedBlockChildren(blocks, depth, context) {
         return;
       }
 
-      block.children = await fetchAllBlockChildren(block.id, depth + 1, context);
+      block.children = await fetchAllBlockChildren(
+        block.id,
+        depth + 1,
+        context,
+        requestOptions,
+      );
     }
   }
 
@@ -71,36 +88,48 @@ async function fetchNestedBlockChildren(blocks, depth, context) {
     blocks.slice(nextIndex).some((block) => block?.has_children)
   ) {
     warnBlockTotalLimit(context, blocks[nextIndex]?.id || blocks[blocks.length - 1]?.id || "");
+    throw createIncompleteContentError(
+      `Block children exceeded total block budget (${NOTION_BLOCK_TOTAL_LIMIT}) while loading nested blocks`,
+    );
   }
 }
 
-async function fetchAllBlockChildren(blockId, depth = 0, context = createBlockFetchContext()) {
+async function fetchAllBlockChildren(
+  blockId,
+  depth = 0,
+  context = createBlockFetchContext(),
+  requestOptions = {},
+) {
   if (depth >= MAX_BLOCK_RECURSION_DEPTH) {
-    console.warn(
-      `Block children recursion reached max depth (${MAX_BLOCK_RECURSION_DEPTH}), ` +
-      `stopping for block: ${blockId}`,
+    throw createIncompleteContentError(
+      `Block children recursion exceeded ${MAX_BLOCK_RECURSION_DEPTH} levels for block: ${blockId}`,
     );
-    return [];
   }
 
   if (context.remainingBlocks <= 0) {
     warnBlockTotalLimit(context, blockId);
-    return [];
+    throw createIncompleteContentError(
+      `Block children exceeded total block budget (${NOTION_BLOCK_TOTAL_LIMIT}) for block: ${blockId}`,
+    );
   }
 
   const blocks = [];
   let startCursor = null;
   let rounds = 0;
+  const seenCursors = new Set();
 
   do {
     if (context.remainingBlocks <= 0) {
       warnBlockTotalLimit(context, blockId);
-      break;
+      throw createIncompleteContentError(
+        `Block children exceeded total block budget (${NOTION_BLOCK_TOTAL_LIMIT}) for block: ${blockId}`,
+      );
     }
 
     if (++rounds > MAX_PAGINATION_ROUNDS) {
-      console.warn(`Block children pagination exceeded ${MAX_PAGINATION_ROUNDS} rounds for block: ${blockId}`);
-      break;
+      throw createIncompleteContentError(
+        `Block children pagination exceeded ${MAX_PAGINATION_ROUNDS} rounds for block: ${blockId}`,
+      );
     }
 
     const query = new URLSearchParams({ page_size: "100" });
@@ -109,26 +138,44 @@ async function fetchAllBlockChildren(blockId, depth = 0, context = createBlockFe
     }
 
     const data = await runWithBlockChildConcurrency(() => (
-      requestNotionJson(`/blocks/${encodeNotionPathId(blockId)}/children?${query.toString()}`)
+      requestNotionJson(
+        `/blocks/${encodeNotionPathId(blockId)}/children?${query.toString()}`,
+        requestOptions,
+      )
     ));
-    const results = Array.isArray(data?.results) ? data.results : [];
+    const {
+      results,
+      nextCursor,
+    } = parseNotionPaginationResponse(data, { resourceType: "block" });
     const acceptedBlocks = results.slice(0, context.remainingBlocks);
     blocks.push(...acceptedBlocks);
     context.remainingBlocks -= acceptedBlocks.length;
 
     if (acceptedBlocks.length < results.length) {
       warnBlockTotalLimit(context, blockId);
-      break;
+      throw createIncompleteContentError(
+        `Block children exceeded total block budget (${NOTION_BLOCK_TOTAL_LIMIT}) for block: ${blockId}`,
+      );
     }
 
-    startCursor = data.has_more ? data.next_cursor : null;
+    if (nextCursor && seenCursors.has(nextCursor)) {
+      throw createNotionRequestError("Notion API repeated a block pagination cursor", {
+        status: 502,
+        code: "notion_invalid_response",
+        resourceType: "block",
+      });
+    }
+    if (nextCursor) seenCursors.add(nextCursor);
+    startCursor = nextCursor;
     if (startCursor && context.remainingBlocks <= 0) {
       warnBlockTotalLimit(context, blockId);
-      break;
+      throw createIncompleteContentError(
+        `Block children exceeded total block budget (${NOTION_BLOCK_TOTAL_LIMIT}) for block: ${blockId}`,
+      );
     }
   } while (startCursor);
 
-  await fetchNestedBlockChildren(blocks, depth, context);
+  await fetchNestedBlockChildren(blocks, depth, context, requestOptions);
 
   return blocks;
 }

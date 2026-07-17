@@ -29,6 +29,8 @@ const {
   readClientKey,
   readPositiveIntegerEnv,
 } = require("../server/request-guard");
+const { createRequestLifecycle } = require("../server/request-lifecycle");
+const { hasCanonicalRequestSearch } = require("../server/canonical-query");
 
 const IMAGE_PROXY_CACHE_CONTROL = "public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400";
 const IMAGE_PROXY_ALLOWED_QUERY_KEYS = new Set(["src", IMAGE_PROXY_SIGNATURE_PARAMETER]);
@@ -77,7 +79,7 @@ function validateImageBytes(buffer) {
   throw createImageProxyError(message, 415);
 }
 
-function pipeValidatedImageResponse(response, res) {
+function pipeValidatedImageResponse(response, res, expectedContentLength = null) {
   const stream = response.stream;
   if (!stream || typeof stream.on !== "function" || typeof res.write !== "function") {
     return null;
@@ -129,7 +131,7 @@ function pipeValidatedImageResponse(response, res) {
       }
 
       didFlush = true;
-      applyImageSuccessHeaders(res, detectedContentType);
+      applyImageSuccessHeaders(res, detectedContentType, expectedContentLength);
       res.status(200);
       bufferedChunks.forEach(writeChunk);
       bufferedChunks.length = 0;
@@ -141,6 +143,14 @@ function pipeValidatedImageResponse(response, res) {
       if (settled) return;
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       totalBytes += buffer.byteLength;
+      if (
+        Number.isSafeInteger(expectedContentLength)
+        && expectedContentLength >= 0
+        && totalBytes > expectedContentLength
+      ) {
+        rejectWith(createImageProxyError("Image response exceeds Content-Length", 502));
+        return;
+      }
       if (totalBytes > IMAGE_PROXY_MAX_BYTES) {
         rejectWith(createImageProxyError("Image is too large", 413));
         return;
@@ -168,11 +178,28 @@ function pipeValidatedImageResponse(response, res) {
     });
 
     stream.on("end", () => {
+      if (
+        Number.isSafeInteger(expectedContentLength)
+        && expectedContentLength >= 0
+        && totalBytes !== expectedContentLength
+      ) {
+        rejectWith(createImageProxyError("Image response length does not match Content-Length", 502));
+        return;
+      }
       if (settled || !flushBufferedChunks()) return;
       res.end();
       settle(resolve);
     });
     stream.on("error", (error) => settle(reject, error));
+    stream.on("aborted", () => settle(
+      reject,
+      createImageProxyError("Image response was interrupted", 502),
+    ));
+    stream.on("close", () => {
+      if (!stream.readableEnded && !settled) {
+        settle(reject, createImageProxyError("Image response closed before completion", 502));
+      }
+    });
   });
 }
 
@@ -182,6 +209,12 @@ async function handler(req, res) {
   const authorization = authorizeImageSourceQuery(req.query, IMAGE_PROXY_ALLOWED_QUERY_KEYS);
   if (!authorization.ok) {
     return sendImageError(res, authorization.status, null, authorization.error);
+  }
+  if (!hasCanonicalRequestSearch(req, [
+    ["src", authorization.source],
+    [IMAGE_PROXY_SIGNATURE_PARAMETER, req.query[IMAGE_PROXY_SIGNATURE_PARAMETER]],
+  ])) {
+    return sendImageError(res, 400, null, "Invalid image request URL");
   }
 
   const rateLimit = imageProxyRateLimiter.consume(readClientKey(req));
@@ -200,19 +233,21 @@ async function handler(req, res) {
     return sendImageError(res, 503, null, "Image service busy", 1);
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), IMAGE_PROXY_TIMEOUT_MS);
+  const lifecycle = createRequestLifecycle(req, res, {
+    timeoutMs: IMAGE_PROXY_TIMEOUT_MS,
+    timeoutMessage: "Image request timed out",
+  });
 
   try {
     const source = await normalizeSourceUrl(authorization.source, undefined, {
-      signal: controller.signal,
+      signal: lifecycle.signal,
     });
     if (!source) {
       return sendImageError(res, 400, null, "Invalid image source");
     }
 
     const response = await fetchImageResponse(source, {
-      signal: controller.signal,
+      signal: lifecycle.signal,
       method: "GET",
     });
     if (!response.ok) {
@@ -242,7 +277,7 @@ async function handler(req, res) {
     }
 
     const streamingResponse = contentLength !== null
-      ? pipeValidatedImageResponse(response, res)
+      ? pipeValidatedImageResponse(response, res, contentLength)
       : null;
     if (streamingResponse) {
       await streamingResponse;
@@ -254,9 +289,16 @@ async function handler(req, res) {
     applyImageSuccessHeaders(res, detectedContentType, body.byteLength);
     return res.status(200).send(body);
   } catch (error) {
+    if (lifecycle.abortKind === "client") {
+      return undefined;
+    }
     const status = getImageProxyErrorStatus(error);
     if (res.headersSent) {
-      res.end?.();
+      if (typeof res.destroy === "function") {
+        res.destroy();
+      } else {
+        res.end?.();
+      }
       return undefined;
     }
     return sendImageError(
@@ -266,7 +308,7 @@ async function handler(req, res) {
       status === 413 ? "Image too large" : "Image unavailable",
     );
   } finally {
-    clearTimeout(timeoutId);
+    lifecycle.dispose();
     releaseConcurrency();
   }
 }

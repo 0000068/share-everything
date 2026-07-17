@@ -10,6 +10,7 @@ export async function runRoutingAndVercelChecks(context) {
     createApiResponseRecorder,
     expectIncludes,
     expectNotIncludes,
+    loadCommonJsModule,
     vercelJson,
   } = context;
 
@@ -32,6 +33,129 @@ expectIncludes(apiSitemapJs, "getPublicContentErrorStatus", "dynamic sitemap sho
 expectIncludes(apiSitemapJs, "applyPublicErrorHeaders", "dynamic sitemap should preserve upstream retry guidance");
 expectIncludes(apiSitemapJs, "serializePublicError", "dynamic sitemap should serialize upstream errors consistently");
 expectIncludes(apiSitemapJs, "s-maxage=300", "dynamic sitemap should allow bounded CDN caching");
+expectIncludes(apiSitemapJs, "createRequestLifecycle", "dynamic sitemap should own a cancellable request lifecycle");
+expectIncludes(apiSitemapJs, "queryPublicPages({}, { signal: lifecycle.signal })", "dynamic sitemap should pass its lifecycle signal to the public page query");
+expectIncludes(apiSitemapJs, 'lifecycle.abortKind === "client"', "dynamic sitemap should stop silently after a client disconnect");
+expectIncludes(apiSitemapJs, "lifecycle.dispose()", "dynamic sitemap should always dispose request listeners");
+
+function attachLifecycleEvents(target) {
+  const listeners = new Map();
+  target.once = function once(eventName, listener) {
+    const normalizedEventName = String(eventName);
+    const eventListeners = listeners.get(normalizedEventName) || new Set();
+    eventListeners.add(listener);
+    listeners.set(normalizedEventName, eventListeners);
+    return this;
+  };
+  target.removeListener = function removeListener(eventName, listener) {
+    const normalizedEventName = String(eventName);
+    const eventListeners = listeners.get(normalizedEventName);
+    eventListeners?.delete(listener);
+    if (eventListeners?.size === 0) listeners.delete(normalizedEventName);
+    return this;
+  };
+  target.listenerCount = (eventName) => listeners.get(String(eventName))?.size || 0;
+  target.emit = function emit(eventName, ...args) {
+    const normalizedEventName = String(eventName);
+    const eventListeners = Array.from(listeners.get(normalizedEventName) || []);
+    listeners.delete(normalizedEventName);
+    eventListeners.forEach((listener) => listener(...args));
+    return eventListeners.length > 0;
+  };
+  return target;
+}
+
+function createSitemapResponse() {
+  const response = attachLifecycleEvents(createApiResponseRecorder());
+  Object.defineProperties(response, {
+    finished: { get: () => response.ended },
+    writableEnded: { get: () => response.ended },
+  });
+  return response;
+}
+
+const sitemapQueryCalls = [];
+let sitemapQueryMode = "pending";
+let didObserveSitemapAbort = false;
+const sitemapHandler = loadCommonJsModule("api/sitemap.js", [], {
+  __moduleMocks: {
+    "../server/notion-server": {
+      buildPostUrl: (postId) => `${configuredSiteOrigin}/posts/${postId}`,
+      getSiteOrigin: () => configuredSiteOrigin,
+      queryPublicPages(query, { signal } = {}) {
+        sitemapQueryCalls.push({ query, signal });
+        if (sitemapQueryMode === "success") {
+          return Promise.resolve([{
+            id: "550e8400e29b41d4a716446655440000",
+            date: "2026-07-17",
+          }]);
+        }
+
+        return new Promise((_resolve, reject) => {
+          const onAbort = () => {
+            didObserveSitemapAbort = true;
+            reject(signal.reason);
+          };
+          if (signal.aborted) {
+            onAbort();
+            return;
+          }
+          signal.addEventListener("abort", onAbort, { once: true });
+        });
+      },
+    },
+  },
+});
+
+const disconnectedSitemapRequest = attachLifecycleEvents({ method: "GET", headers: {} });
+const disconnectedSitemapResponse = createSitemapResponse();
+const disconnectedSitemapResult = sitemapHandler(
+  disconnectedSitemapRequest,
+  disconnectedSitemapResponse,
+);
+await Promise.resolve();
+assert.equal(sitemapQueryCalls.length, 1, "sitemap should begin exactly one public-page query");
+assert.equal(
+  JSON.stringify(sitemapQueryCalls[0].query),
+  "{}",
+  "sitemap should request the complete public page set",
+);
+assert.equal(
+  typeof sitemapQueryCalls[0].signal?.addEventListener,
+  "function",
+  "sitemap should pass an AbortSignal to queryPublicPages",
+);
+assert.equal(disconnectedSitemapRequest.listenerCount("aborted"), 1, "sitemap should observe request aborts while work is pending");
+assert.equal(disconnectedSitemapResponse.listenerCount("close"), 1, "sitemap should observe response closure while work is pending");
+disconnectedSitemapRequest.emit("aborted");
+assert.equal(await disconnectedSitemapResult, undefined, "a disconnected sitemap request should finish without a response payload");
+assert.equal(sitemapQueryCalls[0].signal.aborted, true, "client disconnect should abort the public-page query signal");
+assert.equal(didObserveSitemapAbort, true, "the pending public-page query should observe sitemap cancellation");
+assert.equal(disconnectedSitemapResponse.headersSent, false, "a disconnected sitemap request must not write headers");
+assert.equal(disconnectedSitemapResponse.ended, false, "a disconnected sitemap request must not end the response");
+assert.equal(disconnectedSitemapRequest.listenerCount("aborted"), 0, "sitemap finally should remove the request abort listener");
+assert.equal(disconnectedSitemapResponse.listenerCount("close"), 0, "sitemap finally should remove the response close listener");
+
+sitemapQueryMode = "success";
+const successfulSitemapRequest = attachLifecycleEvents({ method: "GET", headers: {} });
+const successfulSitemapResponse = createSitemapResponse();
+await sitemapHandler(successfulSitemapRequest, successfulSitemapResponse);
+assert.equal(successfulSitemapResponse.statusCode, 200, "dynamic sitemap should return HTTP 200");
+assert.equal(successfulSitemapResponse.getHeader("content-type"), "application/xml; charset=utf-8", "dynamic sitemap should send XML");
+assert.equal(
+  successfulSitemapResponse.getHeader("cache-control"),
+  "public, max-age=0, s-maxage=300, stale-while-revalidate=600",
+  "successful sitemap responses should retain bounded CDN caching",
+);
+expectIncludes(successfulSitemapResponse.textBody, `<loc>${configuredSiteOrigin}/</loc>`, "sitemap should retain the site root entry");
+expectIncludes(
+  successfulSitemapResponse.textBody,
+  `<loc>${configuredSiteOrigin}/posts/550e8400e29b41d4a716446655440000</loc>`,
+  "sitemap should retain public article entries",
+);
+assert.equal(sitemapQueryCalls[1].signal.aborted, false, "a completed sitemap query should not be marked aborted");
+assert.equal(successfulSitemapRequest.listenerCount("aborted"), 0, "successful sitemap completion should remove the request listener");
+assert.equal(successfulSitemapResponse.listenerCount("close"), 0, "successful sitemap completion should remove the response listener");
 expectIncludes(apiRobotsJs, "getSiteOrigin", "dynamic robots should use the configured site origin");
 expectIncludes(apiRobotsJs, "Sitemap:", "dynamic robots should emit a sitemap directive");
 expectIncludes(vercelJson, '"/posts/:id"', "Vercel should rewrite canonical article routes");
@@ -41,8 +165,15 @@ expectIncludes(vercelJson, '"/favicon.png"', "Vercel should set cache headers fo
 expectIncludes(vercelJson, '"/manifest.webmanifest"', "Vercel should set revalidation headers for the standalone web manifest");
 expectIncludes(vercelJson, '"/og-image.jpg"', "Vercel should set cache headers for the Open Graph image asset");
 expectNotIncludes(vercelJson, '"/favicon.svg"', "Vercel should not preserve a cache rule for the removed SVG favicon");
-expectIncludes(vercelJson, "max-age=3600, stale-while-revalidate=86400", "Vercel should give versioned static scripts and styles a short browser cache");
+expectIncludes(vercelJson, "public, max-age=31536000, immutable", "Vercel should give uniformly versioned static assets an immutable one-year cache");
 const parsedVercelJson = JSON.parse(vercelJson);
+for (const source of ["/css/(.*)", "/js/(.*)", "/assets/(.*)"]) {
+  const rule = parsedVercelJson.headers.find((entry) => entry.source === source);
+  assert.ok(
+    rule?.headers?.some((header) => header.key === "Cache-Control" && header.value === "public, max-age=31536000, immutable"),
+    `Vercel should apply the immutable cache contract to ${source}`,
+  );
+}
 const rootHeaderRule = parsedVercelJson.headers.find((entry) => entry.source === "/");
 assert.ok(
   rootHeaderRule?.headers?.some((header) => header.key === "Cache-Control" && header.value === "public, max-age=0, must-revalidate"),

@@ -1,31 +1,58 @@
-import "./font-loader.js?v=20260710-v85";
-import "./notion-content-shared.js?v=20260710-v85";
-import "./runtime-core.js?v=20260710-v85";
-import "./site-utils.js?v=20260710-v85";
-import "./common.js?v=20260710-v85";
-import "./ui-effects.js?v=20260710-v85";
-import "./seo-meta.js?v=20260710-v85";
-import "./spa-router.js?v=20260710-v85";
+import "./notion-content-shared.js?v=20260717-v86-2a8e2e463e9a";
+import "./runtime-core.js?v=20260717-v86-2a8e2e463e9a";
+import "./site-utils.js?v=20260717-v86-2a8e2e463e9a";
+import "./common.js?v=20260717-v86-2a8e2e463e9a";
+import "./ui-effects.js?v=20260717-v86-2a8e2e463e9a";
+import "./seo-meta.js?v=20260717-v86-2a8e2e463e9a";
+import "./spa-router.js?v=20260717-v86-2a8e2e463e9a";
 
-const ASSET_VERSION = "20260710-v85";
+const ASSET_VERSION = "20260717-v86-2a8e2e463e9a";
 const versioned = (path) => `${path}?v=${ASSET_VERSION}`;
 window.AppAssetVersion = ASSET_VERSION;
 
-async function loadPostRenderingChain() {
+function primeBlogInitialData({ url = window.location.href, signal } = {}) {
+  const task = import(versioned("./blog-bootstrap.js"))
+    .then(() => window.BlogBootstrap?.ensure?.(url, { signal }) || null);
+
+  // The page API consumes the original promise once its module is ready. This
+  // rejection observer prevents a fast network failure from becoming an
+  // unhandled rejection while the lightweight listing modules are downloading.
+  task.catch(() => {});
+  return task;
+}
+
+async function loadContentFoundations() {
   await import(versioned("./notion-content-utils.js"));
   await import(versioned("./notion-content-url.js"));
-  await import(versioned("./notion-article-renderer.js"));
-  await import(versioned("./notion-content.js"));
+}
+
+async function loadPublicContentClients() {
   await Promise.all([
     import(versioned("./notion-api.js")),
     import(versioned("./bookmark.js")),
   ]);
 }
 
+async function loadBlogDataChain() {
+  await loadContentFoundations();
+  await loadPublicContentClients();
+}
+
+async function loadPostRenderingChain() {
+  await loadContentFoundations();
+  await import(versioned("./notion-article-renderer.js"));
+  await import(versioned("./notion-content.js"));
+  await loadPublicContentClients();
+}
+
 const pageLoaders = {
   index: () => import(versioned("./index-page.js")),
-  blog: async () => {
-    await loadPostRenderingChain();
+  blog: async (context = {}) => {
+    // Wait only for the tiny bootstrap module and ensure() call, not for the
+    // network response. This guarantees the list request has started before
+    // the listing client can issue its normal fallback request.
+    await primeBlogInitialData(context).catch(() => null);
+    await loadBlogDataChain();
     await import(versioned("./blog-page.js"));
   },
   post: async () => {
@@ -44,22 +71,29 @@ function markInitialPageLoadFailure(error) {
   if (document.body) {
     document.body.dataset.pageModuleError = initialPageId || "unknown";
   }
+
+  window.NavigationFeedback?.show?.({
+    message: "页面资源加载失败，请重试。",
+    actionLabel: "重新加载",
+    onAction: () => {
+      if (typeof window.location.reload === "function") {
+        window.location.reload();
+      } else {
+        window.location.assign?.(window.location.href);
+      }
+    },
+  });
 }
 
 async function bootInitialPage() {
-  if (!loader) {
-    window.PageRuntime?.start?.();
-    return;
-  }
-
   try {
-    await loader();
+    if (loader) {
+      await loader({ url: window.location.href });
+    }
+    window.PageRuntime?.start?.();
   } catch (error) {
     markInitialPageLoadFailure(error);
-    return;
   }
-
-  window.PageRuntime?.start?.();
 }
 
 bootInitialPage();

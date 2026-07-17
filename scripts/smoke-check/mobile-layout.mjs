@@ -214,73 +214,132 @@ function expectBookmarkHitAreaContract(assert, source, label) {
 }
 
 export function runMobileLayoutChecks(context) {
-  const { assert, blogPageCss, styleCss } = context;
-  const realMobileStyle = extractCssBlock(
+  const { assert, blogPageCss, postPageCss, styleCss } = context;
+  const narrowViewportStyle = extractCssBlock(
     styleCss,
-    "@media (max-width: 768px) and (hover: none) and (pointer: coarse)",
+    "@media (max-width: 768px)",
   );
-  const narrowMobileStyle = extractCssBlock(
+  const compactViewportStyle = extractCssBlock(
     styleCss,
-    "@media (max-width: 540px) and (hover: none) and (pointer: coarse)",
+    "@media (max-width: 540px)",
   );
-  const realMobileBlog = extractCssBlock(
+  const ultraNarrowViewportStyle = extractCssBlock(
+    styleCss,
+    "@media (max-width: 360px)",
+  );
+  const narrowViewportBlog = extractCssBlock(
+    blogPageCss,
+    "@media (max-width: 768px)",
+  );
+  const compactViewportBlog = extractCssBlock(
+    blogPageCss,
+    "@media (max-width: 540px)",
+  );
+  const touchOnlyBlog = extractCssBlock(
     blogPageCss,
     "@media (max-width: 768px) and (hover: none) and (pointer: coarse)",
   );
-  const narrowMobileBlog = extractCssBlock(
-    blogPageCss,
-    "@media (max-width: 540px) and (hover: none) and (pointer: coarse)",
+  const narrowViewportPost = extractCssBlock(
+    postPageCss,
+    "@media (max-width: 768px)",
+  );
+  const touchOnlyPost = extractCssBlock(
+    postPageCss,
+    "@media (max-width: 768px) and (hover: none) and (pointer: coarse)",
   );
   assert.ok(
-    styleCss.includes("Generated mobile compatibility fallback"),
-    "shared CSS should label the generated mobile fallback block",
+    styleCss.includes("MOBILE_FALLBACKS_START") && styleCss.includes("MOBILE_FALLBACKS_END"),
+    "shared CSS should keep an explicit generated mobile fallback range",
   );
   assert.ok(
-    blogPageCss.includes("Generated mobile compatibility fallback"),
-    "blog CSS should label the generated mobile fallback block",
+    blogPageCss.includes("MOBILE_FALLBACKS_START") && blogPageCss.includes("MOBILE_FALLBACKS_END"),
+    "blog CSS should keep an explicit generated mobile fallback range",
+  );
+  assert.ok(
+    postPageCss.includes("MOBILE_FALLBACKS_START") && postPageCss.includes("MOBILE_FALLBACKS_END"),
+    "post CSS should keep an explicit generated mobile fallback range",
   );
 
-  expectStaticGradientTitle(assert, realMobileStyle, ".hero-title", "real-mobile home");
-  expectDeclarations(assert, realMobileStyle, "html", {
+  expectStaticGradientTitle(assert, narrowViewportStyle, ".hero-title", "narrow-viewport home");
+  expectDeclarations(assert, narrowViewportStyle, "html", {
     "background-color": "#0a0e1a",
-  }, "real-mobile root");
-  expectDeclarations(assert, realMobileStyle, "body", {
+  }, "narrow-viewport root");
+  expectDeclarations(assert, narrowViewportStyle, "body", {
     "background-color": "#0a0e1a",
-  }, "real-mobile body");
-  expectMobileAmbientBackground(assert, realMobileStyle, ".ambient-background", "real-mobile home background", { backgroundColor: "#0b1021", allowStars: true });
-  expectDeclarations(assert, realMobileStyle, "#particles-canvas", {
+  }, "narrow-viewport body");
+  expectMobileAmbientBackground(assert, narrowViewportStyle, ".ambient-background", "narrow-viewport home background", { backgroundColor: "#0b1021", allowStars: true });
+  expectDeclarations(assert, narrowViewportStyle, "#particles-canvas", {
     "display": "none",
-  }, "real-mobile home");
-  expectDeclarations(assert, realMobileStyle, ".glow-orb", {
+  }, "narrow-viewport home");
+  expectDeclarations(assert, narrowViewportStyle, ".glow-orb", {
     "display": "none",
-  }, "real-mobile home");
-  expectDeclarations(assert, realMobileStyle, ".hero-section", {
+  }, "narrow-viewport home");
+  expectDeclarations(assert, narrowViewportStyle, ".hero-section", {
     "padding": "clamp(148px, 21svh, 190px) 0 48px",
     "gap": "12px",
-  }, "real-mobile home");
-  expectDeclarations(assert, narrowMobileStyle, ".hero-title", {
+  }, "narrow-viewport home");
+  expectDeclarations(assert, narrowViewportStyle, ".hero-search input", {
+    "min-height": "44px",
+    "padding": "10px 58px 10px 16px",
+  }, "narrow-viewport home search field");
+  expectDeclarations(assert, compactViewportStyle, ".hero-title", {
     "font-size": "2.44rem",
     "letter-spacing": "0",
-  }, "narrow real-mobile home");
+  }, "compact-viewport home");
+  expectDeclarations(assert, compactViewportStyle, ".hero-search input", {
+    "min-height": "44px",
+    "padding": "10px 58px 10px 14px",
+  }, "compact-viewport home search field");
+  expectDeclarations(assert, ultraNarrowViewportStyle, ".hero-title", {
+    "max-width": "100%",
+    "white-space": "normal",
+    "overflow-wrap": "anywhere",
+    "text-wrap": "balance",
+    "font-size": "clamp(1.85rem, 10vw, 2.24rem)",
+  }, "ultra-narrow home title");
 
-  expectBlogCardMobileContract(assert, realMobileBlog, "real-mobile blog cards", "24px");
-  expectTouchTargetContract(assert, realMobileBlog, ".page-btn,\n  .empty-state-action", "real-mobile touch targets");
-  expectBookmarkHitAreaContract(assert, realMobileBlog, "real-mobile bookmark hit area");
-  expectDeclarations(assert, narrowMobileBlog, ".blog-card-body", {
+  expectDeclarations(assert, narrowViewportBlog, ".blog-grid", {
+    "grid-template-columns": "repeat(2, minmax(0, 1fr))",
+    "max-width": "460px",
+  }, "narrow-viewport blog grid");
+  expectBlogCardMobileContract(assert, narrowViewportBlog, "narrow-viewport blog cards", "24px");
+  expectTouchTargetContract(assert, narrowViewportBlog, ".page-btn,\n  .empty-state-action", "narrow-viewport targets");
+  expectBookmarkHitAreaContract(assert, touchOnlyBlog, "touch-first bookmark hit area");
+  expectDeclarations(assert, compactViewportBlog, ".blog-card-body", {
     "grid-template-columns": "minmax(0, 1fr) 24px",
-  }, "narrow real-mobile blog cards");
-  expectDeclarations(assert, narrowMobileBlog, ".blog-card-category", {
+  }, "compact-viewport blog cards");
+  expectDeclarations(assert, compactViewportBlog, ".blog-card-category", {
     "display": "inline-flex",
     "min-height": "17px",
     "white-space": "nowrap",
-  }, "narrow real-mobile blog cards");
-  expectDeclarations(assert, narrowMobileBlog, ".blog-card-meta", {
+  }, "compact-viewport blog cards");
+  expectDeclarations(assert, compactViewportBlog, ".blog-card-meta", {
     "align-self": "center",
     "justify-self": "end",
     "gap": "0",
-  }, "narrow real-mobile blog cards");
-  expectDeclarations(assert, narrowMobileBlog, ".card-bookmark-btn", {
+  }, "compact-viewport blog cards");
+  expectDeclarations(assert, compactViewportBlog, ".card-bookmark-btn", {
     "width": "21px",
     "height": "21px",
-  }, "narrow real-mobile blog cards");
+  }, "compact-viewport blog cards");
+
+  expectDeclarations(assert, narrowViewportPost, 'body[data-page="post"] #spa-content,\n  body[data-page="post"] .page-transition-wrapper,\n  body[data-page="post"] .post-container,\n  body[data-page="post"] .post-article,\n  body[data-page="post"] .post-content', {
+    "width": "100%",
+    "max-width": "100%",
+    "min-width": "0",
+    "overflow-x": "hidden",
+  }, "narrow-viewport post wrappers");
+  expectDeclarations(assert, touchOnlyPost, ".fab-bookmark:hover", {
+    "width": "40px",
+    "gap": "0",
+    "transform": "none",
+  }, "touch-first post bookmark hover suppression");
+
+  assert.doesNotMatch(touchOnlyBlog, /\.blog-grid\s*\{/, "touch capability queries must not control blog grid reflow");
+  assert.doesNotMatch(touchOnlyPost, /\.post-container\s*[,{]/, "touch capability queries must not control post width");
+  assert.doesNotMatch(
+    blogPageCss.slice(blogPageCss.indexOf("MOBILE_FALLBACKS_START")),
+    /is-mobile-device-viewport \.blog-grid/,
+    "generated touch fallback must not duplicate structural blog reflow",
+  );
 }

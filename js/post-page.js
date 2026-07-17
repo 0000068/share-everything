@@ -34,6 +34,7 @@
     let statusAnnouncementHandle = null;
     let activeBookmarkPostId = null;
     let bookmarksUpdatedHandler = null;
+    let activePostLoadController = null;
 
     function getCurrentPostId() {
       if (typeof siteUtils.getPostIdFromUrl === "function") {
@@ -42,6 +43,17 @@
 
       const params = new URLSearchParams(window.location.search);
       return params.get("id");
+    }
+
+    function isCurrentPostId(candidate) {
+      if (typeof siteUtils.arePostIdsEquivalent === "function") {
+        return siteUtils.arePostIdsEquivalent(candidate, postId);
+      }
+
+      const normalize = typeof siteUtils.normalizePostId === "function"
+        ? siteUtils.normalizePostId
+        : (value) => String(value || "").trim() || null;
+      return Boolean(postId) && normalize(candidate) === normalize(postId);
     }
 
     function readInitialPostData() {
@@ -77,6 +89,8 @@
       if (nextUrl.href !== currentUrl.href) {
         history.replaceState(history.state, "", nextUrl.href);
       }
+
+      window.SPARouter?.syncCurrentUrl?.(nextUrl.href);
 
       return canonicalHref;
     }
@@ -288,6 +302,8 @@
 
     function disposePostPage({ clearStructuredData = false } = {}) {
       isDisposed = true;
+      activePostLoadController?.abort();
+      activePostLoadController = null;
       cleanupBookmarkHandlers();
       cleanupBookmarkUpdates();
       cleanupBackHandler();
@@ -303,11 +319,7 @@
       initBackButton();
       setBookmarkControlsVisible(false);
       const initialPostData = readInitialPostData();
-      const normalizedInitialPostId =
-        typeof siteUtils.normalizePostId === "function"
-          ? siteUtils.normalizePostId(initialPostData?.id)
-          : initialPostData?.id || null;
-      const canBookmarkFromInitialData = normalizedInitialPostId === postId;
+      const canBookmarkFromInitialData = isCurrentPostId(initialPostData?.id);
 
       if (hasServerRenderedContent()) {
         showServerRenderedFallback({
@@ -329,18 +341,20 @@
         return;
       }
 
+      let loadController = null;
       try {
         const initialPostData = readInitialPostData();
-        const normalizedInitialPostId =
-          typeof siteUtils.normalizePostId === "function"
-            ? siteUtils.normalizePostId(initialPostData?.id)
-            : initialPostData?.id || null;
-        const hasMatchingInitialData = normalizedInitialPostId === postId;
+        const hasMatchingInitialData = isCurrentPostId(initialPostData?.id);
         const canHydrateFromInitialData = hasMatchingInitialData && hasServerRenderedContent();
+        if (!canHydrateFromInitialData) {
+          activePostLoadController?.abort();
+          loadController = new AbortController();
+          activePostLoadController = loadController;
+        }
         const post = canHydrateFromInitialData
           ? initialPostData
-          : await notionApi.getPost(postId);
-        if (isDisposed) return;
+          : await notionApi.getPost(postId, { signal: loadController.signal });
+        if (isDisposed || loadController?.signal.aborted) return;
 
         if (!post) {
           showEmpty("not-found");
@@ -407,9 +421,13 @@
 
         initBookmark(post);
       } catch (error) {
-        if (isDisposed) return;
+        if (isDisposed || loadController?.signal.aborted || error?.name === "AbortError") return;
         console.error("Failed to load post:", error);
         showEmpty(isMissingPostError(error) ? "not-found" : "unavailable");
+      } finally {
+        if (activePostLoadController === loadController) {
+          activePostLoadController = null;
+        }
       }
     }
 

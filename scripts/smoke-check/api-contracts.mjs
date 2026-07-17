@@ -7,6 +7,20 @@ export async function runApiContractChecks(context) {
   } = context;
 
   const publicContentHelpers = loadCommonJsModule("server/public-content.js");
+  const canonicalQueryHelpers = loadCommonJsModule("server/canonical-query.js");
+  const requestLifecycleHelpers = loadCommonJsModule("server/request-lifecycle.js");
+  assert.equal(
+    canonicalQueryHelpers.hasCanonicalRequestSearch({ url: "/api/posts-data" }, []),
+    true,
+    "canonical query matching should accept a request target with no query delimiter",
+  );
+  for (const url of ["/api/posts-data?", "/api/posts-data#fragment"]) {
+    assert.equal(
+      canonicalQueryHelpers.hasCanonicalRequestSearch({ url }, []),
+      false,
+      `canonical query matching should reject raw request-target noise: ${url}`,
+    );
+  }
   const queryCalls = [];
   const expectedPayload = {
     results: [
@@ -56,6 +70,9 @@ export async function runApiContractChecks(context) {
     require(specifier) {
       if (specifier === "../server/notion-server") {
         return {
+          ALL_CATEGORY: "\u5168\u90e8",
+          PUBLIC_CATEGORY_QUERY_MAX_LENGTH: 128,
+          PUBLIC_SEARCH_QUERY_MAX_LENGTH: 256,
           async queryPublicPosts(query) {
             queryCalls.push(query);
             return expectedPayload;
@@ -66,6 +83,12 @@ export async function runApiContractChecks(context) {
       if (specifier === "../server/public-content") {
         return publicContentHelpers;
       }
+      if (specifier === "../server/canonical-query") {
+        return canonicalQueryHelpers;
+      }
+      if (specifier === "../server/request-lifecycle") {
+        return requestLifecycleHelpers;
+      }
 
       throw new Error(`Unexpected api/posts-data.js dependency in contract test: ${specifier}`);
     },
@@ -74,6 +97,7 @@ export async function runApiContractChecks(context) {
   const response = createApiResponseRecorder();
   await postsDataHandler({
     method: "GET",
+    url: "/api/posts-data?category=AI&search=semantic&page=2",
     query: {
       category: "AI",
       search: "semantic",
@@ -119,6 +143,41 @@ export async function runApiContractChecks(context) {
     "posts-data contract should expose category color fields in the final JSON payload",
   );
 
+  for (const invalidQuery of [
+    { page: "1" },
+    { page: "02" },
+    { page: "10001" },
+    { category: "\u5168\u90e8" },
+    { search: " padded " },
+    { search: ["duplicate", "query"] },
+    { unexpected: "1" },
+  ]) {
+    const invalidQueryResponse = createApiResponseRecorder();
+    await postsDataHandler({ method: "GET", query: invalidQuery }, invalidQueryResponse);
+    assert.equal(
+      invalidQueryResponse.statusCode,
+      400,
+      `posts-data should reject non-canonical query input: ${JSON.stringify(invalidQuery)}`,
+    );
+  }
+  const nonCanonicalOrderResponse = createApiResponseRecorder();
+  await postsDataHandler({
+    method: "GET",
+    url: "/api/posts-data?search=semantic&category=AI&page=2",
+    query: { category: "AI", search: "semantic", page: "2" },
+  }, nonCanonicalOrderResponse);
+  assert.equal(
+    nonCanonicalOrderResponse.statusCode,
+    400,
+    "posts-data should reject semantically duplicate cache keys with non-canonical query ordering",
+  );
+  assert.equal(queryCalls.length, 1, "invalid post-list query variants should not reach Notion");
+  for (const url of ["/api/posts-data?", "/api/posts-data#fragment"]) {
+    const rawVariantResponse = createApiResponseRecorder();
+    await postsDataHandler({ method: "GET", url, query: {} }, rawVariantResponse);
+    assert.equal(rawVariantResponse.statusCode, 400, `posts-data should reject raw query variants: ${url}`);
+  }
+
   const postDataFetchCalls = [];
   const postDataHandler = loadCommonJsModule("api/post-data.js", [], {
     require(specifier) {
@@ -137,6 +196,12 @@ export async function runApiContractChecks(context) {
 
       if (specifier === "../server/public-content") {
         return publicContentHelpers;
+      }
+      if (specifier === "../server/canonical-query") {
+        return canonicalQueryHelpers;
+      }
+      if (specifier === "../server/request-lifecycle") {
+        return requestLifecycleHelpers;
       }
 
       throw new Error(`Unexpected api/post-data.js dependency in contract test: ${specifier}`);
@@ -161,15 +226,58 @@ export async function runApiContractChecks(context) {
   );
 
   const validPostDataResponse = createApiResponseRecorder();
+  const canonicalPostId = "550e8400e29b41d4a716446655440000";
   await postDataHandler({
     method: "GET",
-    query: { id: "550e8400-e29b-41d4-a716-446655440000" },
+    url: `/api/post-data?id=${canonicalPostId}`,
+    query: { id: canonicalPostId },
   }, validPostDataResponse);
 
   assert.equal(validPostDataResponse.statusCode, 200, "post-data contract should accept canonical Notion page ids");
   assert.equal(
+    validPostDataResponse.getHeader("cache-control"),
+    "public, max-age=0, s-maxage=300, stale-while-revalidate=600",
+    "successful public post JSON should use short edge caching with stale revalidation",
+  );
+  assert.equal(
     JSON.stringify(postDataFetchCalls),
-    JSON.stringify(["550e8400-e29b-41d4-a716-446655440000"]),
-    "post-data contract should pass validated page ids to the Notion layer unchanged",
+    JSON.stringify([canonicalPostId]),
+    "post-data contract should pass the unique compact lowercase page id to the Notion layer",
+  );
+
+  for (const request of [
+    {
+      url: "/api/post-data?id=550e8400-e29b-41d4-a716-446655440000",
+      query: { id: "550e8400-e29b-41d4-a716-446655440000" },
+    },
+    {
+      url: `/api/post-data?id=${canonicalPostId}&debug=1`,
+      query: { id: canonicalPostId, debug: "1" },
+    },
+    {
+      url: `/api/post-data?id=${canonicalPostId}&id=${canonicalPostId}`,
+      query: { id: [canonicalPostId, canonicalPostId] },
+    },
+    {
+      url: `/api/post-data?id=${canonicalPostId.toUpperCase()}`,
+      query: { id: canonicalPostId.toUpperCase() },
+    },
+    {
+      url: `/api/post-data?id=${canonicalPostId}#fragment`,
+      query: { id: canonicalPostId },
+    },
+  ]) {
+    const nonCanonicalResponse = createApiResponseRecorder();
+    await postDataHandler({ method: "GET", ...request }, nonCanonicalResponse);
+    assert.equal(
+      nonCanonicalResponse.statusCode,
+      request.query.id instanceof Array ? 404 : 400,
+      `post-data should reject non-canonical cache-key variants: ${request.url}`,
+    );
+  }
+  assert.equal(
+    postDataFetchCalls.length,
+    1,
+    "non-canonical post-data query variants should not reach Notion",
   );
 }

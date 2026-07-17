@@ -5,6 +5,7 @@ const {
 const { DEFAULT_SHARE_IMAGE_PATH } = require("../js/notion-content-shared");
 const { getSiteOrigin } = require("./notion-client");
 const { getSiteName } = require("./notion-config");
+const { readPublicPostId } = require("./public-content");
 
 function renderPostContent(postOrBlocks, { baseOrigin = getSiteOrigin() } = {}) {
   const content = Array.isArray(postOrBlocks)
@@ -16,8 +17,13 @@ function renderPostContent(postOrBlocks, { baseOrigin = getSiteOrigin() } = {}) 
   return renderBlocks(content, { baseOrigin });
 }
 
+function buildPostPath(pageId) {
+  const normalizedPageId = readPublicPostId(pageId);
+  return normalizedPageId ? `/posts/${normalizedPageId}` : "/post.html";
+}
+
 function buildPostUrl(pageId) {
-  return `${getSiteOrigin()}/posts/${encodeURIComponent(pageId)}`;
+  return `${getSiteOrigin()}${buildPostPath(pageId)}`;
 }
 
 function buildArticleStructuredData(post) {
@@ -33,6 +39,7 @@ function buildArticleStructuredData(post) {
 
 module.exports = {
   buildArticleStructuredData,
+  buildPostPath,
   buildPostUrl,
   buildSharedArticleStructuredData,
   renderPostContent,

@@ -7,28 +7,82 @@
 
 import { readFile } from "node:fs/promises";
 
-function parseValue(rawValue) {
+function decodeDoubleQuotedValue(value) {
+  let decoded = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (character !== "\\" || index === value.length - 1) {
+      decoded += character;
+      continue;
+    }
+
+    const escaped = value[index + 1];
+    const replacements = {
+      "\\": "\\",
+      n: "\n",
+      r: "\r",
+      t: "\t",
+      '"': '"',
+    };
+    if (Object.prototype.hasOwnProperty.call(replacements, escaped)) {
+      decoded += replacements[escaped];
+      index += 1;
+      continue;
+    }
+
+    decoded += `\\${escaped}`;
+    index += 1;
+  }
+  return decoded;
+}
+
+function findClosingQuote(value, quote) {
+  for (let index = 1; index < value.length; index += 1) {
+    if (value[index] !== quote) continue;
+    if (quote === "'" || value[index - 1] !== "\\") return index;
+
+    let slashCount = 0;
+    for (let cursor = index - 1; cursor >= 0 && value[cursor] === "\\"; cursor -= 1) {
+      slashCount += 1;
+    }
+    if (slashCount % 2 === 0) return index;
+  }
+  return -1;
+}
+
+function createDotEnvSyntaxError(lineNumber, message) {
+  const error = new SyntaxError(`Invalid .env syntax on line ${lineNumber}: ${message}`);
+  error.lineNumber = lineNumber;
+  return error;
+}
+
+function parseValue(rawValue, lineNumber) {
   const trimmed = String(rawValue || "").trim();
   if (!trimmed) return "";
 
-  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    return trimmed
-      .slice(1, -1)
-      .replace(/\\n/g, "\n")
-      .replace(/\\r/g, "\r")
-      .replace(/\\t/g, "\t")
-      .replace(/\\"/g, '"')
-      .replace(/\\\\/g, "\\");
-  }
+  const quote = trimmed[0];
+  if (quote === '"' || quote === "'") {
+    const closingQuoteIndex = findClosingQuote(trimmed, quote);
+    if (closingQuoteIndex < 0) {
+      throw createDotEnvSyntaxError(lineNumber, "unterminated quoted value");
+    }
 
-  if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
-    return trimmed.slice(1, -1);
+    const remainder = trimmed.slice(closingQuoteIndex + 1).trim();
+    if (remainder && !remainder.startsWith("#")) {
+      throw createDotEnvSyntaxError(
+        lineNumber,
+        "unexpected content after the closing quote (only a comment is allowed)",
+      );
+    }
+
+    const value = trimmed.slice(1, closingQuoteIndex);
+    return quote === '"' ? decodeDoubleQuotedValue(value) : value;
   }
 
   return trimmed.replace(/\s+#.*$/, "").trim();
 }
 
-function parseLine(rawLine) {
+function parseLine(rawLine, lineNumber) {
   const line = String(rawLine || "").trim();
   if (!line || line.startsWith("#")) return null;
 
@@ -43,7 +97,7 @@ function parseLine(rawLine) {
 
   return {
     key,
-    value: parseValue(normalizedLine.slice(separatorIndex + 1)),
+    value: parseValue(normalizedLine.slice(separatorIndex + 1), lineNumber),
   };
 }
 
@@ -51,7 +105,7 @@ export function parseDotEnvSource(source) {
   return String(source || "")
     .replace(/^\uFEFF/, "")
     .split(/\r?\n/)
-    .map(parseLine)
+    .map((line, index) => parseLine(line, index + 1))
     .filter(Boolean);
 }
 

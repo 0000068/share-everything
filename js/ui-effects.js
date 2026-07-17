@@ -11,6 +11,16 @@
         addListener: () => {},
         removeListener: () => {},
       };
+  const reducedMotionQuery =
+    typeof siteUtils.createMediaQueryList === "function"
+      ? siteUtils.createMediaQueryList("(prefers-reduced-motion: reduce)")
+      : window.matchMedia?.("(prefers-reduced-motion: reduce)") || {
+          matches: false,
+          addEventListener: null,
+          removeEventListener: null,
+          addListener: () => {},
+          removeListener: () => {},
+        };
   let mouseAF = null;
   let cursorTrackingEnabled = false;
   let latestPointerX = 0;
@@ -28,7 +38,7 @@
   }
 
   function canUseCursorGlow() {
-    return Boolean(cursorGlow) && finePointerQuery.matches;
+    return Boolean(cursorGlow) && finePointerQuery.matches && !reducedMotionQuery.matches;
   }
 
   function syncParticlePointer(clientX, clientY) {
@@ -38,6 +48,7 @@
   }
 
   function handleMouseMove(event) {
+    if (reducedMotionQuery.matches) return;
     latestPointerX = event.clientX;
     latestPointerY = event.clientY;
     syncParticlePointer(latestPointerX, latestPointerY);
@@ -67,7 +78,7 @@
     const blogCards = document.querySelectorAll(".blog-card");
     if (blogCards.length === 0) return () => {};
 
-    if (typeof IntersectionObserver !== "function") {
+    if (reducedMotionQuery.matches || typeof IntersectionObserver !== "function") {
       blogCards.forEach((card) => card.classList.add("visible"));
       return () => {};
     }
@@ -84,7 +95,7 @@
           const timeoutId = window.setTimeout(() => {
             revealTimeouts.delete(timeoutId);
             card.classList.add("visible");
-          }, index * 80);
+          }, reducedMotionQuery.matches ? 0 : index * 80);
           revealTimeouts.add(timeoutId);
           observer.unobserve(card);
         });
@@ -106,6 +117,7 @@
 
   document.addEventListener("mousemove", handleMouseMove, { passive: true });
   bindMediaQueryChange(finePointerQuery, syncCursorGlowState);
+  bindMediaQueryChange(reducedMotionQuery, syncCursorGlowState);
   syncCursorGlowState();
 
   document.addEventListener("mousedown", (event) => {

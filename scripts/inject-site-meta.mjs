@@ -4,7 +4,6 @@ import { escapeHtmlAttribute } from "./lib/html-escape.mjs";
 import {
   findElement,
   findElementById,
-  findElements,
   findLinkByRel,
   findMetaByName,
   findMetaByProperty,
@@ -37,8 +36,7 @@ const pages = [
     ogTitle: ({ siteName }) => siteName,
   },
 ];
-const modulePreloadPaths = [
-  "font-loader.js",
+const sharedModulePreloadPaths = [
   "notion-content-shared.js",
   "runtime-core.js",
   "site-utils.js",
@@ -47,6 +45,28 @@ const modulePreloadPaths = [
   "seo-meta.js",
   "spa-router.js",
 ];
+const pageModulePreloadPaths = {
+  "index.html": ["index-page.js"],
+  "blog.html": [
+    "blog-bootstrap.js",
+    "notion-content-utils.js",
+    "notion-content-url.js",
+    "notion-api.js",
+    "bookmark.js",
+    "blog-page.js",
+  ],
+  "post.html": [
+    "notion-content-utils.js",
+    "notion-content-url.js",
+    "notion-article-renderer.js",
+    "notion-content.js",
+    "notion-api.js",
+    "bookmark.js",
+    "post-page.js",
+  ],
+};
+const modulePreloadsStartMarker = "<!-- SITE_MODULE_PRELOADS_START -->";
+const modulePreloadsEndMarker = "<!-- SITE_MODULE_PRELOADS_END -->";
 const checkOnly = process.argv.includes("--check");
 const ogImagePath = DEFAULT_SHARE_IMAGE_PATH;
 const faviconPath = "/favicon.png?v=4";
@@ -239,7 +259,8 @@ function upsertStandaloneMetadata(doc, ranges, siteName) {
   return applicationName;
 }
 
-function buildWebManifest(siteName) {
+function buildWebManifest(siteName, assetVersion) {
+  const versionedIcon = (filename) => `/assets/${filename}?v=${encodeURIComponent(assetVersion)}`;
   return `${JSON.stringify({
     name: siteName,
     short_name: readShortSiteName(siteName),
@@ -247,15 +268,26 @@ function buildWebManifest(siteName) {
     start_url: "/",
     scope: "/",
     display: "standalone",
-    orientation: "portrait-primary",
     background_color: "#0a0e1a",
     theme_color: "#111528",
     icons: [
       {
-        src: faviconPath,
-        sizes: "256x256",
+        src: versionedIcon("icon-192.png"),
+        sizes: "192x192",
         type: "image/png",
         purpose: "any",
+      },
+      {
+        src: versionedIcon("icon-512.png"),
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: versionedIcon("icon-maskable-512.png"),
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "maskable",
       },
     ],
   }, null, 2)}\n`;
@@ -307,31 +339,34 @@ function updatePageMeta(doc, ranges, { canonicalUrl, ogImageUrl, page, siteName 
   }
 }
 
-function updateModulePreloads(source, doc, ranges, assetVersion) {
-  const nodes = findElements(doc, (node) => (
-    node.tagName === "link" && attrValue(node, "rel") === "modulepreload"
-  ));
-  const markup = modulePreloadPaths
-    .map((filename) => `    <link rel="modulepreload" href="/js/${filename}?v=${escapeHtmlAttribute(assetVersion)}" />`)
-    .join("\n");
+function findUniqueMarker(source, marker, label) {
+  const index = source.indexOf(marker);
+  if (index < 0) throw new Error(`Unable to update ${label}: missing ${marker}`);
+  if (source.indexOf(marker, index + marker.length) >= 0) {
+    throw new Error(`Unable to update ${label}: duplicate ${marker}`);
+  }
+  return index;
+}
 
-  if (nodes.length > 0) {
-    const first = requireNode(nodes[0], "modulepreload hints");
-    const last = requireNode(nodes.at(-1), "modulepreload hints");
-    const lineStart = source.lastIndexOf("\n", first.sourceCodeLocation.startOffset) + 1;
-    ranges.push({
-      start: lineStart,
-      end: last.sourceCodeLocation.endOffset,
-      markup,
-    });
-    return;
+function updateModulePreloads(source, ranges, assetVersion, pageFile) {
+  const start = findUniqueMarker(source, modulePreloadsStartMarker, "modulepreload hints");
+  const end = findUniqueMarker(source, modulePreloadsEndMarker, "modulepreload hints");
+  const contentStart = start + modulePreloadsStartMarker.length;
+  if (end <= contentStart) {
+    throw new Error("Unable to update modulepreload hints: end marker must follow start marker");
   }
 
-  const head = requireNode(findElement(doc, (node) => node.tagName === "head"), "modulepreload hints");
+  const paths = [...new Set([
+    ...sharedModulePreloadPaths,
+    ...(pageModulePreloadPaths[pageFile] || []),
+  ])];
+  const markup = paths
+    .map((filename) => `    <link rel="modulepreload" href="/js/${filename}?v=${escapeHtmlAttribute(assetVersion)}" />`)
+    .join("\n");
   ranges.push({
-    start: head.sourceCodeLocation.endTag.startOffset,
-    end: head.sourceCodeLocation.endTag.startOffset,
-    markup: `${markup}\n  `,
+    start: contentStart,
+    end,
+    markup: `\n${markup}\n    `,
   });
 }
 
@@ -360,7 +395,7 @@ for (const page of pages) {
   const doc = parseHtml(source);
   const ranges = [];
   updatePageMeta(doc, ranges, { canonicalUrl, ogImageUrl, page, siteName });
-  updateModulePreloads(source, doc, ranges, assetVersion);
+  updateModulePreloads(source, ranges, assetVersion, page.file);
   if (page.file === "index.html") {
     updateFeaturedCta(doc, ranges, featuredName);
   }
@@ -375,7 +410,7 @@ for (const page of pages) {
 }
 
 const manifestSource = await readFile("manifest.webmanifest", "utf8");
-const nextManifestSource = buildWebManifest(siteName);
+const nextManifestSource = buildWebManifest(siteName, assetVersion);
 if (nextManifestSource !== manifestSource) {
   changedFiles.push("manifest.webmanifest");
   if (!checkOnly) {

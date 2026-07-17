@@ -6,6 +6,14 @@
 const canvas = document.getElementById("particles-canvas");
 const ctx = canvas ? canvas.getContext("2d") : null;
 const siteUtils = window.SiteUtils || {};
+const reducedMotionQuery =
+  typeof siteUtils.createMediaQueryList === "function"
+    ? siteUtils.createMediaQueryList("(prefers-reduced-motion: reduce)")
+    : window.matchMedia?.("(prefers-reduced-motion: reduce)") || {
+        matches: false,
+        addEventListener: null,
+        addListener: () => {},
+      };
 let width;
 let height;
 let particles = [];
@@ -16,9 +24,25 @@ let mouseY = 0;
 let targetMouseX = 0;
 let targetMouseY = 0;
 const MOBILE_PARTICLE_BREAKPOINT = 768;
-const DESKTOP_PARTICLE_COUNT = 350;
+const PARTICLE_TIERS = Object.freeze([
+  Object.freeze({ name: "high", count: 350, frameIntervalMs: 0 }),
+  Object.freeze({ name: "balanced", count: 220, frameIntervalMs: 0 }),
+  Object.freeze({ name: "economy", count: 120, frameIntervalMs: 1000 / 30 }),
+]);
+const PARTICLE_FRAME_COST_SAMPLE_COUNT = 45;
+const PARTICLE_FRAME_COST_ALPHA = 0.12;
+const PARTICLE_FRAME_COST_DOWNGRADE_MS = 6;
+const PARTICLE_FRAME_COST_RECOVERY_MS = 2.5;
+const PARTICLE_RECOVERY_WINDOWS = 4;
 let particleProfile = getParticleProfileForViewport();
 let particleCount = particleProfile.count;
+let baseParticleTierIndex = particleProfile.tierIndex;
+let adaptiveParticleTierIndex = particleProfile.tierIndex;
+let baseParticleReason = particleProfile.reason;
+let frameCostEma = 0;
+let frameCostSamples = 0;
+let recoveryWindows = 0;
+let lastRenderTimestamp = null;
 const colors = [
   "rgba(0, 255, 255, 1)",
   "rgba(77, 159, 255, 0.9)",
@@ -27,28 +51,77 @@ const colors = [
   "rgba(255, 255, 255, 0.6)",
 ];
 
-function isMobileParticleViewport() {
-  if (typeof siteUtils.isMobileDeviceViewport === "function") {
-    return siteUtils.isMobileDeviceViewport();
+function isNarrowParticleViewport() {
+  if (typeof siteUtils.isNarrowViewport === "function") {
+    return siteUtils.isNarrowViewport();
   }
 
-  return window.innerWidth < MOBILE_PARTICLE_BREAKPOINT
-    && window.matchMedia?.("(hover: none) and (pointer: coarse)")?.matches;
+  const viewportWidth = Math.min(
+    window.innerWidth || Number.POSITIVE_INFINITY,
+    document.documentElement?.clientWidth || Number.POSITIVE_INFINITY,
+  );
+  return viewportWidth <= MOBILE_PARTICLE_BREAKPOINT;
+}
+
+function readPositiveCapability(value) {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : null;
+}
+
+function getHardwareTierIndex() {
+  const navigatorObject = window.navigator || {};
+  const hardwareConcurrency = readPositiveCapability(navigatorObject.hardwareConcurrency);
+  const deviceMemory = readPositiveCapability(navigatorObject.deviceMemory);
+  return (hardwareConcurrency !== null && hardwareConcurrency <= 2)
+    || (deviceMemory !== null && deviceMemory <= 2)
+    ? PARTICLE_TIERS.length - 1
+    : 0;
 }
 
 function getParticleProfileForViewport() {
-  const isMobile = isMobileParticleViewport();
+  const isNarrow = isNarrowParticleViewport();
+  const prefersReducedMotion = Boolean(reducedMotionQuery.matches);
+  const saveData = Boolean(window.navigator?.connection?.saveData);
+  const tierIndex = getHardwareTierIndex();
+  const disabledReason = prefersReducedMotion
+    ? "reduced-motion"
+    : saveData
+      ? "save-data"
+      : isNarrow
+        ? "narrow-viewport"
+        : null;
+  const tier = PARTICLE_TIERS[tierIndex];
+
   return {
-    isMobile,
-    count: isMobile ? 0 : DESKTOP_PARTICLE_COUNT,
+    isNarrow,
+    prefersReducedMotion,
+    saveData,
+    disabled: Boolean(disabledReason),
+    reason: disabledReason || (tierIndex > 0 ? "low-hardware" : "full-capability"),
+    tier: disabledReason ? "off" : tier.name,
+    tierIndex: disabledReason ? -1 : tierIndex,
+    count: disabledReason ? 0 : tier.count,
+    frameIntervalMs: disabledReason ? 0 : tier.frameIntervalMs,
   };
+}
+
+function resetParticleFrameAccounting() {
+  frameCostEma = 0;
+  frameCostSamples = 0;
+  recoveryWindows = 0;
+  lastRenderTimestamp = null;
 }
 
 function refreshParticleProfile() {
   const nextProfile = getParticleProfileForViewport();
-  const didChange = nextProfile.isMobile !== particleProfile.isMobile;
+  const didChange = nextProfile.disabled !== particleProfile.disabled
+    || nextProfile.count !== particleProfile.count;
   particleProfile = nextProfile;
   particleCount = nextProfile.count;
+  baseParticleTierIndex = nextProfile.tierIndex;
+  adaptiveParticleTierIndex = nextProfile.tierIndex;
+  baseParticleReason = nextProfile.reason;
+  resetParticleFrameAccounting();
   return didChange;
 }
 
@@ -150,6 +223,94 @@ function rebuildParticleBuffers() {
   });
 }
 
+function resizeParticleCollection() {
+  if (!particlesBootstrapped || particleProfile.disabled) return;
+
+  if (particles.length > particleCount) {
+    particles.length = particleCount;
+  }
+  while (particles.length < particleCount) {
+    particles.push(new Particle());
+  }
+}
+
+function applyAdaptiveParticleTier(nextTierIndex, reason) {
+  if (particleProfile.disabled || baseParticleTierIndex < 0) return false;
+
+  const boundedTierIndex = Math.min(
+    PARTICLE_TIERS.length - 1,
+    Math.max(baseParticleTierIndex, nextTierIndex),
+  );
+  if (boundedTierIndex === adaptiveParticleTierIndex) return false;
+
+  const tier = PARTICLE_TIERS[boundedTierIndex];
+  adaptiveParticleTierIndex = boundedTierIndex;
+  particleProfile = {
+    ...particleProfile,
+    reason,
+    tier: tier.name,
+    tierIndex: boundedTierIndex,
+    count: tier.count,
+    frameIntervalMs: tier.frameIntervalMs,
+  };
+  particleCount = tier.count;
+  resizeParticleCollection();
+  rebuildParticleBuffers();
+  resetParticleFrameAccounting();
+  syncParticleCanvasState();
+  return true;
+}
+
+function recordParticleFrameCost(frameCostMs) {
+  if (!Number.isFinite(frameCostMs) || frameCostMs < 0 || frameCostMs > 250) return;
+
+  frameCostEma = frameCostSamples === 0
+    ? frameCostMs
+    : frameCostEma + (frameCostMs - frameCostEma) * PARTICLE_FRAME_COST_ALPHA;
+  frameCostSamples += 1;
+  if (frameCostSamples < PARTICLE_FRAME_COST_SAMPLE_COUNT) return;
+
+  frameCostSamples = 0;
+  if (
+    frameCostEma > PARTICLE_FRAME_COST_DOWNGRADE_MS
+    && adaptiveParticleTierIndex < PARTICLE_TIERS.length - 1
+  ) {
+    applyAdaptiveParticleTier(adaptiveParticleTierIndex + 1, "frame-pressure");
+    return;
+  }
+
+  if (
+    frameCostEma < PARTICLE_FRAME_COST_RECOVERY_MS
+    && adaptiveParticleTierIndex > baseParticleTierIndex
+  ) {
+    recoveryWindows += 1;
+    if (recoveryWindows >= PARTICLE_RECOVERY_WINDOWS) {
+      const nextTierIndex = adaptiveParticleTierIndex - 1;
+      applyAdaptiveParticleTier(
+        nextTierIndex,
+        nextTierIndex === baseParticleTierIndex ? baseParticleReason : "frame-recovery",
+      );
+    }
+    return;
+  }
+
+  recoveryWindows = 0;
+}
+
+function shouldRenderParticleFrame(timestamp) {
+  const frameIntervalMs = particleProfile.frameIntervalMs;
+  if (!frameIntervalMs || !Number.isFinite(timestamp)) {
+    lastRenderTimestamp = Number.isFinite(timestamp) ? timestamp : null;
+    return true;
+  }
+
+  if (lastRenderTimestamp !== null && timestamp - lastRenderTimestamp < frameIntervalMs) {
+    return false;
+  }
+  lastRenderTimestamp = timestamp;
+  return true;
+}
+
 rebuildParticleBuffers();
 
 let speedMultiplier = 1;
@@ -157,7 +318,7 @@ let targetSpeedMultiplier = 1;
 let particlesBootstrapped = false;
 
 function drawParticlesFrame(advance = true) {
-  if (!ctx || !width || !height || particleProfile.isMobile) return;
+  if (!ctx || !width || !height || particleProfile.disabled) return;
   ctx.clearRect(0, 0, width, height);
 
   if (advance) {
@@ -196,10 +357,11 @@ function drawParticlesFrame(advance = true) {
 }
 
 function stopParticles() {
-  if (rafId) {
+  if (rafId !== null) {
     cancelAnimationFrame(rafId);
     rafId = null;
   }
+  lastRenderTimestamp = null;
 }
 
 function clearParticleCanvas() {
@@ -210,7 +372,11 @@ function clearParticleCanvas() {
 function syncParticleCanvasState() {
   if (!canvas) return;
 
-  if (particleProfile.isMobile) {
+  canvas.dataset.particlesProfile = particleProfile.tier;
+  canvas.dataset.particlesCount = String(particleProfile.count);
+  canvas.dataset.particlesReason = particleProfile.reason;
+
+  if (particleProfile.disabled) {
     canvas.dataset.particlesDisabled = "true";
     canvas.style.display = "none";
     return;
@@ -227,9 +393,16 @@ function clearParticleBootstrapTimer() {
   }
 }
 
-function animateParticles() {
-  if (!ctx || particleProfile.isMobile) return;
-  drawParticlesFrame(true);
+function animateParticles(timestamp) {
+  rafId = null;
+  if (!ctx || particleProfile.disabled) return;
+
+  if (shouldRenderParticleFrame(timestamp)) {
+    const frameStart = globalThis.performance?.now?.() ?? Date.now();
+    drawParticlesFrame(true);
+    const frameEnd = globalThis.performance?.now?.() ?? Date.now();
+    recordParticleFrameCost(frameEnd - frameStart);
+  }
   rafId = requestAnimationFrame(animateParticles);
 }
 
@@ -246,7 +419,7 @@ function bootstrapParticles(force = false) {
   const hasViewport = resize();
   if (!hasViewport) return false;
 
-  if (particleProfile.isMobile) {
+  if (particleProfile.disabled) {
     particles = [];
     particlesBootstrapped = false;
     clearParticleCanvas();
@@ -259,7 +432,7 @@ function bootstrapParticles(force = false) {
   }
 
   drawParticlesFrame(false);
-  animateParticles();
+  rafId = requestAnimationFrame(animateParticles);
   return true;
 }
 
@@ -291,6 +464,7 @@ function setPointerTarget(clientX, clientY) {
 }
 
 window.ParticlesRuntime = Object.freeze({
+  getProfile: () => Object.freeze({ ...particleProfile }),
   setPointerTarget,
 });
 
@@ -299,6 +473,18 @@ function handleParticleContextChange() {
   clearParticleBootstrapTimer();
   scheduleParticleBootstrap(true);
 }
+
+function bindReducedMotionChange(handler) {
+  if (typeof reducedMotionQuery.addEventListener === "function") {
+    reducedMotionQuery.addEventListener("change", handler);
+    return;
+  }
+
+  reducedMotionQuery.addListener?.(handler);
+}
+
+bindReducedMotionChange(handleParticleContextChange);
+window.navigator?.connection?.addEventListener?.("change", handleParticleContextChange);
 
 let resizeTimer = null;
 window.addEventListener("resize", () => {

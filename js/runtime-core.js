@@ -241,6 +241,92 @@
     return target;
   }
 
+  const NavigationFeedback = (() => {
+    const ROOT_ID = "navigationFeedback";
+    let retryButton = null;
+    let retryHandler = null;
+
+    function removeRetryHandler() {
+      if (retryButton && retryHandler) {
+        retryButton.removeEventListener("click", retryHandler);
+      }
+      retryButton = null;
+      retryHandler = null;
+    }
+
+    function ensureRoot() {
+      let root = document.getElementById(ROOT_ID);
+      if (root) return root;
+
+      root = document.createElement("div");
+      root.id = ROOT_ID;
+      root.className = "navigation-feedback";
+      root.hidden = true;
+      root.setAttribute("role", "alert");
+      root.setAttribute("aria-live", "assertive");
+      root.setAttribute("aria-atomic", "true");
+
+      const message = document.createElement("span");
+      message.className = "navigation-feedback-message";
+      message.dataset.navigationFeedbackMessage = "true";
+      root.appendChild(message);
+
+      const action = document.createElement("button");
+      action.type = "button";
+      action.className = "navigation-feedback-action";
+      action.dataset.navigationFeedbackAction = "true";
+      action.hidden = true;
+      root.appendChild(action);
+
+      document.body?.appendChild(root);
+      return root;
+    }
+
+    function clear() {
+      removeRetryHandler();
+      const root = document.getElementById(ROOT_ID);
+      if (!root) return;
+
+      root.hidden = true;
+      const message = root.querySelector("[data-navigation-feedback-message]");
+      if (message) message.textContent = "";
+      const action = root.querySelector("[data-navigation-feedback-action]");
+      if (action) {
+        action.hidden = true;
+        action.textContent = "";
+      }
+    }
+
+    function show({ message, actionLabel = "重试", onAction } = {}) {
+      if (typeof message !== "string" || !message.trim()) return null;
+
+      const root = ensureRoot();
+      const messageElement = root.querySelector("[data-navigation-feedback-message]");
+      const action = root.querySelector("[data-navigation-feedback-action]");
+      if (messageElement) messageElement.textContent = message.trim();
+
+      removeRetryHandler();
+      if (action && typeof onAction === "function") {
+        retryButton = action;
+        retryHandler = () => {
+          clear();
+          onAction();
+        };
+        action.textContent = actionLabel;
+        action.hidden = false;
+        action.addEventListener("click", retryHandler);
+      } else if (action) {
+        action.hidden = true;
+        action.textContent = "";
+      }
+
+      root.hidden = false;
+      return root;
+    }
+
+    return { clear, show };
+  })();
+
   const PageRuntime = (() => {
     const registry = new Map();
     let currentCleanup = null;
@@ -282,12 +368,10 @@
       const pageModule = pageId ? registry.get(pageId) : null;
       if (!pageModule?.init) return null;
 
-      try {
-        currentCleanup = pageModule.init() || null;
-      } catch (error) {
-        currentCleanup = null;
-        console.error(`Page init error (${pageId || "unknown"}):`, error);
-      }
+      // Initialization is part of the navigation transaction. Let failures
+      // reach the initial boot or SPA recovery boundary instead of reporting a
+      // page as initialized with a partially-mutated DOM.
+      currentCleanup = pageModule.init() || null;
 
       return currentCleanup;
     }
@@ -311,5 +395,6 @@
 
   window.PageProgress = PageProgress;
   window.PageRuntime = PageRuntime;
+  window.NavigationFeedback = NavigationFeedback;
   window.focusSpaContent = focusSpaContent;
 })();

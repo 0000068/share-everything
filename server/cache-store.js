@@ -101,11 +101,32 @@ function createLruTtlCache({ maxEntries = Number.POSITIVE_INFINITY } = {}) {
   };
 }
 
-function createSingleFlight({ errorCooldownMs = 0 } = {}) {
+function readRetryAfterMs(error, now = Date.now()) {
+  const rawValue = Array.isArray(error?.retryAfter) ? error.retryAfter[0] : error?.retryAfter;
+  const normalized = typeof rawValue === "string" ? rawValue.trim() : "";
+  if (!normalized) return 0;
+
+  if (/^\d+(?:\.\d+)?$/.test(normalized)) {
+    const seconds = Number(normalized);
+    return Number.isFinite(seconds) && seconds >= 0 ? Math.ceil(seconds * 1_000) : 0;
+  }
+
+  const retryAt = Date.parse(normalized);
+  return Number.isFinite(retryAt) ? Math.max(0, retryAt - now) : 0;
+}
+
+function createSingleFlight({
+  errorCooldownMs = 0,
+  maxErrorCooldownMs = 300_000,
+} = {}) {
   let pending = null;
   let cooledError = null;
   let cooledErrorExpiresAt = 0;
   const safeErrorCooldownMs = Math.max(0, Math.trunc(Number(errorCooldownMs) || 0));
+  const safeMaxErrorCooldownMs = Math.max(
+    safeErrorCooldownMs,
+    Math.trunc(Number(maxErrorCooldownMs) || 0),
+  );
 
   function clearExpiredCooledError(now = Date.now()) {
     if (!cooledError || now < cooledErrorExpiresAt) {
@@ -116,13 +137,113 @@ function createSingleFlight({ errorCooldownMs = 0 } = {}) {
     cooledErrorExpiresAt = 0;
   }
 
+  function createSingleFlightAbortError(message = "Request aborted") {
+    const error = new Error(message);
+    error.name = "AbortError";
+    error.code = "single_flight_request_aborted";
+    return error;
+  }
+
+  function shouldCoolError(error) {
+    return error?.name !== "AbortError"
+      && error?.code !== "request_subscribers_disconnected";
+  }
+
+  function createPendingEntry(loader, { cancellable }) {
+    const controller = new AbortController();
+    const entry = {
+      controller,
+      hasNonCancellableConsumer: !cancellable,
+      promise: null,
+      subscribers: 0,
+    };
+
+    entry.promise = Promise.resolve()
+      .then(() => loader({ signal: controller.signal }))
+      .then((value) => {
+        if (pending === entry && !entry.controller.signal.aborted) {
+          cooledError = null;
+          cooledErrorExpiresAt = 0;
+        }
+        return value;
+      }, (error) => {
+        const retryAfterMs = readRetryAfterMs(error);
+        const nextErrorCooldownMs = Math.min(
+          safeMaxErrorCooldownMs,
+          Math.max(safeErrorCooldownMs, retryAfterMs),
+        );
+        if (
+          pending === entry
+          && !entry.controller.signal.aborted
+          && shouldCoolError(error)
+          && nextErrorCooldownMs > 0
+        ) {
+          cooledError = error;
+          cooledErrorExpiresAt = Date.now() + nextErrorCooldownMs;
+        }
+        throw error;
+      })
+      .finally(() => {
+        if (pending === entry) pending = null;
+      });
+    pending = entry;
+    return entry;
+  }
+
+  function releaseSubscriber(entry) {
+    entry.subscribers = Math.max(0, entry.subscribers - 1);
+    if (
+      entry.subscribers === 0
+      && !entry.hasNonCancellableConsumer
+      && pending === entry
+      && !entry.controller.signal.aborted
+    ) {
+      const error = createSingleFlightAbortError("All single-flight subscribers disconnected");
+      error.code = "request_subscribers_disconnected";
+      entry.controller.abort(error);
+    }
+  }
+
+  function consumePendingEntry(entry, signal) {
+    entry.subscribers += 1;
+    const release = () => releaseSubscriber(entry);
+
+    if (!signal) return entry.promise.finally(release);
+    if (signal.aborted) {
+      release();
+      entry.promise.catch(() => {});
+      return Promise.reject(signal.reason || createSingleFlightAbortError());
+    }
+
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (callback, value) => {
+        if (settled) return;
+        settled = true;
+        signal.removeEventListener?.("abort", onAbort);
+        release();
+        callback(value);
+      };
+      const onAbort = () => finish(
+        reject,
+        signal.reason || createSingleFlightAbortError(),
+      );
+
+      signal.addEventListener?.("abort", onAbort, { once: true });
+      entry.promise.then(
+        (value) => finish(resolve, value),
+        (error) => finish(reject, error),
+      );
+    });
+  }
+
   return {
     get() {
-      return pending;
+      return pending?.promise || null;
     },
-    run(loader) {
-      if (pending) {
-        return pending;
+    run(loader, { signal } = {}) {
+      if (signal?.aborted) {
+        return Promise.reject(signal.reason || createSingleFlightAbortError());
       }
 
       clearExpiredCooledError();
@@ -130,23 +251,18 @@ function createSingleFlight({ errorCooldownMs = 0 } = {}) {
         return Promise.reject(cooledError);
       }
 
-      pending = Promise.resolve()
-        .then(loader)
-        .then((value) => {
-          cooledError = null;
-          cooledErrorExpiresAt = 0;
-          return value;
-        }, (error) => {
-          if (safeErrorCooldownMs > 0) {
-            cooledError = error;
-            cooledErrorExpiresAt = Date.now() + safeErrorCooldownMs;
-          }
-          throw error;
-        })
-        .finally(() => {
-          pending = null;
-        });
-      return pending;
+      if (
+        pending?.controller.signal.aborted
+        && !pending.hasNonCancellableConsumer
+      ) {
+        pending = null;
+      }
+
+      const entry = pending || createPendingEntry(loader, {
+        cancellable: Boolean(signal),
+      });
+      if (!signal) entry.hasNonCancellableConsumer = true;
+      return consumePendingEntry(entry, signal);
     },
   };
 }
@@ -154,26 +270,99 @@ function createSingleFlight({ errorCooldownMs = 0 } = {}) {
 function createPendingRequestMap() {
   const pendingRequests = new Map();
 
+  function createPendingAbortError(message = "Request aborted") {
+    const error = new Error(message);
+    error.name = "AbortError";
+    return error;
+  }
+
+  function createPendingEntry(key, loader, { cancellable = false } = {}) {
+    const controller = cancellable ? new AbortController() : null;
+    const entry = {
+      controller,
+      hasNonCancellableConsumer: !cancellable,
+      promise: null,
+      subscribers: 0,
+    };
+    entry.promise = Promise.resolve()
+      .then(() => loader({ signal: controller?.signal }))
+      .finally(() => {
+        if (pendingRequests.get(key) === entry) {
+          pendingRequests.delete(key);
+        }
+      });
+    pendingRequests.set(key, entry);
+    return entry;
+  }
+
   return {
     get(key) {
-      return pendingRequests.get(key) || null;
+      return pendingRequests.get(key)?.promise || null;
     },
     run(key, loader) {
       const existing = pendingRequests.get(key);
       if (existing) {
-        return existing;
+        existing.hasNonCancellableConsumer = true;
+        return existing.promise;
+      }
+      return createPendingEntry(key, loader).promise;
+    },
+    subscribe(key, loader, { signal } = {}) {
+      let entry = pendingRequests.get(key);
+      if (
+        entry?.controller?.signal.aborted
+        && !entry.hasNonCancellableConsumer
+      ) {
+        pendingRequests.delete(key);
+        entry = null;
+      }
+      if (!entry) {
+        entry = createPendingEntry(key, loader, { cancellable: true });
+      }
+      entry.subscribers += 1;
+
+      const release = () => {
+        entry.subscribers = Math.max(0, entry.subscribers - 1);
+        if (
+          entry.subscribers === 0
+          && !entry.hasNonCancellableConsumer
+          && pendingRequests.get(key) === entry
+          && entry.controller
+          && !entry.controller.signal.aborted
+        ) {
+          const error = new Error("All request subscribers disconnected");
+          error.name = "AbortError";
+          error.code = "request_subscribers_disconnected";
+          entry.controller.abort(error);
+        }
+      };
+
+      if (!signal) return entry.promise.finally(release);
+      if (signal.aborted) {
+        release();
+        // The caller receives its own abort reason, but the just-created
+        // shared loader may reject asynchronously after observing the shared
+        // cancellation. Keep that rejection observed even with no waiters.
+        entry.promise.catch(() => {});
+        return Promise.reject(signal.reason || createPendingAbortError());
       }
 
-      const pending = Promise.resolve()
-        .then(loader)
-        .finally(() => {
-          if (pendingRequests.get(key) === pending) {
-            pendingRequests.delete(key);
-          }
-        });
-
-      pendingRequests.set(key, pending);
-      return pending;
+      return new Promise((resolve, reject) => {
+        let settled = false;
+        const finish = (callback, value) => {
+          if (settled) return;
+          settled = true;
+          signal.removeEventListener?.("abort", onAbort);
+          release();
+          callback(value);
+        };
+        const onAbort = () => finish(reject, signal.reason || createPendingAbortError());
+        signal.addEventListener?.("abort", onAbort, { once: true });
+        entry.promise.then(
+          (value) => finish(resolve, value),
+          (error) => finish(reject, error),
+        );
+      });
     },
   };
 }
@@ -184,4 +373,5 @@ module.exports = {
   createSingleFlight,
   createTtlSlot,
   isExpired,
+  readRetryAfterMs,
 };

@@ -27,6 +27,7 @@ function extractStaticSpecifiers(source) {
     /\bfrom\s+["']([^"']+)["']/g,
     /\bimport\s*["']([^"']+)["']/g,
     /\bimport\(\s*["']([^"']+)["']\s*\)/g,
+    /\bimport\(\s*versioned\(\s*["']([^"']+)["']\s*\)\s*\)/g,
   ];
 
   patterns.forEach((pattern) => {
@@ -36,6 +37,19 @@ function extractStaticSpecifiers(source) {
   });
   return [...new Set(specifiers)];
 }
+
+const extractionContractSource = [
+  'import "./side-effect.js";',
+  'import value from "./static.js";',
+  'const direct = import("./dynamic.js");',
+  'const cacheBusted = import(versioned("./versioned.js"));',
+].join("\n");
+const extractionContractSpecifiers = extractStaticSpecifiers(extractionContractSource);
+["./side-effect.js", "./static.js", "./dynamic.js", "./versioned.js"].forEach((specifier) => {
+  if (!extractionContractSpecifiers.includes(specifier)) {
+    throw new Error(`Architecture import extraction contract missed ${specifier}`);
+  }
+});
 
 function resolveProjectSpecifier(fromFile, specifier) {
   if (!specifier.startsWith(".")) return null;

@@ -6,14 +6,29 @@ This project is best treated as an early open-source Notion + Vercel personal bl
 
 ## Local Checks
 
-Use Windows-friendly commands from PowerShell:
+Use Node.js 22.13.0–22.x or Node.js 24.x; this matches the versions covered by CI and the repository's `engines` contract.
+
+Install the exact dependency tree first:
+
+```bash
+npm ci
+```
+
+The repository and CI pin `npm@11.9.0` through `packageManager`; if `npm --version` differs, run `npm install --global npm@11.9.0` before the clean install. On Windows PowerShell, use `npm.cmd ci`. Then run the release gates on macOS/Linux:
+
+```bash
+npm run check
+npm run verify:release
+```
+
+Or from Windows PowerShell:
 
 ```powershell
 npm.cmd run check
 npm.cmd run verify:release
 ```
 
-`check` 依次执行 ESLint、生产模块边界/循环依赖检查、生成文件一致性检查和 smoke suite。`verify:release` 在此基础上并行执行严格的真实浏览器与 Windows 像素 baseline 回归。Pull request CI 还会在 Linux Chrome 中执行不依赖平台字体像素的结构契约。
+`check` 依次执行 ESLint、生产模块边界/循环依赖检查、生成文件一致性检查、性能契约和 smoke suite。`verify:release` 在此基础上并行执行严格的真实浏览器与本机像素 baseline 回归；缺失任何已声明场景的 baseline 会失败。Pull request CI 还会在 Linux Chrome 中执行不依赖平台字体像素的结构契约。
 
 `notion:live-check` is optional and requires real `NOTION_TOKEN` and `NOTION_DATABASE_ID` values.
 

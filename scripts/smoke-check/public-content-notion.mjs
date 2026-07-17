@@ -40,6 +40,14 @@ assert.equal(
 );
 assert.equal(
   publicContentHelpers.getPublicContentErrorStatus({
+    status: 404,
+    code: "public_page_out_of_range",
+  }),
+  404,
+  "post-list pages beyond the canonical range should stay a client-visible 404",
+);
+assert.equal(
+  publicContentHelpers.getPublicContentErrorStatus({
     status: 401,
     notionCode: "unauthorized",
   }),
@@ -113,13 +121,23 @@ assert.equal(
 );
 assert.equal(
   publicContentHelpers.readPublicPostId("550e8400-e29b-41d4-a716-446655440000"),
-  "550e8400-e29b-41d4-a716-446655440000",
-  "public content helper should accept canonical Notion UUID route ids",
+  "550e8400e29b41d4a716446655440000",
+  "public content helper should collapse UUID route ids to the unique compact lowercase form",
 );
 assert.equal(
   publicContentHelpers.readPublicPostId("550e8400e29b41d4a716446655440000"),
   "550e8400e29b41d4a716446655440000",
   "public content helper should accept compact Notion page ids",
+);
+assert.equal(
+  publicContentHelpers.readPublicPostId(["550e8400e29b41d4a716446655440000"]),
+  "",
+  "public content helper should reject duplicate/array-valued post ids instead of selecting one",
+);
+assert.equal(
+  new URL(serverNotionHelpers.buildPostUrl("550E8400-E29B-41D4-A716-446655440000")).pathname,
+  "/posts/550e8400e29b41d4a716446655440000",
+  "server-generated canonical article URLs should use the unique compact lowercase id",
 );
 assert.equal(
   publicContentHelpers.readPublicPostId("unsafe/post?debug=1"),
@@ -191,10 +209,281 @@ expectIncludes(serverNotionSchemaJs, "buildDatabaseSorts", "schema service shoul
 expectIncludes(serverPostServiceJs, "normalizePostQueryFilters", "post service should normalize category and search inputs before querying");
 expectIncludes(serverPostServiceJs, "PUBLIC_SEARCH_QUERY_MAX_LENGTH", "post service should cap public search query input length");
 expectIncludes(serverNotionClientJs, "normalizeSiteOrigin", "notion client should validate SITE_URL before generating public URLs");
+expectIncludes(serverPostServiceJs, "parseNotionPaginationResponse(data", "post service should fail closed on malformed Notion list pagination payloads");
+expectIncludes(serverBlockServiceJs, "parseNotionPaginationResponse(data", "block service should fail closed on malformed Notion block pagination payloads");
+expectIncludes(serverPostServiceJs, "seenCursors.has(nextCursor)", "post service should reject repeated Notion database cursors");
+expectIncludes(serverBlockServiceJs, "seenCursors.has(nextCursor)", "block service should reject repeated Notion block cursors");
+expectIncludes(serverPostServiceJs, "{ signal: operation?.signal }", "shared Notion metadata/list work should observe caller cancellation");
 expectIncludes(serverPostServiceJs, "includeSearchText: true", "post service should precompute public post search text when mapping Notion pages");
 expectIncludes(serverPostServiceJs, "hasPostQueryFilters", "post service should detect when filtered queries need extra work");
 expectIncludes(serverNotionClientJs, "NOTION_REQUEST_TIMEOUT_MS", "notion client should define a request timeout for upstream calls");
 expectIncludes(serverNotionClientJs, "AbortController", "notion client should abort slow Notion requests");
+const oversizedOperationNotionClient = loadCommonJsModule("server/notion-client.js", [], {
+  process: {
+    env: {
+      ...process.env,
+      NOTION_OPERATION_TIMEOUT_MS: "40000",
+      NOTION_TOKEN: "smoke-test-notion-token",
+    },
+  },
+});
+assert.equal(
+  oversizedOperationNotionClient.NOTION_OPERATION_TIMEOUT_MS,
+  30_000,
+  "configured Notion operation budgets should clamp below the fixed browser request budget",
+);
+const oversizedExplicitOperation = oversizedOperationNotionClient.createNotionOperation({ timeoutMs: 40_000 });
+assert.ok(
+  oversizedExplicitOperation.deadlineAt - Date.now() <= 30_000,
+  "explicit Notion operation budgets should respect the same server maximum",
+);
+oversizedExplicitOperation.dispose();
+const { createSingleFlight } = loadCommonJsModule("server/cache-store.js");
+const cancellableSingleFlight = createSingleFlight({ errorCooldownMs: 1_000 });
+const firstSingleFlightConsumer = new AbortController();
+const secondSingleFlightConsumer = new AbortController();
+let singleFlightLoaderCount = 0;
+let sharedSingleFlightSignal = null;
+const pendingSingleFlightLoader = ({ signal }) => {
+  singleFlightLoaderCount += 1;
+  sharedSingleFlightSignal = signal;
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+};
+const firstSingleFlightResult = cancellableSingleFlight.run(pendingSingleFlightLoader, {
+  signal: firstSingleFlightConsumer.signal,
+});
+const secondSingleFlightResult = cancellableSingleFlight.run(pendingSingleFlightLoader, {
+  signal: secondSingleFlightConsumer.signal,
+});
+await Promise.resolve();
+assert.equal(singleFlightLoaderCount, 1, "single-flight consumers should share one upstream loader");
+const firstSingleFlightAbort = new Error("first consumer left");
+firstSingleFlightAbort.name = "AbortError";
+const firstSingleFlightRejection = assert.rejects(
+  firstSingleFlightResult,
+  (error) => error === firstSingleFlightAbort,
+  "a disconnected single-flight consumer should stop waiting immediately",
+);
+firstSingleFlightConsumer.abort(firstSingleFlightAbort);
+await firstSingleFlightRejection;
+assert.equal(
+  sharedSingleFlightSignal?.aborted,
+  false,
+  "one disconnected consumer must not cancel work still needed by another consumer",
+);
+const secondSingleFlightAbort = new Error("last consumer left");
+secondSingleFlightAbort.name = "AbortError";
+const secondSingleFlightRejection = assert.rejects(
+  secondSingleFlightResult,
+  (error) => error === secondSingleFlightAbort,
+  "the final disconnected single-flight consumer should stop waiting immediately",
+);
+secondSingleFlightConsumer.abort(secondSingleFlightAbort);
+await secondSingleFlightRejection;
+assert.equal(
+  sharedSingleFlightSignal?.aborted,
+  true,
+  "the final disconnected consumer should abort the now-orphaned upstream loader",
+);
+const recoveredSingleFlightValue = await cancellableSingleFlight.run(async () => {
+  singleFlightLoaderCount += 1;
+  return "recovered";
+}, { signal: new AbortController().signal });
+assert.equal(recoveredSingleFlightValue, "recovered", "subscriber cancellation should not enter the error cooldown");
+assert.equal(singleFlightLoaderCount, 2, "a request after full cancellation should start fresh upstream work");
+const staleFailureSingleFlight = createSingleFlight({ errorCooldownMs: 1_000 });
+const staleFailureConsumer = new AbortController();
+let rejectStaleFailure;
+let staleFailureLoaderCount = 0;
+const staleFailureResult = staleFailureSingleFlight.run(() => {
+  staleFailureLoaderCount += 1;
+  return new Promise((resolve, reject) => {
+    rejectStaleFailure = reject;
+  });
+}, { signal: staleFailureConsumer.signal });
+await Promise.resolve();
+const staleFailureConsumerRejection = assert.rejects(
+  staleFailureResult,
+  (error) => error?.name === "AbortError",
+  "an abandoned loader that ignores cancellation should still release its consumer",
+);
+staleFailureConsumer.abort(new DOMException("stale failure consumer left", "AbortError"));
+await staleFailureConsumerRejection;
+assert.equal(
+  await staleFailureSingleFlight.run(async () => {
+    staleFailureLoaderCount += 1;
+    return "fresh after stale failure";
+  }, { signal: new AbortController().signal }),
+  "fresh after stale failure",
+  "new single-flight work should replace an abandoned loader that ignores cancellation",
+);
+rejectStaleFailure(new Error("late stale failure"));
+await Promise.resolve();
+await Promise.resolve();
+assert.equal(
+  await staleFailureSingleFlight.run(async () => {
+    staleFailureLoaderCount += 1;
+    return "unpoisoned";
+  }, { signal: new AbortController().signal }),
+  "unpoisoned",
+  "a late failure from abandoned work must not poison the current cooldown state",
+);
+assert.equal(staleFailureLoaderCount, 3, "late abandoned failure should not suppress a new loader");
+const staleSuccessSingleFlight = createSingleFlight({ errorCooldownMs: 1_000 });
+const staleSuccessConsumer = new AbortController();
+let resolveStaleSuccess;
+let staleSuccessLoaderCount = 0;
+const staleSuccessResult = staleSuccessSingleFlight.run(() => {
+  staleSuccessLoaderCount += 1;
+  return new Promise((resolve) => {
+    resolveStaleSuccess = resolve;
+  });
+}, { signal: staleSuccessConsumer.signal });
+await Promise.resolve();
+const staleSuccessConsumerRejection = assert.rejects(
+  staleSuccessResult,
+  (error) => error?.name === "AbortError",
+  "an abandoned successful loader should release its consumer",
+);
+staleSuccessConsumer.abort(new DOMException("stale success consumer left", "AbortError"));
+await staleSuccessConsumerRejection;
+const currentSingleFlightError = new Error("current loader failed");
+await assert.rejects(
+  () => staleSuccessSingleFlight.run(async () => {
+    staleSuccessLoaderCount += 1;
+    throw currentSingleFlightError;
+  }, { signal: new AbortController().signal }),
+  (error) => error === currentSingleFlightError,
+  "the replacement loader should establish the active error cooldown",
+);
+resolveStaleSuccess("late stale success");
+await Promise.resolve();
+await Promise.resolve();
+await assert.rejects(
+  () => staleSuccessSingleFlight.run(async () => {
+    staleSuccessLoaderCount += 1;
+    return "should stay cooled";
+  }, { signal: new AbortController().signal }),
+  (error) => error === currentSingleFlightError,
+  "a late success from abandoned work must not erase the replacement loader cooldown",
+);
+assert.equal(staleSuccessLoaderCount, 2, "the active cooldown should still suppress a third loader");
+const headerTimeoutNotionClient = loadCommonJsModule("server/notion-client.js", [], {
+  process: {
+    env: {
+      ...process.env,
+      NOTION_REQUEST_TIMEOUT_MS: "20",
+      NOTION_TOKEN: "smoke-test-notion-token",
+    },
+  },
+  fetch: async (_url, { signal }) => new Promise((resolve, reject) => {
+    const onAbort = () => reject(signal.reason);
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    signal.addEventListener("abort", onAbort, { once: true });
+  }),
+});
+await assert.rejects(
+  () => headerTimeoutNotionClient.requestNotionJson("/databases/pending-headers"),
+  (error) => error?.status === 504 && error?.code === "notion_timeout_error",
+  "an active Notion deadline should keep the invocation alive even when fetch exposes no event-loop handle",
+);
+const bodyTimeoutProcess = {
+  env: {
+    ...process.env,
+    NOTION_REQUEST_TIMEOUT_MS: "20",
+    NOTION_TOKEN: "smoke-test-notion-token",
+  },
+};
+const bodyTimeoutNotionClient = loadCommonJsModule("server/notion-client.js", [], {
+  process: bodyTimeoutProcess,
+  fetch: async (_url, { signal }) => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => null },
+    json() {
+      return new Promise((resolve, reject) => {
+        const lateBodyTimer = setTimeout(() => resolve({ arrivedTooLate: true }), 100);
+        const rejectAsAborted = () => {
+          clearTimeout(lateBodyTimer);
+          const error = new Error("response body aborted");
+          error.name = "AbortError";
+          reject(error);
+        };
+        if (signal.aborted) {
+          rejectAsAborted();
+          return;
+        }
+        signal.addEventListener("abort", rejectAsAborted, { once: true });
+      });
+    },
+  }),
+});
+await assert.rejects(
+  () => bodyTimeoutNotionClient.requestNotionJson("/databases/smoke-test"),
+  (error) => {
+    assert.equal(error?.status, 504);
+    assert.equal(error?.code, "notion_timeout_error");
+    return true;
+  },
+  "notion client timeout should remain active until the response body has been consumed",
+);
+const invalidJsonNotionClient = loadCommonJsModule("server/notion-client.js", [], {
+  process: {
+    env: {
+      ...process.env,
+      NOTION_TOKEN: "smoke-test-notion-token",
+    },
+  },
+  fetch: async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => null },
+    async json() {
+      throw new SyntaxError("Unexpected token");
+    },
+  }),
+});
+await assert.rejects(
+  () => invalidJsonNotionClient.requestNotionJson("/pages/invalid-json"),
+  (error) => {
+    assert.equal(error?.status, 502);
+    assert.equal(error?.code, "notion_invalid_response");
+    assert.equal(error?.resourceType, "page");
+    return true;
+  },
+  "notion client should classify successful responses with malformed JSON deterministically",
+);
+assert.throws(
+  () => invalidJsonNotionClient.parseNotionPaginationResponse({
+    has_more: false,
+    next_cursor: null,
+  }, { resourceType: "database" }),
+  (error) => error?.status === 502
+    && error?.code === "notion_invalid_response"
+    && error?.resourceType === "database",
+  "Notion pagination should reject a 200 payload with no results array",
+);
+assert.throws(
+  () => invalidJsonNotionClient.parseNotionPaginationResponse({
+    results: [],
+    has_more: true,
+    next_cursor: null,
+  }, { resourceType: "block" }),
+  (error) => error?.status === 502
+    && error?.code === "notion_invalid_response"
+    && error?.resourceType === "block",
+  "Notion pagination should reject has_more without a usable next cursor",
+);
 expectIncludes(serverBlockServiceJs, "runWithBlockChildConcurrency", "block service should limit recursive block child fetch concurrency");
 expectIncludes(serverPublicPolicyJs, "buildDatabaseWidePublicAccessPolicy", "public policy should keep v2.5-compatible database-wide public mode");
 expectNotIncludes(
@@ -211,6 +500,58 @@ expectIncludes(serverRenderServiceJs, "buildSharedArticleStructuredData", "rende
 expectIncludes(serverNotionSchemaJs, "resolveNotionContentSchema", "schema service should resolve renamed content properties from database metadata");
 expectIncludes(serverRenderServiceJs, "renderPostContent", "render service should render SSR post HTML without duplicating it in API payloads");
 expectIncludes(serverCacheStoreJs, "createPendingRequestMap", "cache store should centralize pending request de-duplication");
+const pendingRequestHelpers = loadCommonJsModule("server/cache-store.js");
+const pendingRequestMap = pendingRequestHelpers.createPendingRequestMap();
+const firstSubscriberController = new AbortController();
+const secondSubscriberController = new AbortController();
+let sharedPendingSignal = null;
+let sharedPendingLoaderCount = 0;
+const loadSharedPendingValue = ({ signal }) => new Promise((_resolve, reject) => {
+  sharedPendingLoaderCount += 1;
+  sharedPendingSignal = signal;
+  signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+});
+const firstPendingSubscriber = pendingRequestMap.subscribe(
+  "shared-post",
+  loadSharedPendingValue,
+  { signal: firstSubscriberController.signal },
+);
+const secondPendingSubscriber = pendingRequestMap.subscribe(
+  "shared-post",
+  loadSharedPendingValue,
+  { signal: secondSubscriberController.signal },
+);
+firstSubscriberController.abort(new Error("first subscriber left"));
+await assert.rejects(() => firstPendingSubscriber);
+assert.equal(
+  sharedPendingSignal.aborted,
+  false,
+  "one disconnected caller must not cancel shared Notion work needed by another subscriber",
+);
+secondSubscriberController.abort(new Error("last subscriber left"));
+const replacementPendingSubscriber = pendingRequestMap.subscribe(
+  "shared-post",
+  () => {
+    sharedPendingLoaderCount += 1;
+    return Promise.resolve("replacement");
+  },
+);
+await assert.rejects(() => secondPendingSubscriber);
+assert.equal(
+  sharedPendingSignal.aborted,
+  true,
+  "shared Notion work should abort once its final subscriber disconnects",
+);
+assert.equal(
+  await replacementPendingSubscriber,
+  "replacement",
+  "a new caller should not attach to an already-aborted shared request",
+);
+assert.equal(
+  sharedPendingLoaderCount,
+  2,
+  "a caller arriving after full disconnect should start one fresh loader",
+);
 expectNotIncludes(serverPostServiceJs, "buildSearchFilter", "post service should not delegate search semantics to upstream filters that behave differently from local search");
 expectNotIncludes(serverPostServiceJs, 'category === "閸忋劑鍎?', "post service should not compare against a mojibake category label");
 const resolvedContentSchema = serverNotionHelpers.buildContentSchema({
@@ -504,11 +845,27 @@ const secondCachedQuery = await queryCacheServerNotion.queryPublicPosts({
   search: "alpha",
   page: 1,
 });
+const differentlySearchedQuery = await queryCacheServerNotion.queryPublicPosts({
+  category: "Tech",
+  search: "beta",
+  page: 1,
+});
+assert.equal(
+  queryCacheFetchCounts.pageQueries,
+  1,
+  "different searches in one category should reuse the same upstream category page set",
+);
+const pageQueriesBeforeUnknownCategory = queryCacheFetchCounts.pageQueries;
 const differentlyCasedQuery = await queryCacheServerNotion.queryPublicPosts({
   category: "tech",
   search: "alpha",
   page: 1,
 });
+assert.equal(
+  queryCacheFetchCounts.pageQueries,
+  pageQueriesBeforeUnknownCategory,
+  "a category absent from database select options should not reach the Notion query endpoint",
+);
 assert.equal(
   queryCacheFetchCounts.database,
   1,
@@ -516,8 +873,8 @@ assert.equal(
 );
 assert.equal(
   queryCacheFetchCounts.pageQueries,
-  2,
-  "server notion layer should reuse cached filtered query results for identical filters without collapsing differently cased category queries",
+  1,
+  "same-category searches should reuse one category base query and unknown categories should not reach Notion",
 );
 assert.equal(
   queryCacheRequestBodies[0]?.filter?.property,
@@ -542,12 +899,102 @@ assert.equal(
 assert.equal(
   secondCachedQuery.results[0]?.id,
   "search-post-alpha",
-  "server notion layer should return the cached filtered result set without changing the query output",
+  "server notion layer should locally reapply an identical search to the cached category base pages",
+);
+assert.equal(
+  differentlySearchedQuery.results[0]?.id,
+  "search-post-beta",
+  "server notion layer should locally apply different searches without repeating the category query",
 );
 assert.equal(
   differentlyCasedQuery.total,
   0,
-  "server notion layer should not reuse a cached category query result when the requested category value changes semantically",
+  "server notion layer should return an empty result for a category absent from the database select options",
+);
+
+const staleMetadataFetches = [];
+const staleMetadataService = loadCommonJsModule("server/post-service.js", [], {
+  process: {
+    env: {
+      ...process.env,
+      NOTION_TOKEN: "test-token",
+      NOTION_DATABASE_ID: "stale-metadata-database",
+      DATABASE_METADATA_TTL_MS: "120000",
+      SITE_URL: "https://example.com",
+      VERCEL: "1",
+    },
+  },
+  fetch: (url) => new Promise((resolve) => {
+    staleMetadataFetches.push({ resolve, url: String(url) });
+  }),
+});
+const waitForStaleMetadataState = async (predicate, label) => {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  throw new Error(`Timed out while waiting for ${label}`);
+};
+const buildMetadataResponse = (id, onRead = () => {}) => ({
+  ok: true,
+  status: 200,
+  headers: { get: () => null },
+  async json() {
+    onRead();
+    return {
+      id,
+      properties: {
+        Name: { id: "title", name: "Name", type: "title" },
+      },
+    };
+  },
+});
+const abandonedMetadataController = new AbortController();
+const abandonedMetadataRequest = staleMetadataService.getDatabaseMetadata({
+  operation: { signal: abandonedMetadataController.signal },
+});
+await waitForStaleMetadataState(
+  () => staleMetadataFetches.length === 1,
+  "the abandoned metadata request to reach fetch",
+);
+const abandonedMetadataReason = new Error("metadata subscriber disconnected");
+abandonedMetadataReason.name = "AbortError";
+const abandonedMetadataRejection = assert.rejects(
+  abandonedMetadataRequest,
+  (error) => error === abandonedMetadataReason,
+  "the abandoned metadata subscriber should stop waiting immediately",
+);
+abandonedMetadataController.abort(abandonedMetadataReason);
+await abandonedMetadataRejection;
+
+const freshMetadataController = new AbortController();
+const freshMetadataRequest = staleMetadataService.getDatabaseMetadata({
+  operation: { signal: freshMetadataController.signal },
+});
+await waitForStaleMetadataState(
+  () => staleMetadataFetches.length === 2,
+  "a replacement metadata request to start",
+);
+staleMetadataFetches[1].resolve(buildMetadataResponse("fresh-metadata"));
+assert.equal(
+  (await freshMetadataRequest).database.id,
+  "fresh-metadata",
+  "the replacement metadata request should populate the cache",
+);
+
+let didReadAbandonedMetadata = false;
+staleMetadataFetches[0].resolve(buildMetadataResponse("stale-metadata", () => {
+  didReadAbandonedMetadata = true;
+}));
+await waitForStaleMetadataState(
+  () => didReadAbandonedMetadata,
+  "the abandoned metadata response to arrive late",
+);
+await new Promise((resolve) => setImmediate(resolve));
+assert.equal(
+  staleMetadataService.getCachedDatabaseMetadata().database.id,
+  "fresh-metadata",
+  "an abandoned late single-flight result must not overwrite fresher shared metadata",
 );
 const dedupedFetchCounts = {
   database: 0,
@@ -1019,26 +1466,19 @@ const blockBudgetService = loadCommonJsModule("server/block-service.js", [], {
     throw new Error(`Unexpected Notion request during block budget test: ${requestUrl}`);
   },
 });
-const budgetedBlocks = await blockBudgetService.fetchAllBlockChildren("deep-root");
 assert.equal(
   blockBudgetService.NOTION_BLOCK_TOTAL_LIMIT,
   3,
   "block service should read the configured total block budget",
 );
-assert.equal(
-  budgetedBlocks.length,
-  2,
-  "block service should keep root blocks already inside the total budget",
-);
-assert.equal(
-  budgetedBlocks[0].children.length,
-  1,
-  "block service should truncate nested children when the total block budget is exhausted",
-);
-assert.equal(
-  budgetedBlocks[1].children,
-  undefined,
-  "block service should stop descending into sibling children after the budget is exhausted",
+await assert.rejects(
+  () => blockBudgetService.fetchAllBlockChildren("deep-root"),
+  (error) => {
+    assert.equal(error?.status, 502);
+    assert.equal(error?.code, "notion_content_incomplete");
+    return true;
+  },
+  "block service should fail closed instead of caching a silently truncated article",
 );
 assert.equal(
   blockBudgetRequests.some((requestUrl) => requestUrl.includes("/blocks/child-b/children?")),
@@ -1083,7 +1523,7 @@ const singleFlightCooldownServerNotion = loadCommonJsModule("server/notion-serve
           code: "rate_limited",
         }, {
           status: 429,
-          headers: { "retry-after": "1" },
+          headers: { "retry-after": "3" },
         });
       }
 
@@ -1130,6 +1570,20 @@ assert.equal(
   "server notion layer should avoid hammering Notion while a single-flight error cooldown is active",
 );
 singleFlightCooldownNow = 51_001;
+await assert.rejects(
+  () => singleFlightCooldownServerNotion.queryPublicPosts(),
+  (error) => {
+    assert.equal(error?.status, 429);
+    return true;
+  },
+  "Retry-After should extend the single-flight cooldown beyond the configured minimum",
+);
+assert.equal(
+  singleFlightCooldownFetchCounts.database,
+  1,
+  "Retry-After cooldown should prevent an early metadata retry",
+);
+singleFlightCooldownNow = 53_001;
 const recoveredCooldownQuery = await singleFlightCooldownServerNotion.queryPublicPosts();
 assert.equal(
   singleFlightCooldownFetchCounts.database,

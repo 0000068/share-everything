@@ -712,6 +712,21 @@
     return richTextToHtml(blockData?.caption, options);
   }
 
+  function getImageDimension(value) {
+    const dimension = Number(value);
+    return Number.isFinite(dimension) && dimension > 0 && dimension <= 16_384
+      ? Math.round(dimension)
+      : null;
+  }
+
+  function getFirstImageDimension(...values) {
+    for (const value of values) {
+      const dimension = getImageDimension(value);
+      if (dimension) return dimension;
+    }
+    return null;
+  }
+
   function formatBlockTypeLabel(type) {
     return String(type || "unsupported").replace(/_/g, " ");
   }
@@ -895,6 +910,8 @@
         url: blockData.file?.url || blockData.external?.url || "",
         caption: richTextToPlain(blockData.caption),
         captionHtml: richTextToHtml(blockData.caption, options),
+        width: getFirstImageDimension(blockData.width, blockData.file?.width, blockData.external?.width),
+        height: getFirstImageDimension(blockData.height, blockData.file?.height, blockData.external?.height),
       }),
       embed: () => buildResourceBlock(type, blockData, options),
       video: () => buildResourceBlock(type, blockData, options),
@@ -1168,7 +1185,12 @@
         });
         if (!safeImageUrl) return childrenHtml;
         const captionHtml = renderFigureCaption(block.captionHtml, block.caption, "post-figure-caption");
-        return `<figure class="post-figure post-figure-image"><img class="post-figure-media" src="${escapeHtml(safeImageUrl)}" alt="${escapeHtml(block.caption)}" ${getPostImageLoadingAttributes(options)}>${captionHtml}</figure>${childrenHtml}`;
+        const mappedWidth = getImageDimension(block.width);
+        const mappedHeight = getImageDimension(block.height);
+        const dimensionAttributes = mappedWidth && mappedHeight
+          ? ` width="${mappedWidth}" height="${mappedHeight}"`
+          : "";
+        return `<figure class="post-figure post-figure-image"><img class="post-figure-media" src="${escapeHtml(safeImageUrl)}" alt="${escapeHtml(block.caption)}"${dimensionAttributes} ${getPostImageLoadingAttributes(options)}>${captionHtml}</figure>${childrenHtml}`;
       },
       callout: (block, { childrenHtml }) => {
         const iconHtml = block.icon

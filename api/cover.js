@@ -28,9 +28,10 @@ const {
   readClientKey,
   readPositiveIntegerEnv,
 } = require("../server/request-guard");
+const { createRequestLifecycle } = require("../server/request-lifecycle");
+const { hasCanonicalRequestSearch } = require("../server/canonical-query");
 
 const COVER_IMAGE_WIDTHS = Object.freeze([320, 640, 960]);
-const COVER_IMAGE_DEFAULT_WIDTH = 640;
 const COVER_IMAGE_ASPECT_WIDTH = 16;
 const COVER_IMAGE_ASPECT_HEIGHT = 9;
 const COVER_IMAGE_MAX_INPUT_PIXELS = 48_000_000;
@@ -64,14 +65,13 @@ const COVER_IMAGE_FORMATS = Object.freeze({
     transform: (pipeline) => pipeline.jpeg({ quality: COVER_IMAGE_QUALITY, mozjpeg: true }),
   },
 });
-const COVER_FORMAT_PREFERENCE = Object.freeze(["avif", "webp", "jpeg"]);
 const coverImageRateLimiter = createFixedWindowRateLimiter({
   limit: COVER_IMAGE_RATE_LIMIT_PER_MINUTE,
 });
 const coverImageConcurrencyGate = createConcurrencyGate(COVER_IMAGE_MAX_CONCURRENT_REQUESTS);
 
 function readCoverWidth(value) {
-  if (value === undefined) return COVER_IMAGE_DEFAULT_WIDTH;
+  if (value === undefined) return null;
   if (typeof value !== "string" || value !== value.trim() || !/^\d+$/.test(value)) {
     return null;
   }
@@ -81,7 +81,6 @@ function readCoverWidth(value) {
 }
 
 function readCoverFormat(value) {
-  if (value === undefined) return null;
   if (
     typeof value !== "string"
     || !value
@@ -93,82 +92,21 @@ function readCoverFormat(value) {
   return Object.hasOwn(COVER_IMAGE_FORMATS, value) ? value : undefined;
 }
 
-function readAcceptQuality(parameters) {
-  const qualityParameter = parameters.find((parameter) => (
-    parameter.trim().toLowerCase().startsWith("q=")
-  ));
-  if (!qualityParameter) return 1;
-
-  const quality = Number(qualityParameter.split("=")[1]);
-  return Number.isFinite(quality) && quality >= 0 && quality <= 1 ? quality : 0;
-}
-
-function parseAcceptHeader(accept) {
-  return String(accept || "")
-    .split(",")
-    .map((entry, index) => {
-      const [mediaRange, ...parameters] = entry.split(";");
-      return {
-        index,
-        mediaRange: mediaRange.trim().toLowerCase(),
-        quality: readAcceptQuality(parameters),
-      };
-    })
-    .filter((entry) => entry.mediaRange);
-}
-
-function readAcceptedQuality(entries, mimeType) {
-  const [type] = mimeType.split("/");
-  const candidates = entries
-    .filter((entry) => (
-      entry.mediaRange === mimeType
-      || entry.mediaRange === `${type}/*`
-      || entry.mediaRange === "*/*"
-    ))
-    .map((entry) => ({
-      ...entry,
-      specificity: entry.mediaRange === mimeType ? 2 : entry.mediaRange === `${type}/*` ? 1 : 0,
-    }))
-    .sort((left, right) => (
-      right.specificity - left.specificity
-      || left.index - right.index
-    ));
-
-  return candidates[0]?.quality ?? 0;
-}
-
 function selectCoverFormat(req) {
   const requestedFormat = readCoverFormat(req.query?.format);
-  if (requestedFormat === undefined) return null;
-  if (requestedFormat !== null) {
-    return { format: requestedFormat, variesByAccept: false };
-  }
-
-  const accept = String(req.headers?.accept || "").trim();
-  if (!accept) return { format: "jpeg", variesByAccept: true };
-  const accepted = parseAcceptHeader(accept);
-  const rankedFormats = COVER_FORMAT_PREFERENCE
-    .map((format, preference) => ({
-      format,
-      preference,
-      quality: readAcceptedQuality(accepted, COVER_IMAGE_FORMATS[format].contentType),
-    }))
-    .filter((candidate) => candidate.quality > 0)
-    .sort((left, right) => (
-      right.quality - left.quality
-      || left.preference - right.preference
-    ));
-
-  return rankedFormats.length > 0
-    ? { format: rankedFormats[0].format, variesByAccept: true }
-    : { format: "", variesByAccept: true };
+  return requestedFormat ? { format: requestedFormat } : null;
 }
 
 function getCoverHeight(width) {
   return Math.round((width * COVER_IMAGE_ASPECT_HEIGHT) / COVER_IMAGE_ASPECT_WIDTH);
 }
 
-async function optimizeCoverImage(body, { width, format }) {
+async function optimizeCoverImage(body, {
+  width,
+  format,
+  signal,
+  timeoutSeconds = 0,
+}) {
   const outputFormat = COVER_IMAGE_FORMATS[format];
   const pipeline = sharp(body, {
     failOn: "truncated",
@@ -181,18 +119,25 @@ async function optimizeCoverImage(body, { width, format }) {
       fit: "cover",
       position: sharp.strategy.attention,
     });
+  if (timeoutSeconds > 0) {
+    pipeline.timeout({ seconds: timeoutSeconds });
+  }
 
-  return outputFormat.transform(pipeline).toBuffer();
+  const outputPipeline = outputFormat.transform(pipeline);
+  const onAbort = () => outputPipeline.destroy(signal.reason);
+  if (signal?.aborted) onAbort();
+  else signal?.addEventListener?.("abort", onAbort, { once: true });
+  try {
+    return await outputPipeline.toBuffer();
+  } finally {
+    signal?.removeEventListener?.("abort", onAbort);
+  }
 }
 
-function applyCoverSuccessHeaders(res, outputFormat, {
-  contentLength,
-  variesByAccept,
-} = {}) {
+function applyCoverSuccessHeaders(res, outputFormat, { contentLength } = {}) {
   res.setHeader("Cache-Control", COVER_IMAGE_CACHE_CONTROL);
   res.setHeader("Content-Type", outputFormat.contentType);
   res.setHeader("X-Content-Type-Options", "nosniff");
-  if (variesByAccept) res.setHeader("Vary", "Accept");
   if (Number.isSafeInteger(contentLength) && contentLength >= 0) {
     res.setHeader("Content-Length", String(contentLength));
   }
@@ -228,13 +173,18 @@ async function handler(req, res) {
   if (!width || !selectedFormat) {
     return sendCoverError(res, 400, null, "Invalid cover image request");
   }
-  if (!selectedFormat.format) {
-    return sendCoverError(res, 406, null, "No acceptable cover image format");
-  }
-
   const authorization = authorizeImageSourceQuery(req.query, COVER_IMAGE_ALLOWED_QUERY_KEYS);
   if (!authorization.ok) {
     return sendCoverError(res, authorization.status, null, authorization.error);
+  }
+  const canonicalEntries = [
+    ["format", selectedFormat.format],
+    ["src", authorization.source],
+    [IMAGE_PROXY_SIGNATURE_PARAMETER, req.query[IMAGE_PROXY_SIGNATURE_PARAMETER]],
+    ["w", String(width)],
+  ];
+  if (!hasCanonicalRequestSearch(req, canonicalEntries)) {
+    return sendCoverError(res, 400, null, "Invalid cover image request URL");
   }
 
   const rateLimit = coverImageRateLimiter.consume(readClientKey(req));
@@ -254,19 +204,21 @@ async function handler(req, res) {
   }
 
   const outputFormat = COVER_IMAGE_FORMATS[selectedFormat.format];
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), IMAGE_PROXY_TIMEOUT_MS);
+  const lifecycle = createRequestLifecycle(req, res, {
+    timeoutMs: IMAGE_PROXY_TIMEOUT_MS,
+    timeoutMessage: "Cover image request timed out",
+  });
 
   try {
     const source = await normalizeSourceUrl(authorization.source, undefined, {
-      signal: controller.signal,
+      signal: lifecycle.signal,
     });
     if (!source) {
       return sendCoverError(res, 400, null, "Invalid cover image source");
     }
 
     const response = await loadSourceImage(source, {
-      signal: controller.signal,
+      signal: lifecycle.signal,
     });
     const body = await readBoundedImageBuffer(response);
     if (body.byteLength > IMAGE_PROXY_MAX_BYTES) {
@@ -278,23 +230,38 @@ async function handler(req, res) {
 
     let optimizedBody;
     try {
+      if (lifecycle.signal.aborted) {
+        throw lifecycle.signal.reason;
+      }
       optimizedBody = await optimizeCoverImage(body, {
         width,
         format: selectedFormat.format,
+        signal: lifecycle.signal,
+        timeoutSeconds: Math.max(
+          1,
+          Math.ceil((lifecycle.deadlineAt - Date.now()) / 1_000),
+        ),
       });
+      if (lifecycle.signal.aborted) {
+        throw lifecycle.signal.reason;
+      }
     } catch (error) {
+      if (lifecycle.signal.aborted) throw lifecycle.signal.reason;
+      if (error?.name === "AbortError") throw error;
       throw createImageProxyError("Image could not be optimized", 415, error);
     }
 
     applyCoverSuccessHeaders(res, outputFormat, {
       contentLength: optimizedBody.byteLength,
-      variesByAccept: selectedFormat.variesByAccept,
     });
     if (req.method === "HEAD") {
       return res.status(200).end();
     }
     return res.status(200).send(optimizedBody);
   } catch (error) {
+    if (lifecycle.abortKind === "client") {
+      return undefined;
+    }
     const status = getImageProxyErrorStatus(error);
     return sendCoverError(
       res,
@@ -303,7 +270,7 @@ async function handler(req, res) {
       status === 413 ? "Image too large" : "Cover image unavailable",
     );
   } finally {
-    clearTimeout(timeoutId);
+    lifecycle.dispose();
     releaseConcurrency();
   }
 }
@@ -312,8 +279,6 @@ handler.__test = Object.freeze({
   COVER_IMAGE_MAX_CONCURRENT_REQUESTS,
   COVER_IMAGE_RATE_LIMIT_PER_MINUTE,
   applyCoverSuccessHeaders,
-  parseAcceptHeader,
-  readAcceptedQuality,
   readCoverFormat,
   readCoverWidth,
   selectCoverFormat,

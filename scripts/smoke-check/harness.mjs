@@ -34,6 +34,10 @@ function checkSyntax(relativePath) {
 function loadCommonJsModule(relativePath, exportedNames = [], sandboxOverrides = {}) {
   const rootPath = fileURLToPath(root);
   const moduleCache = new Map();
+  const {
+    __moduleMocks: moduleMocks = {},
+    ...sandboxGlobals
+  } = sandboxOverrides;
 
   function toProjectPath(filename) {
     const relative = path.relative(rootPath, filename);
@@ -47,6 +51,9 @@ function loadCommonJsModule(relativePath, exportedNames = [], sandboxOverrides =
     const nativeRequire = createRequire(new URL(parentRelativePath, root));
 
     return function sandboxRequire(specifier) {
+      if (Object.prototype.hasOwnProperty.call(moduleMocks, specifier)) {
+        return moduleMocks[specifier];
+      }
       const resolved = nativeRequire.resolve(specifier);
       const projectPath = toProjectPath(resolved);
       if (!projectPath) {
@@ -98,7 +105,7 @@ function loadCommonJsModule(relativePath, exportedNames = [], sandboxOverrides =
       fetch,
       setTimeout,
       clearTimeout,
-      ...sandboxOverrides,
+      ...sandboxGlobals,
     }, {
       filename,
       importModuleDynamically: (specifier) => import(specifier),
@@ -314,6 +321,7 @@ function createImageRequestMock({
   status = 200,
   headers = {},
   body = Buffer.alloc(0),
+  responseError = null,
   onRequest = () => {},
 } = {}) {
   return (url, options = {}, callback) => {
@@ -337,7 +345,11 @@ function createImageRequestMock({
           if (body?.byteLength) {
             response.emit("data", body);
           }
-          response.emit("end");
+          if (responseError) {
+            response.emit("error", responseError);
+          } else {
+            response.emit("end");
+          }
         }, 0);
       }, 0);
     };
@@ -378,6 +390,7 @@ function createApiResponseRecorder() {
     bodyChunks: [],
     headersSent: false,
     ended: false,
+    destroyed: false,
     setHeader(name, value) {
       this.headers.set(String(name).toLowerCase(), String(value));
       return this;
@@ -426,6 +439,11 @@ function createApiResponseRecorder() {
       this.headersSent = true;
       this.ended = true;
       return this.textBody;
+    },
+    destroy() {
+      this.headersSent = true;
+      this.ended = true;
+      this.destroyed = true;
     },
   };
 }

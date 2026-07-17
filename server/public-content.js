@@ -20,12 +20,16 @@ function readPositiveInteger(value, fallback = 1) {
 }
 
 function readPublicPostId(value) {
-  const postId = readQueryString(value);
+  if (typeof value !== "string") return "";
+
+  const postId = value.trim();
   if (postId.length === 0 || postId.length > PUBLIC_POST_ID_MAX_LENGTH) {
     return "";
   }
 
-  return PUBLIC_POST_ID_PATTERN.test(postId) ? postId : "";
+  return PUBLIC_POST_ID_PATTERN.test(postId)
+    ? postId.replace(/-/g, "").toLowerCase()
+    : "";
 }
 
 function readRetryAfter(error) {
@@ -165,6 +169,10 @@ function isUpstreamDatabaseReferenceError(error) {
 
 function getPublicContentErrorStatus(error) {
   const status = Number(error?.status);
+
+  if (status === 404 && error?.code === "public_page_out_of_range") {
+    return 404;
+  }
 
   if (
     (status === 500 && isPublicContentConfigError(error)) ||

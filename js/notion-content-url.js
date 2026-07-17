@@ -12,6 +12,7 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, (sharedUtils = {}) => {
   const SAFE_LINK_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
   const SAFE_IMAGE_PROTOCOLS = new Set(["https:"]);
+  const COVER_IMAGE_FORMAT = "webp";
   const COVER_IMAGE_PATH = "/api/cover";
   const COVER_IMAGE_WIDTHS = Object.freeze([320, 640, 960]);
   const COVER_IMAGE_DEFAULT_WIDTH = 640;
@@ -139,6 +140,7 @@
 
     const resolvedBaseOrigin = getBaseOrigin(baseOrigin);
     const coverUrl = new URL(COVER_IMAGE_PATH, resolvedBaseOrigin);
+    coverUrl.searchParams.set("format", COVER_IMAGE_FORMAT);
     coverUrl.searchParams.set("src", source.safeImageUrl);
     coverUrl.searchParams.set(IMAGE_PROXY_SIGNATURE_PARAMETER, source.signature);
     coverUrl.searchParams.set("w", String(normalizeCoverImageWidth(width)));
@@ -296,6 +298,7 @@
     IMAGE_PROXY_PATH,
     IMAGE_PROXY_SIGNATURE_PARAMETER,
     COVER_IMAGE_DEFAULT_WIDTH,
+    COVER_IMAGE_FORMAT,
     COVER_IMAGE_PATH,
     COVER_IMAGE_WIDTHS,
     SAFE_IMAGE_PROTOCOLS,

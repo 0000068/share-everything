@@ -18,8 +18,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-8.5.0-00e5ff?style=flat-square" alt="Version" />
-  <img src="https://img.shields.io/badge/node-%3E%3D22-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
+  <img src="https://img.shields.io/badge/version-8.6.0-00e5ff?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/node-22.13--22.x%20%7C%2024.x-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/deploy-Vercel-000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel" />
   <img src="https://img.shields.io/badge/CMS-Notion-000?style=flat-square&logo=notion&logoColor=white" alt="Notion" />
   <img src="https://img.shields.io/badge/framework-none-d500f9?style=flat-square" alt="No Framework" />
@@ -35,10 +35,10 @@
 **Share Everything** 的思路不同：
 
 - ✏️ **在 Notion 里写文章**，放进配置好的公开数据库就上线
-- ⚡ **零构建步骤**，没有 React/Vue/Next.js，纯 HTML + CSS + JS
-- 🖥️ **SSR + SPA 混合**，首屏服务端渲染，后续导航丝滑无刷新
+- ⚡ **无前端打包步骤**，没有 React/Vue/Next.js，运行时是纯 HTML + CSS + JS；发布前仍需运行 `npm.cmd run assets:sync`，同步生成内容和确定性资源指纹
+- 🖥️ **静态 shell + canonical 文章 SSR + SPA 混合**，首页和博客列表使用静态 HTML 外壳并在客户端读取数据，只有 `/posts/:id` canonical 文章路由由服务端渲染
 - 🔒 **面向公开部署的安全基线**，CSP 响应头、SSRF 防护、XSS 白名单过滤
-- 📱 **极致移动端体验**，首页极轻粒子，列表和文章页移动端静态背景优先阅读
+- 📱 **极致移动端体验**，`<=768px` 关闭粒子 canvas 并使用静态背景，列表和文章页优先阅读稳定性
 
 ---
 
@@ -50,8 +50,8 @@
 - Canvas 2D 粒子背景 + 多层光晕轨道动画
 - 鼠标跟随光效
 - 渐变文字标题 + 微交互动效
-- 真实移动端 gate（窄视口 + 触控能力）优先，窄屏桌面保持桌面体验
-- 保留旧版粒子、路由与光标动态，不使用 reduced-motion 弱化主动画
+- 响应式布局与输入能力分别建模；粒子性能策略仅按宽度和运行能力判断，不依赖触控/鼠标类型
+- `<=768px`、`saveData` 或 `prefers-reduced-motion` 时关闭粒子；宽屏按硬件能力和实际帧成本在 350 / 220 / 120 三档间自适应，并在 reduced-motion 下缩短装饰过渡
 
 ### 📝 内容
 
@@ -63,14 +63,15 @@
 
 ### ⚡ 性能
 
-- 字体延迟加载 (`media="print"` → `"all"`)
-- 卡片封面走 `/api/cover` 生成 320 / 640 / 960 三档 WebP/AVIF/JPEG 缩略图，并通过 `srcset` / `sizes` 按设备选择
+- 使用本地系统字体栈，不让外部字体 CSS/WOFF 阻塞首屏
+- 博客入口在列表模块下载前启动 JSON 请求；博客只加载 Shared / Utils / URL、`notion-api.js`、`bookmark.js` 和 `blog-page.js`，不会下载文章正文渲染器，文章路由仍加载完整渲染链
+- 卡片封面走 `/api/cover`，以显式 `format=webp` 生成 320 / 640 / 960 三档缩略图，并通过 `srcset` / `sizes` 按设备选择；端点支持的每种输出格式都必须显式指定
 - 文章内远程图片走 `/api/image` 安全代理；已知大小图片先做 SVG/XML 头部检查再流式返回
 - 后续图片全部 `lazy` + `decoding="async"`
 - SPA 路由 HTML 缓存（5 分钟 / 最多 6 页）
 - 悬停 + 聚焦预取（尊重 `saveData` 和 2G 网络）
 - 服务端六层缓存体系 + 三层请求去重
-- 真实移动端禁用粒子 canvas（桌面 350 个动态粒子保留），窄屏电脑不降级
+- `<=768px`、`saveData`、reduced-motion 关闭粒子 canvas；宽屏上限 350 个，并根据低硬件能力或持续帧成本降到 220 / 120
 
 ### 🔒 安全
 
@@ -81,7 +82,7 @@
 - 错误信息脱敏，仅调试模式暴露详情
 - `frame-ancestors 'none'` + `X-Frame-Options: DENY` + HSTS / Referrer-Policy / Permissions-Policy
 - 静态 HTML 的 CSP meta 用于静态 fallback；SSR 文章页由 `api/post.js` 重写 OG/canonical，并通过响应 header 承载完整 CSP 与 `frame-ancestors`
-- `scripts/smoke-check.mjs` 中关于 `shouldReduceMotion` / `prefers-reduced-motion` 的反向断言是动效常开设计守卫，不要作为无障碍修复顺手移除
+- 静态 CSP 不允许外部字体域；图片与嵌入仍遵守明确的来源白名单
 
 ### ♿ 无障碍
 
@@ -90,6 +91,7 @@
 - 书签按钮 `aria-pressed` 动态同步
 - 博客网格 `role="list"` 语义标记
 - 表格键盘滚动 (`tabindex="0"`)
+- 系统开启“减少动态效果”后禁用粒子与循环装饰动画，并缩短页面过渡
 
 ---
 
@@ -171,7 +173,8 @@ Notion Database
 │   ├── seo-meta.js         SPA SEO 元信息管理
 │   ├── common.js           粒子系统
 │   ├── ui-effects.js       光标光效
-│   └── font-loader.js      字体延迟加载
+│   ├── blog-bootstrap.js   博客列表关键请求提前启动
+│   └── app.js              共享模块入口与页面加载器
 ├── css/
 │   ├── style.css           全局设计令牌与共享样式
 │   ├── blog-page.css       列表页样式
@@ -179,7 +182,7 @@ Notion Database
 ├── scripts/
 │   ├── local-server.mjs    本地开发服务器
 │   ├── architecture-check.mjs  模块边界与循环依赖门禁
-│   ├── smoke-check.mjs     冒烟测试（5800+ 行测试 / 约 350 个断言）
+│   ├── smoke-check.mjs     行为、边界与本地服务器集成门禁
 │   └── visual-regression.mjs  真实浏览器截图回归
 ├── eslint.config.mjs       浏览器 / CommonJS / ESM 分层静态规则
 └── vercel.json             路由、缓存、安全头
@@ -195,7 +198,7 @@ Notion Database
 
 ### 前置条件
 
-- [Node.js](https://nodejs.org/) ≥ 22
+- [Node.js](https://nodejs.org/) 22.13.0–22.x，或 24.x
 - 一个 [Notion](https://www.notion.so/) 数据库
 - 一个 [Notion Integration Token](https://developers.notion.com/docs/getting-started)
 
@@ -206,10 +209,34 @@ git clone https://github.com/你的用户名/share-everything.git
 cd share-everything
 ```
 
-### 2. 配置环境变量
+### 2. 安装锁定依赖
+
+macOS / Linux：
+
+```bash
+npm ci
+```
+
+Windows PowerShell：
+
+```powershell
+npm.cmd ci
+```
+
+仓库与 CI 固定使用 `npm@11.9.0`（见 `packageManager`）；如果 `npm --version` 不一致，先执行 `npm install --global npm@11.9.0`，再运行上述干净安装命令。
+
+### 3. 配置环境变量
+
+macOS / Linux：
 
 ```bash
 cp .env.example .env
+```
+
+Windows PowerShell：
+
+```powershell
+Copy-Item .env.example .env
 ```
 
 编辑 `.env` 文件：
@@ -226,6 +253,7 @@ PUBLIC_PAGE_SUMMARY_CACHE_TTL_MS=120000
 PUBLIC_POST_CACHE_TTL_MS=60000
 NOTION_SINGLE_FLIGHT_ERROR_COOLDOWN_MS=2000
 NOTION_REQUEST_TIMEOUT_MS=12000
+NOTION_OPERATION_TIMEOUT_MS=30000
 NOTION_BLOCK_CHILD_CONCURRENCY=4
 NOTION_BLOCK_TOTAL_LIMIT=2000
 IMAGE_PROXY_TIMEOUT_MS=10000
@@ -238,11 +266,13 @@ COVER_IMAGE_RATE_LIMIT_PER_MINUTE=90
 COVER_IMAGE_MAX_CONCURRENT_REQUESTS=2
 # 推荐设置至少 32 UTF-8 字节的独立随机值；未设置时使用 NOTION_TOKEN 派生签名密钥
 IMAGE_PROXY_SIGNING_SECRET=replace_with_at_least_32_random_characters
+# 仅轮换窗口使用；旧签名 URL 过期后删除
+IMAGE_PROXY_SIGNING_SECRET_PREVIOUS=replace_with_previous_32_character_secret
 # 默认保持 v2.5 行为：整个配置的 Notion 数据库都作为公开内容读取。
 # 请把草稿放到另一个数据库；公开/发布字段会被忽略。
 ```
 
-### 3. 本地开发
+### 4. 本地开发
 
 ```powershell
 npm.cmd run dev
@@ -252,13 +282,22 @@ npm.cmd run dev
 
 保持该终端窗口打开即可查看本地服务日志；停止时按 `Ctrl+C`。
 
-### 4. 运行测试
+### 5. 运行测试
 
 ```powershell
 npm.cmd run check
 ```
 
 `npm test` 与 `npm.cmd run check` 等价，会依次运行 ESLint、模块边界/循环依赖检查、生成 CSS 与静态元数据一致性检查，以及无浏览器依赖的 smoke suite。需要复核移动端/桌面视觉时：
+
+修改运行时 JS、CSS、`assets/` 或 manifest 生成逻辑后，先同步所有生成内容和确定性缓存指纹，再运行只读门禁：
+
+```powershell
+npm.cmd run assets:sync
+npm.cmd run check
+```
+
+`assets:sync` 固定按 `mobile:fallbacks → meta:inject → assets:stamp` 执行；最后一步会根据最终 JS/CSS/assets/manifest 字节生成 `ASSET_VERSION` 的 12 位内容指纹。CI 与 `check` 只校验，不会替开发者静默改文件。
 
 ```powershell
 npm.cmd run visual:check
@@ -270,7 +309,7 @@ npm.cmd run visual:check
 npm.cmd run verify:release
 ```
 
-该本地发布命令会并行运行完整快速门禁和 `VISUAL_STRICT=1` 像素级视觉回归。GitHub Actions 除 Node 22/24 快速门禁与高危依赖公告审计外，还会在 Linux Chrome 中运行 `VISUAL_STRICT=1 + VISUAL_SKIP_DIFF=1` 的跨平台真实浏览器结构契约；它验证 DOM、尺寸、可见性、移动端粒子和控件布局，但跳过会受字体栅格化影响的像素差。Windows 基线像素比较保留为本地发布 contract，跨平台结构契约则由 CI 强制执行。
+该本地发布命令会并行运行完整快速门禁和 `VISUAL_STRICT=1` 像素级视觉回归；严格模式下任何场景缺少 baseline 都会失败。GitHub Actions 在 Node 22.13.0 边界与 Node 24 上运行快速门禁和高危依赖公告审计，并在 Linux Chrome 中运行 `VISUAL_STRICT=1 + VISUAL_SKIP_DIFF=1` 的跨平台真实浏览器结构契约；它验证 DOM、尺寸、可见性、移动端粒子和控件布局，但跳过会受字体栅格化影响的像素差。Windows 基线像素比较保留为本地发布 contract，跨平台结构契约则由 CI 强制执行。
 
 ---
 
@@ -281,11 +320,12 @@ npm.cmd run verify:release
 1. Fork 本仓库
 2. 在 [Vercel](https://vercel.com) 导入项目
 3. 添加环境变量 `NOTION_TOKEN` 和 `NOTION_DATABASE_ID`；推荐再设置独立随机的 `IMAGE_PROXY_SIGNING_SECRET`
-4. 部署完成 ✅
+4. 发布前运行 `npm.cmd run assets:sync` 和 `npm.cmd run check`，并提交生成后的 HTML/CSS/manifest 与资源指纹
+5. 部署完成 ✅
 
 项目自带 `vercel.json` 配置，无需额外设置。
 
-远程图片代理只接受服务端为公开 Notion 内容签发的 HMAC URL。未设置 `IMAGE_PROXY_SIGNING_SECRET` 时会从 `NOTION_TOKEN` 派生密钥，部署可直接工作；生产环境推荐使用至少 32 UTF-8 字节的独立稳定随机值，避免轮换 Notion Token 时让旧书签中的签名失效。显式设置但不足 32 字节会 fail-closed，不会静默改用另一把密钥。旧缓存或旧书签中没有签名的图片会安全回退为浏览器直连 HTTPS 源图，不会开放匿名代理。
+远程图片代理只接受服务端为公开 Notion 内容签发的 HMAC URL。未设置 `IMAGE_PROXY_SIGNING_SECRET` 时会从 `NOTION_TOKEN` 派生密钥，部署可直接工作；生产环境推荐使用至少 32 UTF-8 字节的独立稳定随机值，避免轮换 Notion Token 时让旧书签中的签名失效。轮换时先把旧值放入 `IMAGE_PROXY_SIGNING_SECRET_PREVIOUS`、再把新值写入 `IMAGE_PROXY_SIGNING_SECRET`；服务端只继续验证这一把旧密钥，待旧签名 URL 的缓存兼容窗口结束后删除。书签封面元数据最多复用 30 分钟：页面会优先合并当前 Notion 摘要中的封面 URL/签名并持久化；刷新失败或离线时仅暂时隐藏过期封面并保留书签、标题、标签、时间与渐变/Emoji fallback，恢复联网后仍可重试。因此删除 previous secret 不会让旧书签永久卡在 403，也不会用数据删除来掩盖签名失败。两个显式值都必须至少 32 UTF-8 字节，否则会 fail-closed，不会静默改用另一把密钥。旧缓存或旧书签中没有签名的图片会安全回退为浏览器直连 HTTPS 源图，不会开放匿名代理。
 
 ### Notion 数据库设置
 
@@ -380,12 +420,14 @@ NOTION_READ_TIME_PROPERTY_NAMES=ReadTime,Read Time,Reading Time,阅读时间
 | `PUBLIC_POST_CACHE_TTL_MS` | ❌ | `60000` | 单篇文章缓存时间 (ms) |
 | `NOTION_SINGLE_FLIGHT_ERROR_COOLDOWN_MS` | ❌ | `2000` | 元数据/列表 single-flight 失败后的短冷却窗口 (ms) |
 | `NOTION_REQUEST_TIMEOUT_MS` | ❌ | `12000` | Notion API 超时 (ms) |
+| `NOTION_OPERATION_TIMEOUT_MS` | ❌ | `30000` | 一次公开列表或文章操作跨分页/递归的总超时预算，最大 `30000`，确保低于浏览器 `35000ms` 预算 |
 | `NOTION_BLOCK_CHILD_CONCURRENCY` | ❌ | `4` | 块子元素并发获取数 |
 | `NOTION_BLOCK_TOTAL_LIMIT` | ❌ | `2000` | 单篇文章递归获取的最大 Notion block 数 |
 | `IMAGE_PROXY_TIMEOUT_MS` | ❌ | `10000` | 图片代理完整上游阶段超时，包括初始 DNS (ms) |
 | `IMAGE_PROXY_MAX_BYTES` | ❌ | `8388608` | 图片代理最大响应体字节数 |
 | `IMAGE_PROXY_MAX_REDIRECTS` | ❌ | `4` | 图片代理最大重定向跳数 |
 | `IMAGE_PROXY_SIGNING_SECRET` | 推荐 | `NOTION_TOKEN` 派生 | 图片源 HMAC 签名密钥；独立值至少 32 UTF-8 字节 |
+| `IMAGE_PROXY_SIGNING_SECRET_PREVIOUS` | ❌ | — | 轮换期间唯一兼容的上一把签名密钥；旧 URL 失效后删除 |
 | `IMAGE_PROXY_RATE_LIMIT_PER_MINUTE` | ❌ | `180` | 每个客户端、每个热实例每分钟允许的原图代理未缓存请求数 |
 | `IMAGE_PROXY_RATE_LIMIT_MAX_CLIENTS` | ❌ | `2048` | 单实例限流状态最多保留的客户端数 |
 | `IMAGE_PROXY_MAX_CONCURRENT_REQUESTS` | ❌ | `8` | 单实例原图代理最大并发数 |
@@ -420,7 +462,7 @@ NOTION_READ_TIME_PROPERTY_NAMES=ReadTime,Read Time,Reading Time,阅读时间
   </tr>
   <tr>
     <td align="center"><b>字体</b></td>
-    <td>Google Sans + Inter</td>
+    <td>本地系统字体栈（无外部字体请求）</td>
   </tr>
   <tr>
     <td align="center"><b>测试</b></td>

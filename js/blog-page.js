@@ -1,25 +1,77 @@
 (() => {
-  const SHARED_CONTENT = window.NotionContent;
-  const ALL_CATEGORY = SHARED_CONTENT.ALL_CATEGORY;
-  const BOOKMARK_CATEGORY = SHARED_CONTENT.BOOKMARK_CATEGORY;
+  function createListingContentFacade() {
+    const contentShared = window.NotionContentShared;
+    const contentUtils = window.NotionContentUtils;
+    const contentUrl = window.NotionContentUrl;
+    const facade = {
+      ALL_CATEGORY: contentShared?.ALL_CATEGORY,
+      BOOKMARK_CATEGORY: contentShared?.BOOKMARK_CATEGORY,
+      CALENDAR_ICON_SVG: contentShared?.CALENDAR_ICON_SVG,
+      CLOCK_ICON_SVG: contentShared?.CLOCK_ICON_SVG,
+      DEFAULT_CATEGORY_COLOR: contentShared?.DEFAULT_CATEGORY_COLOR,
+      DEFAULT_COVER_GRADIENT: contentShared?.DEFAULT_COVER_GRADIENT,
+      buildCoverImageSrcSet: contentUrl?.buildCoverImageSrcSet,
+      buildPostSearchText: contentUtils?.buildPostSearchText,
+      escapeHtml: contentUtils?.escapeHtml,
+      getBookmarkOnlyCategories: contentShared?.getBookmarkOnlyCategories,
+      getCategoryColor: contentShared?.getCategoryColor,
+      normalizeSearchText: contentUtils?.normalizeSearchText,
+      resolveCoverImageUrl: contentUrl?.resolveCoverImageUrl,
+      sanitizeCssColorValue: contentUtils?.sanitizeCssColorValue,
+    };
+    const requiredTypes = {
+      ALL_CATEGORY: "string",
+      BOOKMARK_CATEGORY: "string",
+      CALENDAR_ICON_SVG: "string",
+      CLOCK_ICON_SVG: "string",
+      DEFAULT_CATEGORY_COLOR: "object",
+      DEFAULT_COVER_GRADIENT: "string",
+      buildCoverImageSrcSet: "function",
+      buildPostSearchText: "function",
+      escapeHtml: "function",
+      getBookmarkOnlyCategories: "function",
+      getCategoryColor: "function",
+      normalizeSearchText: "function",
+      resolveCoverImageUrl: "function",
+      sanitizeCssColorValue: "function",
+    };
+    const missingHelpers = Object.entries(requiredTypes)
+      .filter(([name, type]) => typeof facade[name] !== type)
+      .map(([name]) => name);
+
+    if (missingHelpers.length > 0) {
+      throw new Error(
+        `blog-page.js listing dependencies missing or wrong type: ${missingHelpers.join(", ")}. `
+        + "Ensure notion-content-shared.js, notion-content-utils.js, and notion-content-url.js load first.",
+      );
+    }
+
+    return Object.freeze(facade);
+  }
+
+  const LISTING_CONTENT = createListingContentFacade();
+  const ALL_CATEGORY = LISTING_CONTENT.ALL_CATEGORY;
+  const BOOKMARK_CATEGORY = LISTING_CONTENT.BOOKMARK_CATEGORY;
   const DEFAULT_PAGE_SIZE = 9;
-  const EAGER_COVER_IMAGE_COUNT = 3;
-  const MOBILE_EAGER_COVER_IMAGE_COUNT = 1;
+  const PRIORITY_COVER_IMAGE_COUNT = 1;
   const PAGINATION_SIBLING_COUNT = 2;
   const PAGINATION_MAX_NUMBERED_BUTTONS = (PAGINATION_SIBLING_COUNT * 2) + 3;
-  const BOOKMARK_ONLY_CATEGORIES = Object.freeze(SHARED_CONTENT.getBookmarkOnlyCategories());
-  const FALLBACK_CATEGORY_COLOR = SHARED_CONTENT.DEFAULT_CATEGORY_COLOR;
-  const DEFAULT_COVER_GRADIENT = SHARED_CONTENT.DEFAULT_COVER_GRADIENT;
-  const sanitizeCssColor = SHARED_CONTENT.sanitizeCssColorValue;
-  const normalizeBookmarkSearchQuery = SHARED_CONTENT.normalizeSearchText;
-  const buildSharedPostSearchText = SHARED_CONTENT.buildPostSearchText;
+  const BOOKMARK_ONLY_CATEGORIES = Object.freeze(LISTING_CONTENT.getBookmarkOnlyCategories());
+  const FALLBACK_CATEGORY_COLOR = LISTING_CONTENT.DEFAULT_CATEGORY_COLOR;
+  const DEFAULT_COVER_GRADIENT = LISTING_CONTENT.DEFAULT_COVER_GRADIENT;
+  const sanitizeCssColor = LISTING_CONTENT.sanitizeCssColorValue;
+  const normalizeBookmarkSearchQuery = LISTING_CONTENT.normalizeSearchText;
+  const buildSharedPostSearchText = LISTING_CONTENT.buildPostSearchText;
   const HISTORY_MODE_REPLACE = "replace";
   const HISTORY_MODE_PUSH = "push";
-  const PRELOAD_COVER_IMAGE_COUNT = 3;
-  const MOBILE_PRELOAD_COVER_IMAGE_COUNT = 1;
   const COVER_IMAGE_SIZES = "(max-width: 768px) 50vw, (max-width: 900px) 100vw, (max-width: 1200px) 50vw, 400px";
   const PUBLIC_CATEGORY_QUERY_MAX_LENGTH = 128;
   const PUBLIC_SEARCH_QUERY_MAX_LENGTH = 256;
+  const BOOKMARK_METADATA_RETRY_BASE_MS = 5_000;
+  const BOOKMARK_METADATA_RETRY_MAX_MS = 60_000;
+  const BOOKMARK_METADATA_RETRY_MAX_EXPONENT = Math.ceil(
+    Math.log2(BOOKMARK_METADATA_RETRY_MAX_MS / BOOKMARK_METADATA_RETRY_BASE_MS),
+  );
 
   function normalizeBoundedListingQuery(value, maxLength) {
     const safeMaxLength = Number.isSafeInteger(Number(maxLength)) && Number(maxLength) > 0
@@ -59,7 +111,10 @@
       onBeforeRead();
     }
 
-    let bookmarks = bookmarkManager.getAll();
+    const readEntries = typeof bookmarkManager.getDisplayEntries === "function"
+      ? bookmarkManager.getDisplayEntries
+      : bookmarkManager.getAll;
+    let bookmarks = readEntries.call(bookmarkManager);
     if (search) {
       const query = normalizeBookmarkSearchQuery(search);
       bookmarks = bookmarks.filter((post) => buildBookmarkSearchText(post).includes(query));
@@ -80,7 +135,7 @@
 
   function initBlogPage() {
     const notionApi = window.NotionAPI;
-    const sharedContent = SHARED_CONTENT;
+    const sharedContent = LISTING_CONTENT;
     const siteUtils = window.SiteUtils || {};
     const siteName =
       typeof siteUtils.getSiteName === "function" ? siteUtils.getSiteName() : "Site";
@@ -128,13 +183,18 @@
     let currentPage = 1;
     let renderToken = 0;
     let searchDebounce = null;
+    let bookmarkRemovalTimer = null;
     let revealFrame = null;
     let cleanupCardReveal = null;
     let statusAnnouncementHandle = null;
     let metadataHydrationTask = null;
-    let didAttemptHydration = false;
+    let metadataHydrationRetryTimer = null;
+    let metadataHydrationRetryAttempt = 0;
+    let shouldRetryHydrationImmediately = false;
     let didCompleteInitialRender = false;
     let isDisposed = false;
+    let isHandlingBookmarkToggle = false;
+    let activeRenderController = null;
     let didNormalizeRoute = false;
     let hashChangeHandler = null;
     const preloadedCoverImages = new Set();
@@ -230,6 +290,12 @@
       statusAnnouncementHandle = null;
     }
 
+    function clearBookmarkRemovalTimer() {
+      if (bookmarkRemovalTimer == null) return;
+      window.clearTimeout(bookmarkRemovalTimer);
+      bookmarkRemovalTimer = null;
+    }
+
     function announceStatus(message) {
       if (!statusEl || typeof message !== "string" || !message.trim()) return;
 
@@ -269,7 +335,7 @@
       }
 
       if (code === "notion_public_config_error") {
-        return "当前部署仍在返回旧版公开字段错误，请确认线上已部署 v2.7，并检查 Vercel 的 Notion 环境变量。";
+        return "当前部署仍在返回旧版公开字段错误，请确认线上已部署最新版本，并检查 Vercel 的 Notion 环境变量。";
       }
 
       if (status === 401 || status === 403 || notionCode === "unauthorized" || notionCode === "restricted_resource") {
@@ -295,6 +361,10 @@
       }
 
       return "请检查网络后重试";
+    }
+
+    function isPublicPageOutOfRangeError(error) {
+      return error?.code === "public_page_out_of_range";
     }
 
     function isBookmarkView() {
@@ -366,15 +436,76 @@
       return true;
     }
 
-    function scheduleLegacyMetadataHydration() {
-      if (!isBookmarkView()) return;
-      if (didAttemptHydration) return;
-      if (metadataHydrationTask) return;
-      if (typeof bookmarkManager.hasLegacyMetadata !== "function") return;
-      if (!bookmarkManager.hasLegacyMetadata()) return;
+    function hasBookmarkMetadataNeedingHydration() {
+      const hasStaleMetadata = typeof bookmarkManager.hasStaleMetadata === "function"
+        ? bookmarkManager.hasStaleMetadata
+        : bookmarkManager.hasLegacyMetadata;
+      if (typeof hasStaleMetadata !== "function") return false;
 
-      didAttemptHydration = true;
-      metadataHydrationTask = Promise.resolve(bookmarkManager.hydrateMissingMetadata?.())
+      try {
+        return Boolean(hasStaleMetadata.call(bookmarkManager));
+      } catch (error) {
+        return false;
+      }
+    }
+
+    function clearBookmarkMetadataHydrationRetry() {
+      if (metadataHydrationRetryTimer === null) return;
+      window.clearTimeout(metadataHydrationRetryTimer);
+      metadataHydrationRetryTimer = null;
+    }
+
+    function resetBookmarkMetadataHydrationRetry() {
+      clearBookmarkMetadataHydrationRetry();
+      metadataHydrationRetryAttempt = 0;
+      shouldRetryHydrationImmediately = false;
+    }
+
+    function scheduleBookmarkMetadataHydrationRetry() {
+      if (isDisposed || !isBookmarkView()) return;
+      if (metadataHydrationTask || metadataHydrationRetryTimer !== null) return;
+      if (!hasBookmarkMetadataNeedingHydration()) {
+        resetBookmarkMetadataHydrationRetry();
+        return;
+      }
+
+      const retryDelay = Math.min(
+        BOOKMARK_METADATA_RETRY_BASE_MS * (2 ** metadataHydrationRetryAttempt),
+        BOOKMARK_METADATA_RETRY_MAX_MS,
+      );
+      metadataHydrationRetryAttempt = Math.min(
+        metadataHydrationRetryAttempt + 1,
+        BOOKMARK_METADATA_RETRY_MAX_EXPONENT,
+      );
+      metadataHydrationRetryTimer = window.setTimeout(() => {
+        metadataHydrationRetryTimer = null;
+        scheduleBookmarkMetadataHydration();
+      }, retryDelay);
+    }
+
+    function scheduleBookmarkMetadataHydration({ resetRetryDelay = false } = {}) {
+      if (isDisposed || !isBookmarkView()) return;
+      if (resetRetryDelay) {
+        clearBookmarkMetadataHydrationRetry();
+        metadataHydrationRetryAttempt = 0;
+      } else if (metadataHydrationRetryTimer !== null) {
+        return;
+      }
+
+      if (metadataHydrationTask) {
+        if (resetRetryDelay) {
+          shouldRetryHydrationImmediately = true;
+        }
+        return;
+      }
+      if (typeof bookmarkManager.hydrateMissingMetadata !== "function") return;
+      if (!hasBookmarkMetadataNeedingHydration()) {
+        resetBookmarkMetadataHydrationRetry();
+        return;
+      }
+
+      metadataHydrationTask = Promise.resolve()
+        .then(() => bookmarkManager.hydrateMissingMetadata())
         .then((didHydrate) => {
           if (didHydrate && !isDisposed && isBookmarkView()) {
             renderPosts();
@@ -383,7 +514,26 @@
         .catch(() => {})
         .finally(() => {
           metadataHydrationTask = null;
+          if (isDisposed || !isBookmarkView()) {
+            shouldRetryHydrationImmediately = false;
+            return;
+          }
+          if (!hasBookmarkMetadataNeedingHydration()) {
+            resetBookmarkMetadataHydrationRetry();
+            return;
+          }
+
+          if (shouldRetryHydrationImmediately) {
+            shouldRetryHydrationImmediately = false;
+            scheduleBookmarkMetadataHydration();
+            return;
+          }
+          scheduleBookmarkMetadataHydrationRetry();
         });
+    }
+
+    function handleOnline() {
+      scheduleBookmarkMetadataHydration({ resetRetryDelay: true });
     }
 
     function buildResultsAnnouncement(data) {
@@ -408,9 +558,11 @@
       title = "没有找到匹配的文章",
       hint = "试试其他关键词或分类",
       actionLabel = "",
+      action = "retry",
     } = {}) {
+      const resolvedAction = action === "overview" ? "overview" : "retry";
       const actionHtml = actionLabel
-        ? `<button type="button" class="empty-state-action" data-empty-action="retry">${escapeText(actionLabel)}</button>`
+        ? `<button type="button" class="empty-state-action" data-empty-action="${resolvedAction}">${escapeText(actionLabel)}</button>`
         : "";
 
       return `
@@ -426,6 +578,12 @@
 
     function resolveSafeCoverImage(post) {
       const candidate = post?.coverImage;
+      const resolvedCoverImage = LISTING_CONTENT.resolveCoverImageUrl(
+        candidate,
+        window.location.origin,
+        { signature: post?.coverImageSignature },
+      );
+      if (resolvedCoverImage) return resolvedCoverImage;
       if (typeof siteUtils.resolveCoverImageUrl === "function") {
         return siteUtils.resolveCoverImageUrl(candidate, {
           signature: post?.coverImageSignature,
@@ -442,6 +600,12 @@
 
     function resolveSafeCoverImageSrcSet(post) {
       const candidate = post?.coverImage;
+      const resolvedSrcSet = LISTING_CONTENT.buildCoverImageSrcSet(
+        candidate,
+        window.location.origin,
+        { signature: post?.coverImageSignature },
+      );
+      if (resolvedSrcSet) return resolvedSrcSet;
       if (typeof siteUtils.buildCoverImageSrcSet === "function") {
         return siteUtils.buildCoverImageSrcSet(candidate, {
           signature: post?.coverImageSignature,
@@ -454,16 +618,15 @@
       cleanupPreloadedCoverLinks();
       if (!Array.isArray(posts) || posts.length === 0) return;
 
-      const preloadCount = isMobileDeviceViewport()
-        ? MOBILE_PRELOAD_COVER_IMAGE_COUNT
-        : PRELOAD_COVER_IMAGE_COUNT;
-
-      posts.slice(0, preloadCount).forEach((post) => {
+      let preloadedCount = 0;
+      for (const post of posts) {
+        if (preloadedCount >= PRIORITY_COVER_IMAGE_COUNT) break;
         const coverImage = resolveSafeCoverImage(post);
-        if (!coverImage || preloadedCoverImages.has(coverImage)) return;
+        if (!coverImage || preloadedCoverImages.has(coverImage)) continue;
         const coverSrcSet = resolveSafeCoverImageSrcSet(post);
 
         preloadedCoverImages.add(coverImage);
+        preloadedCount += 1;
         const link = document.createElement("link");
         link.rel = "preload";
         link.as = "image";
@@ -480,7 +643,7 @@
         link.setAttribute("data-blog-cover-preload", "true");
         preloadedCoverLinks.add(link);
         document.head?.appendChild(link);
-      });
+      }
     }
 
     function cleanupPreloadedCoverLinks() {
@@ -667,12 +830,14 @@
         }
       }
 
+      window.SPARouter?.syncCurrentUrl?.(window.location.href);
+
       if (typeof siteUtils.rememberBlogReturnUrl === "function") {
         siteUtils.rememberBlogReturnUrl(window.location.href);
       }
     }
 
-    function renderCard(post, index = 0) {
+    function renderCard(post, shouldLoadCoverEagerly = false) {
       const esc = escapeText;
       // Defense-in-depth: category colors may come from site config via the API.
       const catColor = post.categoryColor || getCategoryColor(post.category);
@@ -695,10 +860,6 @@
         typeof siteUtils.buildPostPath === "function"
           ? siteUtils.buildPostPath(post.id)
           : `/posts/${encodeURIComponent(post.id)}`;
-      const eagerCoverCount = isMobileDeviceViewport()
-        ? MOBILE_EAGER_COVER_IMAGE_COUNT
-        : EAGER_COVER_IMAGE_COUNT;
-      const shouldLoadCoverEagerly = index < eagerCoverCount;
       const coverLoading = shouldLoadCoverEagerly ? "eager" : "lazy";
       const coverFetchPriority = shouldLoadCoverEagerly ? "high" : "auto";
       const serializedTags = esc(JSON.stringify(Array.isArray(post.tags) ? post.tags : []));
@@ -710,11 +871,11 @@
       const metaItems = [];
 
       if (post.date) {
-        metaItems.push(`<span>${SHARED_CONTENT.CALENDAR_ICON_SVG}${esc(post.date)}</span>`);
+        metaItems.push(`<span>${LISTING_CONTENT.CALENDAR_ICON_SVG}${esc(post.date)}</span>`);
       }
 
       if (post.readTime) {
-        metaItems.push(`<span>${SHARED_CONTENT.CLOCK_ICON_SVG}${esc(post.readTime)}</span>`);
+        metaItems.push(`<span>${LISTING_CONTENT.CLOCK_ICON_SVG}${esc(post.readTime)}</span>`);
       }
       const coverHtml = safeCoverImage
         ? `<div class="blog-card-cover-placeholder blog-card-cover-img" data-cover-gradient="${esc(safeCoverGradient)}" data-cover-emoji="${safeCoverEmoji}" style="background: ${DEFAULT_COVER_GRADIENT}">
@@ -833,13 +994,13 @@
       paginationEl.innerHTML = html;
     }
 
-    async function loadCurrentPageData() {
+    async function loadCurrentPageData(signal) {
       if (!isBookmarkView()) {
         return notionApi.queryPosts({
           category: currentCategory,
           search: currentSearch,
           page: currentPage,
-        });
+        }, { signal });
       }
 
       return buildBookmarkPageData({
@@ -847,20 +1008,27 @@
         search: currentSearch,
         page: currentPage,
         pageSize,
-        onBeforeRead: scheduleLegacyMetadataHydration,
+        onBeforeRead: scheduleBookmarkMetadataHydration,
       });
     }
 
-    async function renderPosts() {
+    async function renderPosts({ didRetryOutOfRange = false } = {}) {
+      if (isDisposed) return;
+      if (!isBookmarkView()) {
+        resetBookmarkMetadataHydrationRetry();
+      }
+      activeRenderController?.abort();
+      const renderController = new AbortController();
+      activeRenderController = renderController;
       const currentToken = ++renderToken;
       clearCardReveal();
       setGridBusy(true);
       announceStatus(currentSearch ? "正在更新搜索结果。" : "正在加载文章列表。");
 
       try {
-        const data = await loadCurrentPageData();
+        const data = await loadCurrentPageData(renderController.signal);
 
-        if (currentToken !== renderToken) return;
+        if (isDisposed || renderController.signal.aborted || currentToken !== renderToken) return;
         if (updateRemoteCategories(data.categories)) {
           renderFilters();
         }
@@ -877,15 +1045,42 @@
 
         emptyEl.style.display = "none";
         preloadCoverImages(data.results);
-        gridEl.innerHTML = data.results.map(renderCard).join("");
+        const priorityCoverIndex = data.results.findIndex((post) => resolveSafeCoverImage(post));
+        gridEl.innerHTML = data.results
+          .map((post, index) => renderCard(post, index === priorityCoverIndex))
+          .join("");
         renderPagination(data);
         setGridBusy(false);
         announceStatus(buildResultsAnnouncement(data));
         revealRenderedCards();
       } catch (error) {
-        if (currentToken !== renderToken) return;
+        if (
+          isDisposed ||
+          renderController.signal.aborted ||
+          error?.name === "AbortError" ||
+          currentToken !== renderToken
+        ) return;
+
+        if (isPublicPageOutOfRangeError(error) && currentPage > 1 && !didRetryOutOfRange) {
+          currentPage = 1;
+          syncListingUrl(HISTORY_MODE_REPLACE);
+          updatePageUI();
+          window.scrollTo({ top: 0, behavior: "auto" });
+          return renderPosts({ didRetryOutOfRange: true });
+        }
 
         console.error("Failed to load posts:", error);
+        if (isPublicPageOutOfRangeError(error)) {
+          showEmptyState({
+            title: "当前页已不存在",
+            hint: "文章数量可能已发生变化，请返回总览重新浏览。",
+            actionLabel: "返回总览",
+            action: "overview",
+            announcement: "当前页已不存在，请返回文章总览。",
+          });
+          didCompleteInitialRender = true;
+          return;
+        }
         showEmptyState({
           title: "加载失败",
           hint: describeLoadFailure(error),
@@ -893,6 +1088,10 @@
           announcement: "文章加载失败，请重试。",
         });
         didCompleteInitialRender = true;
+      } finally {
+        if (activeRenderController === renderController) {
+          activeRenderController = null;
+        }
       }
     }
 
@@ -957,7 +1156,13 @@
       event.stopPropagation();
 
       const postId = button.dataset.bookmarkId;
-      const nowBookmarked = bookmarkManager.toggleById(postId);
+      let nowBookmarked;
+      isHandlingBookmarkToggle = true;
+      try {
+        nowBookmarked = bookmarkManager.toggleById(postId);
+      } finally {
+        isHandlingBookmarkToggle = false;
+      }
       const postTitle = button.dataset.bookmarkTitle || "Untitled";
       if (nowBookmarked === null) {
         announceStatus(`收藏失败，请稍后重试：${postTitle}。`);
@@ -978,7 +1183,11 @@
         // Delay the re-render so the bounce animation (260ms) finishes before
         // the card is removed from the grid; otherwise users see a jarring
         // cut while their finger is still on the button.
-        setTimeout(() => renderPosts(), 300);
+        clearBookmarkRemovalTimer();
+        bookmarkRemovalTimer = window.setTimeout(() => {
+          bookmarkRemovalTimer = null;
+          renderPosts();
+        }, 300);
       }
     }
 
@@ -1004,6 +1213,8 @@
       if (isDisposed) return;
 
       if (isBookmarkView()) {
+        if (isHandlingBookmarkToggle) return;
+        clearBookmarkRemovalTimer();
         renderPosts();
         return;
       }
@@ -1023,8 +1234,20 @@
     }
 
     function handleEmptyStateClick(event) {
-      const button = event.target.closest("[data-empty-action='retry']");
+      const button = event.target.closest("[data-empty-action]");
       if (!button || !emptyEl.contains(button)) return;
+      if (button.dataset.emptyAction === "overview") {
+        const didChange = applyListingState({
+          category: ALL_CATEGORY,
+          search: "",
+          page: 1,
+        }, HISTORY_MODE_PUSH);
+        if (!didChange) {
+          const overviewUrl = new URL(window.location.pathname, window.location.origin).href;
+          window.location.assign?.(overviewUrl);
+        }
+        return;
+      }
       renderPosts();
     }
 
@@ -1096,6 +1319,7 @@
     emptyEl.addEventListener("click", handleEmptyStateClick);
     topActionsEl?.addEventListener("click", handleTopActionsClick);
     window.addEventListener?.("bookmarks:updated", handleBookmarksUpdated);
+    window.addEventListener?.("online", handleOnline);
     bindBookmarkHashNavigation();
 
     renderPosts();
@@ -1103,8 +1327,12 @@
     return () => {
       isDisposed = true;
       renderToken += 1;
+      activeRenderController?.abort();
+      activeRenderController = null;
       clearTimeout(searchDebounce);
       searchDebounce = null;
+      clearBookmarkRemovalTimer();
+      resetBookmarkMetadataHydrationRetry();
       filtersEl.removeEventListener("click", handleFilterClick);
       searchInput.removeEventListener("input", handleSearchInput);
       paginationEl.removeEventListener("click", handlePaginationClick);
@@ -1113,6 +1341,7 @@
       emptyEl.removeEventListener("click", handleEmptyStateClick);
       topActionsEl?.removeEventListener("click", handleTopActionsClick);
       window.removeEventListener?.("bookmarks:updated", handleBookmarksUpdated);
+      window.removeEventListener?.("online", handleOnline);
       if (hashChangeHandler) {
         window.removeEventListener("hashchange", hashChangeHandler);
         hashChangeHandler = null;

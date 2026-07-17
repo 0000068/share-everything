@@ -41,7 +41,7 @@
 }
 
 .page-title {
-  font-family: "Google Sans", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "Microsoft YaHei", sans-serif;
   font-size: clamp(2rem, 5vw, 3.5rem);
   font-weight: 700;
   letter-spacing: -0.03em;
@@ -272,7 +272,7 @@
 }
 
 .blog-card-title {
-  font-family: "Google Sans", sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "Microsoft YaHei", sans-serif;
   font-size: 1.2rem;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -423,7 +423,7 @@
 }
 
 
-@media (max-width: 768px) and (hover: none) and (pointer: coarse) {
+@media (max-width: 768px) {
   .blog-card.visible {
     transition:
       opacity 0.3s ease,
@@ -491,12 +491,6 @@
     min-height: 44px;
   }
 
-  .filter-btn::after {
-    content: "";
-    position: absolute;
-    inset: -6px;
-  }
-
   .blog-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 11px;
@@ -517,13 +511,6 @@
     -webkit-backdrop-filter: none;
     box-shadow: 0 7px 18px rgba(0, 0, 0, 0.13);
     transition: opacity 0.3s ease, transform 0.3s var(--transition-smooth);
-  }
-
-  .blog-card:hover {
-    background: rgba(255, 255, 255, 0.055);
-    border-color: rgba(255, 255, 255, 0.09);
-    transform: none;
-    box-shadow: 0 7px 18px rgba(0, 0, 0, 0.13);
   }
 
   .blog-card:focus-within {
@@ -631,12 +618,6 @@
     background: rgba(255, 255, 255, 0.055);
   }
 
-  .card-bookmark-btn::after {
-    content: "";
-    position: absolute;
-    inset: -11px;
-  }
-
   .pagination {
     margin-top: 30px;
     gap: 10px;
@@ -650,7 +631,7 @@
   }
 }
 
-@media (max-width: 540px) and (hover: none) and (pointer: coarse) {
+@media (max-width: 540px) {
   .blog-search {
     width: 82%;
     max-width: 340px;
@@ -691,10 +672,6 @@
   .blog-card {
     grid-template-rows: minmax(0, 0.54fr) minmax(0, 0.46fr);
     border-radius: 15px;
-    box-shadow: 0 7px 18px rgba(0, 0, 0, 0.13);
-  }
-
-  .blog-card:hover {
     box-shadow: 0 7px 18px rgba(0, 0, 0, 0.13);
   }
 
@@ -780,105 +757,40 @@
   }
 }
 
-/* ===== Generated mobile compatibility fallback =====
- * Source: scripts/build-mobile-fallbacks.mjs.
- * Edit the real touch media queries above, then run npm.cmd run mobile:fallbacks.
- * ================================================= */
-
-@media (max-width: 768px) {
-  html.is-mobile-device-viewport .blog-card.visible {
-    transition:
-      opacity 0.3s ease,
-      transform 0.3s var(--transition-smooth);
-  }
-
-  html.is-mobile-device-viewport .blog-search {
-    width: 84%;
-    max-width: 400px;
-    margin: 0 auto 14px;
-  }
-
-  html.is-mobile-device-viewport .blog-search input {
-    min-height: 36px;
-    padding: 8px 36px 8px 14px;
-    border-radius: 999px;
-    font-size: 0.73rem;
-    background: rgba(255, 255, 255, 0.06);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.06),
-      0 7px 18px rgba(0, 0, 0, 0.14);
-  }
-
-  html.is-mobile-device-viewport .blog-search .search-icon {
-    right: 12px;
-    width: 13px;
-    height: 13px;
-  }
-
-  html.is-mobile-device-viewport .blog-filters {
-    width: 84%;
-    max-width: 400px;
-    justify-content: flex-start;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    margin: 0 auto 16px;
-    padding: 0 1px 3px;
-    gap: 7px;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    scroll-snap-type: x proximity;
-  }
-
-  html.is-mobile-device-viewport .blog-filters::-webkit-scrollbar {
-    display: none;
-  }
-
-  html.is-mobile-device-viewport .filter-btn {
-    flex: 0 0 auto;
-    min-height: 30px;
-    padding: 5px 10px;
-    font-size: 0.66rem;
-    line-height: 1.15;
-    position: relative;
-    scroll-snap-align: start;
-    background: rgba(255, 255, 255, 0.055);
-    box-shadow: none;
-  }
-
-  html.is-mobile-device-viewport .page-btn,
-  html.is-mobile-device-viewport .empty-state-action {
-    min-width: 44px;
-    min-height: 44px;
-  }
-
-  html.is-mobile-device-viewport .filter-btn::after {
+/* Pointer capabilities affect interaction affordances, never structural reflow. */
+@media (max-width: 768px) and (hover: none) and (pointer: coarse) {
+  .filter-btn::after {
     content: "";
     position: absolute;
     inset: -6px;
   }
 
-  html.is-mobile-device-viewport .blog-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 11px;
-    max-width: 460px;
-    align-items: stretch;
-  }
-
-  html.is-mobile-device-viewport .blog-card {
-    display: grid;
-    grid-template-rows: minmax(0, 0.66fr) minmax(0, 0.34fr);
-    aspect-ratio: 1 / 0.94;
-    content-visibility: auto;
-    contain-intrinsic-size: 150px 141px;
-    border-radius: 14px;
+  .blog-card:hover {
     background: rgba(255, 255, 255, 0.055);
     border-color: rgba(255, 255, 255, 0.09);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
+    transform: none;
     box-shadow: 0 7px 18px rgba(0, 0, 0, 0.13);
-    transition: opacity 0.3s ease, transform 0.3s var(--transition-smooth);
+  }
+
+  .card-bookmark-btn::after {
+    content: "";
+    position: absolute;
+    inset: -11px;
+  }
+}
+
+@media (max-width: 540px) and (hover: none) and (pointer: coarse) {
+  .blog-card:hover {
+    box-shadow: 0 7px 18px rgba(0, 0, 0, 0.13);
+  }
+}
+
+/* MOBILE_FALLBACKS_START — generated by scripts/build-mobile-fallbacks.mjs */
+@media (max-width: 768px) {
+  html.is-mobile-device-viewport .filter-btn::after {
+    content: "";
+    position: absolute;
+    inset: -6px;
   }
 
   html.is-mobile-device-viewport .blog-card:hover {
@@ -886,111 +798,6 @@
     border-color: rgba(255, 255, 255, 0.09);
     transform: none;
     box-shadow: 0 7px 18px rgba(0, 0, 0, 0.13);
-  }
-
-  html.is-mobile-device-viewport .blog-card:focus-within {
-    transform: none;
-    box-shadow:
-      0 7px 18px rgba(0, 0, 0, 0.13),
-      0 0 0 1px rgba(0, 229, 255, 0.28);
-  }
-
-  html.is-mobile-device-viewport .blog-card-cover-placeholder {
-    position: relative;
-    overflow: hidden;
-    height: auto;
-    min-height: 0;
-    font-size: 1.75rem;
-  }
-
-  html.is-mobile-device-viewport .blog-card-cover-placeholder > span,
-  html.is-mobile-device-viewport .blog-card-cover-fallback {
-    color: transparent;
-    font-size: 0;
-    opacity: 0;
-  }
-
-  html.is-mobile-device-viewport .blog-card-body {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 24px;
-    grid-template-rows: auto minmax(0, 1fr);
-    column-gap: 5px;
-    row-gap: 2px;
-    align-items: start;
-    min-height: 0;
-    position: relative;
-    padding: 6px 8px;
-  }
-
-  html.is-mobile-device-viewport .blog-card-category {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    grid-column: 1 / -1;
-    align-self: flex-start;
-    justify-self: start;
-    width: auto;
-    max-width: 100%;
-    min-width: 0;
-    min-height: 18px;
-    box-sizing: border-box;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    line-height: 1.15;
-    margin-bottom: 0;
-    padding: 2px 7px;
-    font-size: 0.6rem;
-    letter-spacing: 0.03em;
-  }
-
-  html.is-mobile-device-viewport .blog-card-title {
-    grid-column: 1;
-    grid-row: 2;
-    align-self: center;
-    margin-top: 0;
-    margin-bottom: 0;
-    font-size: 0.78rem;
-    line-height: 1.26;
-    min-height: 0;
-    padding-bottom: 0.04em;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-  }
-
-  html.is-mobile-device-viewport .blog-card-excerpt {
-    display: none;
-  }
-
-  html.is-mobile-device-viewport .blog-card-meta {
-    position: static;
-    grid-column: 2;
-    grid-row: 2;
-    align-self: center;
-    justify-self: end;
-    margin-top: 0;
-    flex-wrap: nowrap;
-    justify-content: flex-end;
-    gap: 0;
-    font-size: 0.67rem;
-  }
-
-  html.is-mobile-device-viewport .blog-card-meta > span {
-    display: none;
-  }
-
-  html.is-mobile-device-viewport .blog-card-meta svg {
-    width: 11px;
-    height: 11px;
-    margin-right: 2px;
-  }
-
-  html.is-mobile-device-viewport .card-bookmark-btn {
-    margin-left: 0;
-    width: 21px;
-    height: 21px;
-    border-radius: 7px;
-    background: rgba(255, 255, 255, 0.055);
   }
 
   html.is-mobile-device-viewport .card-bookmark-btn::after {
@@ -998,146 +805,12 @@
     position: absolute;
     inset: -11px;
   }
-
-  html.is-mobile-device-viewport .pagination {
-    margin-top: 30px;
-    gap: 10px;
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-
-  html.is-mobile-device-viewport .page-btn {
-    width: 40px;
-    height: 40px;
-  }
 }
 
 @media (max-width: 540px) {
-  html.is-mobile-device-viewport .blog-search {
-    width: 82%;
-    max-width: 340px;
-    margin-bottom: 12px;
-  }
-
-  html.is-mobile-device-viewport .blog-search input {
-    min-height: 34px;
-    padding: 7px 34px 7px 13px;
-    border-radius: 999px;
-    font-size: 0.7rem;
-  }
-
-  html.is-mobile-device-viewport .blog-search .search-icon {
-    right: 11px;
-    width: 12px;
-    height: 12px;
-  }
-
-  html.is-mobile-device-viewport .blog-filters {
-    width: 82%;
-    max-width: 340px;
-    margin-bottom: 13px;
-    padding-bottom: 3px;
-    gap: 6px;
-  }
-
-  html.is-mobile-device-viewport .filter-btn {
-    min-height: 28px;
-    padding: 4px 9px;
-    font-size: 0.63rem;
-  }
-
-  html.is-mobile-device-viewport .blog-grid {
-    gap: 10px;
-  }
-
-  html.is-mobile-device-viewport .blog-card {
-    grid-template-rows: minmax(0, 0.54fr) minmax(0, 0.46fr);
-    border-radius: 15px;
-    box-shadow: 0 7px 18px rgba(0, 0, 0, 0.13);
-  }
-
   html.is-mobile-device-viewport .blog-card:hover {
     box-shadow: 0 7px 18px rgba(0, 0, 0, 0.13);
   }
-
-  html.is-mobile-device-viewport .blog-card:focus-within {
-    box-shadow:
-      0 7px 18px rgba(0, 0, 0, 0.13),
-      0 0 0 1px rgba(0, 229, 255, 0.28);
-  }
-
-  html.is-mobile-device-viewport .blog-card-cover-placeholder {
-    height: auto;
-    min-height: 0;
-    font-size: 1.5rem;
-  }
-
-  html.is-mobile-device-viewport .blog-card-body {
-    grid-template-columns: minmax(0, 1fr) 24px;
-    column-gap: 6px;
-    row-gap: 4px;
-    padding: 6px 7px;
-  }
-
-  html.is-mobile-device-viewport .blog-card-category {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: auto;
-    max-width: 100%;
-    min-width: 0;
-    justify-self: start;
-    min-height: 17px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    line-height: 1.15;
-    margin-bottom: 0;
-    padding: 2px 6px;
-    font-size: 0.58rem;
-  }
-
-  html.is-mobile-device-viewport .blog-card-title {
-    font-size: 0.72rem;
-    margin-bottom: 0;
-    line-height: 1.26;
-    min-height: 0;
-    padding-bottom: 0.04em;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-  }
-
-  html.is-mobile-device-viewport .blog-card-meta {
-    align-self: center;
-    justify-self: end;
-    gap: 0;
-    font-size: 0.63rem;
-  }
-
-  html.is-mobile-device-viewport .blog-card-meta svg {
-    width: 10px;
-    height: 10px;
-    margin-right: 2px;
-  }
-
-  html.is-mobile-device-viewport .card-bookmark-btn {
-    width: 21px;
-    height: 21px;
-    border-radius: 6px;
-  }
-
-  html.is-mobile-device-viewport .pagination {
-    margin-top: 24px;
-    gap: 8px;
-  }
-
-  html.is-mobile-device-viewport .page-btn {
-    width: 38px;
-    height: 38px;
-  }
-
-  html.is-mobile-device-viewport .pagination-ellipsis {
-    width: 18px;
-    height: 38px;
-  }
 }
+
+/* MOBILE_FALLBACKS_END */

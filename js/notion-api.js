@@ -9,11 +9,10 @@
       postEndpoint: "/api/post-data",
       pageSize: 9,
     };
-    // Stay above the server-side Notion request budget (NOTION_REQUEST_TIMEOUT_MS,
-    // default 12000ms) so a slow-but-successful upstream response is not aborted
-    // client-side and surfaced as a spurious failure. The server caches the
-    // result on completion, so even if this does fire a retry stays fast.
-    const REQUEST_TIMEOUT = 15000;
+    // Stay above the server's complete Notion operation budget (30s by default),
+    // not merely one upstream request, so valid multi-page/block traversals can
+    // finish and populate shared caches before the browser gives up.
+    const PUBLIC_CONTENT_REQUEST_TIMEOUT_MS = 35000;
     const POST_SUMMARY_CACHE_PREFIX = "notion_post_summary_";
     const POSTS_REQUEST_KEY_PREFIX = "notion_query_posts";
     const POST_REQUEST_KEY_PREFIX = "notion_page_";
@@ -33,10 +32,55 @@
     const POST_SUMMARY_SESSION_MAX_COVER_IMAGE_LENGTH = 320;
     const POST_SUMMARY_SESSION_MAX_IMAGE_SIGNATURE_LENGTH = 64;
     const POST_SUMMARY_SESSION_MAX_GRADIENT_LENGTH = 160;
-    const sharedContent = window.NotionContent;
-    const ALL_CATEGORY = sharedContent.ALL_CATEGORY;
-    const REMOTE_BLOG_CATEGORIES = sharedContent.getRemoteBlogCategories();
-    const fallbackCategoryColor = sharedContent.DEFAULT_CATEGORY_COLOR;
+    const CANONICAL_NOTION_POST_ID_PATTERN = /^[a-f0-9]{32}$/;
+    const FLEXIBLE_NOTION_POST_ID_PATTERN = /^(?:[a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i;
+
+    function createListingContentFacade() {
+      const contentShared = window.NotionContentShared;
+      const contentUtils = window.NotionContentUtils;
+      const contentUrl = window.NotionContentUrl;
+      const facade = {
+        ALL_CATEGORY: contentShared?.ALL_CATEGORY,
+        DEFAULT_CATEGORY_COLOR: contentShared?.DEFAULT_CATEGORY_COLOR,
+        escapeHtml: contentUtils?.escapeHtml,
+        getCategoryColor: contentShared?.getCategoryColor,
+        getRemoteBlogCategories: contentShared?.getRemoteBlogCategories,
+        gradientForCategory: contentShared?.gradientForCategory,
+        isLikelyEphemeralAssetUrl: contentUrl?.isLikelyEphemeralAssetUrl,
+        normalizeImageProxySignature: contentUrl?.normalizeImageProxySignature,
+        normalizeSearchText: contentUtils?.normalizeSearchText,
+        resolveDisplayImageUrl: contentUrl?.resolveDisplayImageUrl,
+      };
+      const requiredTypes = {
+        ALL_CATEGORY: "string",
+        DEFAULT_CATEGORY_COLOR: "object",
+        escapeHtml: "function",
+        getCategoryColor: "function",
+        getRemoteBlogCategories: "function",
+        gradientForCategory: "function",
+        isLikelyEphemeralAssetUrl: "function",
+        normalizeImageProxySignature: "function",
+        normalizeSearchText: "function",
+        resolveDisplayImageUrl: "function",
+      };
+      const missingHelpers = Object.entries(requiredTypes)
+        .filter(([name, type]) => typeof facade[name] !== type)
+        .map(([name]) => name);
+
+      if (missingHelpers.length > 0) {
+        throw new Error(
+          `notion-api.js listing dependencies missing or wrong type: ${missingHelpers.join(", ")}. `
+          + "Ensure notion-content-shared.js, notion-content-utils.js, and notion-content-url.js load first.",
+        );
+      }
+
+      return Object.freeze(facade);
+    }
+
+    const listingContent = createListingContentFacade();
+    const ALL_CATEGORY = listingContent.ALL_CATEGORY;
+    const REMOTE_BLOG_CATEGORIES = listingContent.getRemoteBlogCategories();
+    const fallbackCategoryColor = listingContent.DEFAULT_CATEGORY_COLOR;
     let categoryNavigationCache = normalizeCategoryList(REMOTE_BLOG_CATEGORIES);
     const categoryPresentationCache = new Map();
     const pendingRequests = new Map();
@@ -48,14 +92,14 @@
     const postSummaryMemoryCache = new Map();
     let lastPostSummaryCacheSweepAt = 0;
     let lastPostSummaryQuotaSweepAt = 0;
-    const escapeHtml = sharedContent.escapeHtml;
+    const escapeHtml = listingContent.escapeHtml;
 
     function normalizeSearchText(value) {
-      return sharedContent.normalizeSearchText(value);
+      return listingContent.normalizeSearchText(value);
     }
 
     function gradientForCategory(category) {
-      return sharedContent.gradientForCategory(category);
+      return listingContent.gradientForCategory(category);
     }
 
     function getCategoryColor(category) {
@@ -64,11 +108,22 @@
         return cached.categoryColor;
       }
 
-      return sharedContent.getCategoryColor(category);
+      return listingContent.getCategoryColor(category);
+    }
+
+    function getArticleRenderer(methodName) {
+      const articleContent = window.NotionContent;
+      const renderer = articleContent?.[methodName];
+      if (typeof renderer !== "function") {
+        throw new Error(
+          `notion-content.js must load before NotionAPI.${methodName}() can render article content`,
+        );
+      }
+      return renderer.bind(articleContent);
     }
 
     function renderBlocks(blocks) {
-      return sharedContent.renderBlocks(blocks, { baseOrigin: window.location.origin });
+      return getArticleRenderer("renderBlocks")(blocks, { baseOrigin: window.location.origin });
     }
 
     function normalizeCategoryColor(value) {
@@ -137,7 +192,7 @@
     }
 
     function renderPostArticle(post) {
-      return sharedContent.renderPostArticle(post, { baseOrigin: window.location.origin });
+      return getArticleRenderer("renderPostArticle")(post, { baseOrigin: window.location.origin });
     }
 
     function createRequestError(message, { status, notionCode, code, detail, retryAfter } = {}) {
@@ -158,6 +213,36 @@
         error.retryAfter = retryAfter;
       }
       return error;
+    }
+
+    function normalizePublicPostId(value) {
+      const siteNormalizer = window.SiteUtils?.normalizePostId;
+      if (typeof siteNormalizer === "function") {
+        try {
+          const normalized = siteNormalizer(value);
+          return typeof normalized === "string" && CANONICAL_NOTION_POST_ID_PATTERN.test(normalized)
+            ? normalized
+            : null;
+        } catch (error) {
+          return null;
+        }
+      }
+
+      if (typeof value !== "string") return null;
+      const normalized = value.trim();
+      return FLEXIBLE_NOTION_POST_ID_PATTERN.test(normalized)
+        ? normalized.replace(/-/g, "").toLowerCase()
+        : null;
+    }
+
+    function requirePublicPostId(value) {
+      const normalized = normalizePublicPostId(value);
+      if (normalized) return normalized;
+
+      throw createRequestError("Invalid public post id", {
+        status: 400,
+        code: "invalid_post_id",
+      });
     }
 
     function isPostSummaryCacheKey(key) {
@@ -306,13 +391,13 @@
     }
 
     function normalizeSessionCoverImage(coverImage) {
-      const safeImageUrl = sharedContent.resolveDisplayImageUrl(coverImage, window.location.origin);
+      const safeImageUrl = listingContent.resolveDisplayImageUrl(coverImage, window.location.origin);
 
       if (!safeImageUrl || safeImageUrl.length > POST_SUMMARY_SESSION_MAX_COVER_IMAGE_LENGTH) {
         return null;
       }
 
-      if (sharedContent.isLikelyEphemeralAssetUrl(safeImageUrl, window.location.origin)) {
+      if (listingContent.isLikelyEphemeralAssetUrl(safeImageUrl, window.location.origin)) {
         return null;
       }
 
@@ -334,7 +419,7 @@
         readTime: truncateText(summary.readTime, POST_SUMMARY_SESSION_MAX_READ_TIME_LENGTH),
         coverImage: normalizeSessionCoverImage(summary.coverImage),
         coverImageSignature: truncateText(
-          sharedContent.normalizeImageProxySignature(summary.coverImageSignature),
+          listingContent.normalizeImageProxySignature(summary.coverImageSignature),
           POST_SUMMARY_SESSION_MAX_IMAGE_SIGNATURE_LENGTH,
         ),
         coverEmoji: truncateText(summary.coverEmoji, 8, "📝"),
@@ -373,7 +458,8 @@
     }
 
     function normalizePostSummary(post) {
-      if (!post?.id) return null;
+      const id = normalizePublicPostId(post?.id);
+      if (!id) return null;
 
       const title = post.title || "Untitled";
       const excerpt = post.excerpt || "";
@@ -382,7 +468,7 @@
       const categoryColor = normalizeCategoryColor(post.categoryColor);
       const readTime = post.readTime || "";
       const coverImage = post.coverImage || null;
-      const coverImageSignature = sharedContent.normalizeImageProxySignature(
+      const coverImageSignature = listingContent.normalizeImageProxySignature(
         post.coverImageSignature,
       );
       const coverEmoji = post.coverEmoji || "📝";
@@ -391,7 +477,7 @@
       const tags = Array.isArray(post.tags) ? [...post.tags] : [];
 
       return {
-        id: post.id,
+        id,
         title,
         excerpt,
         category,
@@ -448,9 +534,10 @@
     }
 
     function getPostSummarySnapshot(pageId) {
-      if (!pageId) return null;
+      const normalizedPageId = normalizePublicPostId(pageId);
+      if (!normalizedPageId) return null;
 
-      const memoryEntry = postSummaryMemoryCache.get(pageId);
+      const memoryEntry = postSummaryMemoryCache.get(normalizedPageId);
       if (memoryEntry) {
         rememberPostSummaryInMemory(memoryEntry.summary, memoryEntry.timestamp);
         return {
@@ -460,7 +547,7 @@
         };
       }
 
-      const cached = readSessionCache(getPostSummaryCacheKey(pageId));
+      const cached = readSessionCache(getPostSummaryCacheKey(normalizedPageId));
       if (!cached) return null;
       const timestamp = Number(cached.timestamp);
       if (!Number.isFinite(timestamp)) return null;
@@ -482,26 +569,158 @@
       return snapshot.summary;
     }
 
-    function withPendingRequest(key, loader) {
-      if (pendingRequests.has(key)) {
-        return pendingRequests.get(key);
-      }
-
-      const pending = Promise.resolve()
-        .then(loader)
-        .finally(() => {
-          if (pendingRequests.get(key) === pending) {
-            pendingRequests.delete(key);
-          }
-        });
-
-      pendingRequests.set(key, pending);
-      return pending;
+    function createAbortError() {
+      const error = new Error("The operation was aborted");
+      error.name = "AbortError";
+      return error;
     }
 
-    async function requestJsonWithTimeout(url, init = {}) {
+    function throwIfAborted(signal) {
+      if (signal?.aborted) {
+        throw createAbortError();
+      }
+    }
+
+    function consumePendingRequest(entry, signal) {
+      try {
+        throwIfAborted(signal);
+      } catch (error) {
+        return Promise.reject(error);
+      }
+
+      entry.consumerCount += 1;
+      return new Promise((resolve, reject) => {
+        let didSettle = false;
+
+        const settle = (handler, value, wasAborted = false) => {
+          if (didSettle) return;
+          didSettle = true;
+          signal?.removeEventListener?.("abort", handleAbort);
+          entry.consumerCount = Math.max(0, entry.consumerCount - 1);
+          if (wasAborted && entry.consumerCount === 0 && !entry.didSettle) {
+            entry.controller.abort();
+          }
+          handler(value);
+        };
+
+        const handleAbort = () => settle(reject, createAbortError(), true);
+        signal?.addEventListener?.("abort", handleAbort, { once: true });
+        entry.promise.then(
+          (value) => settle(resolve, value),
+          (error) => settle(reject, error),
+        );
+      });
+    }
+
+    function withPendingRequest(key, loader, { signal } = {}) {
+      let entry = pendingRequests.get(key);
+      if (entry?.controller.signal.aborted && entry.consumerCount === 0) {
+        pendingRequests.delete(key);
+        entry = null;
+      }
+
+      if (!entry) {
+        const controller = new AbortController();
+        entry = {
+          controller,
+          consumerCount: 0,
+          didSettle: false,
+          promise: null,
+        };
+
+        const pending = Promise.resolve()
+          .then(() => loader(controller.signal))
+          .finally(() => {
+            entry.didSettle = true;
+            if (pendingRequests.get(key) === entry) {
+              pendingRequests.delete(key);
+            }
+          });
+        entry.promise = pending;
+        pendingRequests.set(key, entry);
+      }
+
+      return consumePendingRequest(entry, signal);
+    }
+
+    function normalizeRequestUrl(url) {
+      try {
+        const resolved = new URL(url, window.location.origin);
+        resolved.hash = "";
+        return resolved.href;
+      } catch (error) {
+        return "";
+      }
+    }
+
+    function takeBlogInitialData(requestUrl, signal) {
+      const bootstrap = window.PageBootstrap?.blogInitialData;
+      if (
+        !bootstrap ||
+        bootstrap.consumed ||
+        normalizeRequestUrl(bootstrap.requestUrl) !== normalizeRequestUrl(requestUrl)
+      ) {
+        return null;
+      }
+
+      bootstrap.consumed = true;
+      const bootstrapStartedAt = Number(bootstrap.startedAt);
+      const elapsedMs = Number.isFinite(bootstrapStartedAt)
+        ? Math.max(0, Date.now() - bootstrapStartedAt)
+        : 0;
+      const remainingMs = Math.max(0, PUBLIC_CONTENT_REQUEST_TIMEOUT_MS - elapsedMs);
+
+      return new Promise((resolve, reject) => {
+        let didSettle = false;
+        let timeoutId = null;
+
+        const settle = (handler, value) => {
+          if (didSettle) return;
+          didSettle = true;
+          clearTimeout(timeoutId);
+          signal?.removeEventListener?.("abort", handleAbort);
+          handler(value);
+        };
+        const handleAbort = () => {
+          bootstrap.controller?.abort?.();
+          settle(reject, createAbortError());
+        };
+
+        signal?.addEventListener?.("abort", handleAbort, { once: true });
+        if (signal?.aborted) {
+          handleAbort();
+          return;
+        }
+
+        timeoutId = setTimeout(() => {
+          settle(reject, createRequestError("Notion API request timed out", { status: 504 }));
+          bootstrap.controller?.abort?.();
+        }, remainingMs);
+
+        Promise.resolve(bootstrap.promise)
+          .then(async (payload) => {
+            if (payload && typeof payload.json === "function") {
+              return payload.json();
+            }
+            return payload;
+          })
+          .then(
+            (payload) => settle(resolve, payload),
+            (error) => settle(reject, error),
+          );
+      });
+    }
+
+    async function requestJsonWithTimeout(url, init = {}, { signal } = {}) {
+      throwIfAborted(signal);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+      let didTimeOut = false;
+      const handleCallerAbort = () => controller.abort();
+      signal?.addEventListener?.("abort", handleCallerAbort, { once: true });
+      const timeoutId = setTimeout(() => {
+        didTimeOut = true;
+        controller.abort();
+      }, PUBLIC_CONTENT_REQUEST_TIMEOUT_MS);
 
       try {
         const response = await fetch(url, {
@@ -510,7 +729,12 @@
         });
 
         if (!response.ok) {
-          const rawDetail = await response.text().catch(() => "");
+          let rawDetail = "";
+          try {
+            rawDetail = await response.text();
+          } catch (error) {
+            if (error?.name === "AbortError") throw error;
+          }
           let detail = rawDetail;
           let notionCode = "";
           let code = "";
@@ -552,14 +776,18 @@
         return await response.json();
       } catch (error) {
         if (error?.name === "AbortError") {
-          throw createRequestError("Notion API request timed out", {
-            status: 504,
-          });
+          if (didTimeOut) {
+            throw createRequestError("Notion API request timed out", {
+              status: 504,
+            });
+          }
+          throw createAbortError();
         }
 
         throw error;
       } finally {
         clearTimeout(timeoutId);
+        signal?.removeEventListener?.("abort", handleCallerAbort);
       }
     }
 
@@ -669,7 +897,8 @@
       }
     }
 
-    async function fetchPostsRemote(options) {
+    async function fetchPostsRemote(options, { signal } = {}) {
+      throwIfAborted(signal);
       const requestKey = buildPostsRequestKey(options);
       const cachedResponse = readCachedPostsResponse(requestKey);
       if (cachedResponse) {
@@ -678,34 +907,44 @@
         return cachedResponse;
       }
 
-      return withPendingRequest(requestKey, async () => {
+      return withPendingRequest(requestKey, async (requestSignal) => {
+        const requestUrl = `${CONFIG.postsEndpoint}${buildPostQueryString(options)}`;
+        const initialData = takeBlogInitialData(requestUrl, requestSignal);
         const mappedData = normalizePostQueryResult(
-          await requestJsonWithTimeout(`${CONFIG.postsEndpoint}${buildPostQueryString(options)}`),
+          await (initialData || requestJsonWithTimeout(requestUrl, {}, { signal: requestSignal })),
         );
 
         primePostSummaries(mappedData.results);
         cachePostsResponse(requestKey, mappedData);
         return clonePostQueryResult(mappedData);
-      });
+      }, { signal });
     }
 
-    async function liveQueryDatabase({ category, search, page = 1 }) {
-      return fetchPostsRemote({ category, search, page });
+    async function liveQueryDatabase({ category, search, page = 1 } = {}, requestOptions = {}) {
+      return fetchPostsRemote({ category, search, page }, requestOptions);
     }
 
-    async function fetchPageRemote(pageId) {
-      return withPendingRequest(`${POST_REQUEST_KEY_PREFIX}${pageId}`, async () => {
-        const mappedData = await requestJsonWithTimeout(
-          `${CONFIG.postEndpoint}?id=${encodeURIComponent(pageId)}`,
+    async function fetchPageRemote(pageId, { signal } = {}) {
+      throwIfAborted(signal);
+      const normalizedPageId = requirePublicPostId(pageId);
+      return withPendingRequest(`${POST_REQUEST_KEY_PREFIX}${normalizedPageId}`, async (requestSignal) => {
+        const responseData = await requestJsonWithTimeout(
+          `${CONFIG.postEndpoint}?id=${encodeURIComponent(normalizedPageId)}`,
+          {},
+          { signal: requestSignal },
         );
+        const mappedData = {
+          ...responseData,
+          id: normalizedPageId,
+        };
 
         storePostSummary(mappedData);
         return mappedData;
-      });
+      }, { signal });
     }
 
-    async function liveGetPage(pageId) {
-      return fetchPageRemote(pageId);
+    async function liveGetPage(pageId, requestOptions = {}) {
+      return fetchPageRemote(pageId, requestOptions);
     }
 
     return {
@@ -713,8 +952,8 @@
         ...category,
         categoryColor: category.categoryColor ? { ...category.categoryColor } : category.categoryColor,
       })),
-      queryPosts: (options = {}) => liveQueryDatabase(options),
-      getPost: (pageId) => liveGetPage(pageId),
+      queryPosts: (options = {}, requestOptions = {}) => liveQueryDatabase(options, requestOptions),
+      getPost: (pageId, requestOptions = {}) => liveGetPage(pageId, requestOptions),
       getPostSummary,
       renderPostArticle,
       renderBlocks,

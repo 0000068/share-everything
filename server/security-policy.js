@@ -5,13 +5,9 @@ const FRAME_ANCESTORS_DIRECTIVE = "frame-ancestors 'none'";
 const STYLE_SOURCES = [
   "'self'",
   "'unsafe-inline'",
-  "https://fonts.googleapis.com",
-  "https://fonts.googleapis.cn",
 ];
 const FONT_SOURCES = [
   "'self'",
-  "https://fonts.gstatic.com",
-  "https://fonts.gstatic.cn",
   "data:",
 ];
 const FRAME_SOURCES = [

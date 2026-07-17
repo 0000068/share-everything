@@ -182,6 +182,11 @@ export function runContentModuleChecks(context) {
     ),
   );
   assert.equal(coverThumbnailUrl.pathname, "/api/cover", "notion-content-url.js should route remote card covers through the cover endpoint");
+  assert.equal(
+    coverThumbnailUrl.searchParams.get("format"),
+    "webp",
+    "notion-content-url.js should use one explicit cover format so CDN keys do not vary by browser Accept headers",
+  );
   assert.equal(coverThumbnailUrl.searchParams.get("w"), "320", "notion-content-url.js should preserve the requested cover width");
   assert.equal(
     coverThumbnailUrl.searchParams.get("src"),
@@ -208,6 +213,11 @@ export function runContentModuleChecks(context) {
     "notion-content-url.js should include cover endpoint URLs and width descriptors in srcsets",
   );
   assert.equal(
+    coverThumbnailSrcSet.match(/format=webp/g)?.length,
+    3,
+    "notion-content-url.js should keep every responsive cover candidate on the same explicit format",
+  );
+  assert.equal(
     notionContentUrlHelpers.resolveEmbeddableUrl("https://vimeo.com/123456789/abcdef123", "https://example.com"),
     "https://player.vimeo.com/video/123456789?h=abcdef123",
     "notion-content-url.js should preserve Vimeo unlisted hash tokens on embed URLs",
@@ -219,6 +229,24 @@ export function runContentModuleChecks(context) {
   assert.equal(malformedImageBlock.type, "image", "notion-content.js should preserve malformed media block type");
   assert.equal(malformedImageBlock.url, "", "notion-content.js should fall back missing media URLs to an empty string");
   assert.equal(malformedImageBlock.captionHtml, "", "notion-content.js should tolerate malformed media captions without throwing");
+  const sizedImageBlock = notionContentHelpers.mapNotionBlock({
+    type: "image",
+    image: {
+      external: { url: "https://assets.example.com/sized.png" },
+      width: 800,
+      height: 600,
+    },
+  });
+  assert.equal(sizedImageBlock.width, 800, "notion-content.js should preserve valid image width metadata");
+  assert.equal(sizedImageBlock.height, 600, "notion-content.js should preserve valid image height metadata");
+  const sizedImageHtml = notionContentHelpers.renderBlocks([sizedImageBlock], {
+    baseOrigin: "https://example.com",
+  });
+  expectIncludes(
+    sizedImageHtml,
+    'width="800" height="600"',
+    "notion-content.js should emit intrinsic dimensions only when both source dimensions are known",
+  );
   const missingBlock = notionContentHelpers.mapNotionBlock(null);
   assert.equal(missingBlock.type, "unsupported", "notion-content.js should degrade missing blocks to unsupported placeholders");
   assert.equal(missingBlock.blockType, "unsupported", "notion-content.js should label missing blocks as unsupported");

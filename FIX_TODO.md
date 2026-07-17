@@ -1,12 +1,12 @@
 # 修复清单
 
-> 更新时间：2026-07-10（v8.5 图片代理与质量门禁加固）
+> 更新时间：2026-07-17（v8.6 性能、取消链路与发布门禁加固）
 
 ---
 
 ## 一、当前待修任务
 
-> 当前无活跃修复任务。下一轮审查产出新条目时填入此处。
+> v8.6 修复与本地发布级验证已在当前工作树完成，尚未提交、同步或部署。`npm.cmd test`、严格 7 场景 `verify:release`、全量/生产依赖审计、过期检查和 lockfile 干净安装均已通过；提交与远端同步仍是独立的用户授权动作，本节不构成已发布声明。
 
 ---
 
@@ -21,6 +21,22 @@
 
 ## 三、历史完成记录
 
+### v8.6 性能、取消链路与发布门禁加固（待发布，2026-07-17）
+
+- 移除外部 Google Fonts 与退役的 `font-loader.js`，改用本地系统字体栈；博客列表请求由无依赖 bootstrap 提前启动，HTML 对 blog/post 渲染链提供页面专属 modulepreload。
+- 静态 JS/CSS/assets 改用一年 immutable 缓存；`ASSET_VERSION` 加入基于实际发布内容的确定性 12 位指纹，内容变化但缓存键未更新时 smoke 必须失败。
+- SPA 导航拆分网络与页面准备 deadline：网络失败事务性保留旧 DOM/URL/SEO 并显示可访问重试；runtime 版本缺失/不一致、文档结构或 loader/init 准备失败只触发一次真实导航，避免跨部署资源混用。目标页面同版本 modulepreload 在 loader 前迁移；预取严格比较 URL origin、跳过当前页面，并将 `{ url, signal }` 传给页面加载器。
+- 浏览器列表/文章请求、服务端 Notion 操作与图片代理统一贯穿取消和总预算；公开文章成功响应启用短边缘缓存，失败仍为 `no-store`。
+- 移动兼容 CSS 与 modulepreload 生成区改用显式起止 marker，避免生成器误删区外手写内容；架构检查识别 `import(versioned(...))` 动态边。
+- smoke 增加 dotenv 尾注、共享请求引用计数取消、bootstrap 首次消费、本地服务器真实 HTTP、性能与 PWA 图标尺寸契约；视觉 fixture 覆盖真实博客卡片和完整文章的移动/桌面布局，并以有界语义就绪、卡片 reveal 完成状态和有限 CSS 动画/过渡收敛取代固定截图等待；严格模式下收敛超时会失败。
+- 浏览器列表/详情与早期 blog bootstrap 的总预算统一为 `35000ms`，明确高于服务端完整 Notion 操作默认 `30000ms`；避免合法的冷分页/递归读取在 15 秒处被客户端反复取消，且 smoke 锁定两端预算关系。
+- 博客依赖链移除正文渲染器；规范化文章 ID 贯穿路由、数据 URL、pending/session 缓存与书签；封面 URL 固定显式 `format→src→sig→w`，不再读取 `Accept` 或发送 `Vary: Accept`。
+- 书签签名元数据按 30 分钟独立刷新，失败/部分成功采用 5–60 秒有界退避、联网立即重试；跨标签页合并以较新的 `metadataRefreshedAt` 为准，旧响应不能覆盖新状态。
+- single-flight 仅在最后一个订阅者离开后取消，放弃请求的晚到结果不能覆盖新缓存/cooldown；同分类不同搜索复用分类基础页，未知分类在 Notion 查询前返回空集。
+- sitemap 复用统一请求生命周期；本地只读 API 保留 raw URL/断开事件，非 GET/HEAD 请求体仅流式 drain，不在方法拒绝前聚合到内存。
+- 粒子系统按宽度、省流量、reduced-motion、硬件与实测帧成本在关闭或 350/220/120 档间有界调整；视觉基线的 7 个场景共享单一清单，截图先验证动态效果再固定测试随机源和无限 CSS 动画相位，三样本最大两两差异超过 0.25% 即拒绝安装，并以 staging/backup/install/rollback 事务替换。
+- 本轮仅改变公开内容的传输、缓存与质量边界；专用 Notion 数据库仍按既定产品设计整体公开。
+
 ### v8.5 图片代理与质量门禁加固（2026-07-10）
 
 从生产边界重新审查远程图片链路，并把静态质量、模块边界和真实浏览器行为升级为可执行门禁。整个 Notion 数据库继续按产品设计公开；本轮限制的是图片代理能力，而不是内容公开范围。
@@ -31,7 +47,7 @@
 - `server/image-format.js` 依据真实文件签名识别 PNG、JPEG、GIF、WebP、AVIF/HEIF、BMP、TIFF、ICO；上游仅伪造 `Content-Type` 无法再得到可缓存的图片响应。
 - 图片成功头延迟到验证/转换完成后写入；所有失败响应统一为 `application/json; charset=utf-8 + no-store`，并清除残留的实体头和 `Vary`，修复错误 JSON 被标记成图片的真实线上缺陷。
 - `server/request-guard.js` 对原图代理与 Sharp 转换分别施加有界的每客户端固定窗口限流和单实例并发闸门，超限返回 `429` 或 `503`，避免未命中 CDN 时耗尽连接、内存或 CPU。
-- `/api/cover` 的 `Accept` 协商按相对质量值选择 AVIF/WebP/JPEG，精确 `q=0` 优先于通配符，完全不可接受时返回 `406`；显式 `format` 不再发送多余的 `Vary: Accept`。
+- `/api/cover` 在 v8.5 的历史实现中曾按 `Accept` 相对质量协商 AVIF/WebP/JPEG；该行为已由 v8.6 的显式必填 `format` 契约取代，当前响应不读取 `Accept`、不发送 `Vary: Accept`。
 
 **架构与代码质量**
 
@@ -39,7 +55,7 @@
 - 新增 ESLint 10 分层配置，分别建模浏览器脚本、CommonJS 服务与 ESM 工具；清理全部静态错误、无用变量、重复导入和历史测试死代码。
 - 新增 `scripts/architecture-check.mjs`，阻止生产模块循环依赖、浏览器层越界、server 反向依赖 API、API handler 互相依赖。
 - smoke suite 改为从真实聚焦模块组装测试能力，覆盖签名篡改、重复/额外 query、无密钥 fail-closed、真实格式嗅探、限流/并发、SSRF、JSON 错误 MIME 与完整 cover 协商。
-- GitHub Actions 保留 Node 22/24 快速门禁，并新增 Linux Chrome 严格结构契约；Windows 像素 baseline 继续由本地 `verify:release` 校验。工作流 token 权限收窄为只读、不保留 checkout 凭据，checkout v7.0.0 与 setup-node v6.4.0 按完整 SHA 固定。原 `B-3` 跨平台 CI 缺口已关闭。
+- GitHub Actions 在 Node 22.13.0 最低边界与 Node 24 运行快速门禁，并新增 Linux Chrome 严格结构契约；Windows 像素 baseline 继续由本地 `verify:release` 校验，严格模式缺失任一场景 baseline 会失败。工作流 token 权限收窄为只读、不保留 checkout 凭据，checkout v7.0.0 与 setup-node v6.4.0 按完整 SHA 固定。原 `B-3` 跨平台 CI 缺口已关闭。
 
 **版本与依赖**
 

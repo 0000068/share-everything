@@ -1,19 +1,28 @@
 import { notionBlockFixtures } from "./fixtures/notion-block-fixtures.mjs";
 import { runApiContractChecks } from "./smoke-check/api-contracts.mjs";
+import { runBookmarkRotationChecks } from "./smoke-check/bookmark-rotation.mjs";
 import { runBlogPageChecks } from "./smoke-check/blog-page.mjs";
 import { runImageProxyChecks } from "./smoke-check/image-proxy.mjs";
+import { runLocalServerIntegrationChecks } from "./smoke-check/local-server-integration.mjs";
 import { runMobileLayoutChecks } from "./smoke-check/mobile-layout.mjs";
 import { runContentModuleChecks } from "./smoke-check/content-modules.mjs";
 import { runNotionApiClientChecks } from "./smoke-check/notion-api-client.mjs";
+import { runPerformanceContractChecks } from "./smoke-check/performance-contract.mjs";
+import { runParticleRuntimeChecks } from "./smoke-check/particle-runtime.mjs";
 import { runPublicContentAndNotionChecks } from "./smoke-check/public-content-notion.mjs";
 import { runRoutingAndVercelChecks } from "./smoke-check/routing-vercel.mjs";
 import { runServerModuleChecks } from "./smoke-check/server-modules.mjs";
+import { runSpaRouterChecks } from "./smoke-check/spa-router.mjs";
+import { runToolingChecks } from "./smoke-check/tooling.mjs";
 import * as parse5ForSmokeCheck from "parse5";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { computeExpectedAssetVersion } from "./lib/asset-fingerprint.mjs";
+import { VISUAL_SCENARIO_NAMES } from "./lib/visual-scenarios.mjs";
 
 const smokeRequire = createRequire(import.meta.url);
 const { DEFAULT_SHARE_IMAGE_PATH: SHARED_DEFAULT_SHARE_IMAGE_PATH } =
@@ -48,8 +57,8 @@ import {
 [
   "js/common.js",
   "js/blog-page.js",
+  "js/blog-bootstrap.js",
   "js/bookmark.js",
-  "js/font-loader.js",
   "js/app.js",
   "js/index-page.js",
   "js/notion-content-shared.js",
@@ -67,12 +76,18 @@ import {
   "scripts/build-mobile-fallbacks.mjs",
   "scripts/architecture-check.mjs",
   "scripts/inject-site-meta.mjs",
+  "scripts/lib/asset-fingerprint.mjs",
   "scripts/lib/html-escape.mjs",
   "scripts/lib/html-rewriter.mjs",
   "scripts/lib/pixel-diff.mjs",
+  "scripts/lib/visual-scenarios.mjs",
+  "scripts/smoke-check/particle-runtime.mjs",
+  "scripts/smoke-check/bookmark-rotation.mjs",
   "scripts/release-check.mjs",
+  "scripts/stamp-asset-version.mjs",
   "scripts/visual-baselines/approve.mjs",
   "scripts/visual-baselines/generate.mjs",
+  "scripts/fixtures/local-server-lifecycle-probe.cjs",
   "api/cover.js",
   "api/notion.js",
   "api/image.js",
@@ -91,6 +106,7 @@ import {
   "server/notion-config.js",
   "server/category-navigation.js",
   "server/cache-store.js",
+  "server/canonical-query.js",
   "server/notion-client.js",
   "server/notion-schema.js",
   "server/public-policy.js",
@@ -162,6 +178,7 @@ const notionContentUrlJs = read("js/notion-content-url.js");
 const notionArticleRendererJs = read("js/notion-article-renderer.js");
 const notionContentJs = read("js/notion-content.js");
 const notionApiJs = read("js/notion-api.js");
+const blogBootstrapJs = read("js/blog-bootstrap.js");
 const postPageJs = read("js/post-page.js");
 const siteUtilsJs = read("js/site-utils.js");
 const smokeCheckSource = read("scripts/smoke-check.mjs");
@@ -171,11 +188,16 @@ const smokeCheckModuleSources = [
   read("scripts/smoke-check/content-modules.mjs"),
   read("scripts/smoke-check/harness.mjs"),
   read("scripts/smoke-check/image-proxy.mjs"),
+  read("scripts/smoke-check/local-server-integration.mjs"),
   read("scripts/smoke-check/mobile-layout.mjs"),
   read("scripts/smoke-check/notion-api-client.mjs"),
+  read("scripts/smoke-check/performance-contract.mjs"),
+  read("scripts/smoke-check/particle-runtime.mjs"),
   read("scripts/smoke-check/public-content-notion.mjs"),
   read("scripts/smoke-check/routing-vercel.mjs"),
   read("scripts/smoke-check/server-modules.mjs"),
+  read("scripts/smoke-check/spa-router.mjs"),
+  read("scripts/smoke-check/tooling.mjs"),
 ];
 const visualRegressionJs = read("scripts/visual-regression.mjs");
 const apiNotionJs = read("api/notion.js");
@@ -198,6 +220,7 @@ const serverBlockServiceJs = read("server/block-service.js");
 const serverPostServiceJs = read("server/post-service.js");
 const serverRenderServiceJs = read("server/render-service.js");
 const serverNotionJs = read("server/notion-server.js");
+await runToolingChecks({ assert });
 const notionContentSharedHelpers = loadCommonJsModule("js/notion-content-shared.js");
 const notionContentUtilsHelpers = loadCommonJsModule("js/notion-content-utils.js");
 const notionContentUrlHelpers = loadCommonJsModule("js/notion-content-url.js");
@@ -249,16 +272,22 @@ const appAssetVersionMatch = appJs.match(/const ASSET_VERSION = "([^"]+)";/);
 assert.ok(appAssetVersionMatch, "app.js should declare a literal ASSET_VERSION");
 const assetVersionValue = appAssetVersionMatch[1];
 assert.ok(
-  assetVersionValue.endsWith(`-${assetReleaseSuffix}`),
-  `asset version should end with -${assetReleaseSuffix} for package ${packageMetadata.version}`,
+  new RegExp(`^\\d{8}-${assetReleaseSuffix}-[a-f0-9]{12}$`).test(assetVersionValue),
+  `asset version should include the package release suffix and deterministic 12-hex fingerprint for ${packageMetadata.version}`,
+);
+const smokeRootDir = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
+assert.equal(
+  assetVersionValue,
+  computeExpectedAssetVersion(smokeRootDir, assetVersionValue),
+  "ASSET_VERSION fingerprint should match all shipped JS, CSS, assets, and manifest content",
 );
 const assetVersion = `v=${assetVersionValue}`;
 const defaultShareImagePath = SHARED_DEFAULT_SHARE_IMAGE_PATH;
 const mobileStarfieldAssetUrl = `/assets/mobile-home-starry-bg.svg?${assetVersion}`;
 assert.equal(
   (styleCss.match(new RegExp(escapeRegex(mobileStarfieldAssetUrl), "g")) || []).length,
-  2,
-  "mobile home starfield CSS URL should use the shared asset version in both mobile rendering paths",
+  1,
+  "mobile home starfield CSS URL should use one width-driven rule with the shared asset version",
 );
 expectNotIncludes(
   styleCss,
@@ -464,15 +493,29 @@ expectIncludes(postHtml, 'property="og:image"', "post.html should declare og:ima
 assert.equal(webManifest.name, configuredSiteName, "web manifest name should follow site.config.json siteName");
 assert.equal(webManifest.short_name, "Share", "web manifest should keep a compact launcher title");
 assert.equal(webManifest.display, "standalone", "web manifest should request standalone display without the browser address bar");
-assert.equal(webManifest.orientation, "portrait-primary", "web manifest should preserve the portrait-first mobile composition");
+assert.ok(!Object.prototype.hasOwnProperty.call(webManifest, "orientation"), "web manifest should allow installed apps to follow the user's device orientation");
 assert.equal(webManifest.background_color, "#0a0e1a", "web manifest background should match the mobile safe-area background");
 assert.equal(webManifest.theme_color, "#111528", "web manifest theme color should match the existing mobile browser chrome color");
-assert.deepEqual(webManifest.icons?.[0], {
-  src: "/favicon.png?v=4",
-  sizes: "256x256",
-  type: "image/png",
-  purpose: "any",
-}, "web manifest should use the approved compact PNG brand icon");
+assert.deepEqual(webManifest.icons, [
+  {
+    src: `/assets/icon-192.png?v=${assetVersionValue}`,
+    sizes: "192x192",
+    type: "image/png",
+    purpose: "any",
+  },
+  {
+    src: `/assets/icon-512.png?v=${assetVersionValue}`,
+    sizes: "512x512",
+    type: "image/png",
+    purpose: "any",
+  },
+  {
+    src: `/assets/icon-maskable-512.png?v=${assetVersionValue}`,
+    sizes: "512x512",
+    type: "image/png",
+    purpose: "maskable",
+  },
+], "web manifest should expose correctly versioned standard and maskable PWA icons");
 expectIncludes(localServerJs, '[".webmanifest", "application/manifest+json; charset=utf-8"]', "local dev server should serve the web manifest with the manifest MIME type");
 expectIncludes(injectSiteMetaJs, "upsertStandaloneMetadata", "metadata injection should keep standalone mobile tags in sync");
 expectIncludes(injectSiteMetaJs, "buildWebManifest", "metadata injection should keep the web manifest in sync with site config");
@@ -496,6 +539,7 @@ assert.ok(ogImageJpg.length <= 80 * 1024, "og-image.jpg should stay at or below 
 expectIncludes(indexHtml, 'id="heroSearchForm"', "index.html should expose a real search form");
 expectIncludes(indexHtml, 'action="/blog.html"', "index.html search should degrade to a real blog route");
 expectIncludes(indexHtml, 'method="get"', "index.html search should work without JavaScript");
+expectIncludes(indexHtml, 'maxlength="256"', "index.html should bound native search URLs to the public API contract");
 expectIncludes(postHtml, 'rel="canonical"', "post.html should declare a fallback canonical link");
 expectIncludes(postHtml, 'href="/blog.html"', "post.html should use root-relative blog links for canonical post routes");
 expectIncludes(postHtml, 'class="empty-state-helper"', "post.html should keep empty-state helper styling in CSS classes");
@@ -540,10 +584,9 @@ assert.equal(
   "static CSS/JS assets should not carry multiple cache-busting versions",
 );
 const expectedStaticContentSecurityPolicy = securityPolicyHelpers.buildStaticContentSecurityPolicy();
-expectIncludes(expectedStaticContentSecurityPolicy, "https://fonts.googleapis.com", "shared CSP should allow the global Google Fonts CSS endpoint");
-expectIncludes(expectedStaticContentSecurityPolicy, "https://fonts.googleapis.cn", "shared CSP should keep the China Google Fonts CSS endpoint allowed");
-expectIncludes(expectedStaticContentSecurityPolicy, "https://fonts.gstatic.com", "shared CSP should allow the global Google Fonts file endpoint");
-expectIncludes(expectedStaticContentSecurityPolicy, "https://fonts.gstatic.cn", "shared CSP should keep the China Google Fonts file endpoint allowed");
+expectIncludes(expectedStaticContentSecurityPolicy, "font-src 'self' data:", "shared CSP should keep fonts local or inline");
+expectNotIncludes(expectedStaticContentSecurityPolicy, "fonts.googleapis", "shared CSP should not retain external Google Fonts CSS hosts");
+expectNotIncludes(expectedStaticContentSecurityPolicy, "fonts.gstatic", "shared CSP should not retain external Google Fonts file hosts");
 expectIncludes(expectedStaticContentSecurityPolicy, "https://www.youtube.com", "shared CSP should allow YouTube embeds");
 expectIncludes(expectedStaticContentSecurityPolicy, "https://player.bilibili.com", "shared CSP should allow Bilibili embeds");
 expectIncludes(expectedStaticContentSecurityPolicy, "https://player.vimeo.com", "shared CSP should allow Vimeo embeds");
@@ -557,24 +600,27 @@ pageHtmlByLabel.forEach(([label, htmlSource]) => {
     expectedStaticContentSecurityPolicy,
     `${label} static CSP meta should match the shared security policy builder`,
   );
-  expectIncludes(htmlSource, 'rel="preconnect" href="https://fonts.googleapis.com"', `${label} should preconnect to the global Google Fonts CSS endpoint`);
-  expectIncludes(htmlSource, 'rel="preconnect" href="https://fonts.gstatic.com"', `${label} should preconnect to the global Google Fonts file endpoint`);
-  expectIncludes(htmlSource, 'rel="preconnect" href="https://fonts.googleapis.cn"', `${label} should keep the China Google Fonts CSS preconnect`);
-  expectIncludes(htmlSource, 'rel="preconnect" href="https://fonts.gstatic.cn"', `${label} should keep the China Google Fonts file preconnect`);
+  expectNotIncludes(htmlSource, "fonts.googleapis", `${label} should not block first paint on external font CSS`);
+  expectNotIncludes(htmlSource, "fonts.gstatic", `${label} should not fetch external font files`);
+  expectNotIncludes(htmlSource, "font-loader.js", `${label} should not load the retired font loader`);
 
   expectIncludes(
     htmlSource,
     `<script type="module" src="/js/app.js?${assetVersion}" data-spa-runtime></script>`,
-    `${label} should load the shared SPA runtime through one ES module entry`,
+    `${label} should load the shared SPA runtime through its ES module entry`,
   );
+  const expectedScriptCount = label === "blog.html" ? 2 : 1;
   assert.equal(
     Array.from(htmlSource.matchAll(/<script\b[^>]*\bsrc="\/js\//g)).length,
-    1,
-    `${label} should avoid HTML script-order dependencies by using the module entry`,
+    expectedScriptCount,
+    `${label} should expose only its intentional module entries`,
   );
 });
+assert.ok(
+  blogHtml.indexOf('data-blog-bootstrap') < blogHtml.indexOf('data-spa-runtime'),
+  "blog.html should start its dependency-free data bootstrap before the shared app entry",
+);
 const expectedAppStaticImports = [
-  "./font-loader.js",
   "./notion-content-shared.js",
   "./runtime-core.js",
   "./site-utils.js",
@@ -584,6 +630,7 @@ const expectedAppStaticImports = [
   "./spa-router.js",
 ];
 const expectedAppDynamicImports = [
+  "./blog-bootstrap.js",
   "./notion-content-utils.js",
   "./notion-content-url.js",
   "./notion-article-renderer.js",
@@ -612,7 +659,27 @@ appStaticImports.forEach(([, src, version]) => {
   assert.ok(expectedAppStaticImports.includes(src), `app.js should not statically import unexpected module ${src}`);
   assert.equal(version, assetVersionValue, `${src} static import should use the shared asset version`);
 });
-const expectedModulePreloadHrefs = expectedAppStaticImports.map((src) => `/js/${src.slice(2)}?${assetVersion}`);
+const sharedModulePreloadHrefs = expectedAppStaticImports.map((src) => `/js/${src.slice(2)}?${assetVersion}`);
+const pageModulePreloadPaths = {
+  "index.html": ["index-page.js"],
+  "blog.html": [
+    "blog-bootstrap.js",
+    "notion-content-utils.js",
+    "notion-content-url.js",
+    "notion-api.js",
+    "bookmark.js",
+    "blog-page.js",
+  ],
+  "post.html": [
+    "notion-content-utils.js",
+    "notion-content-url.js",
+    "notion-article-renderer.js",
+    "notion-content.js",
+    "notion-api.js",
+    "bookmark.js",
+    "post-page.js",
+  ],
+};
 pageHtmlByLabel.forEach(([label, htmlSource]) => {
   const modulePreloadHrefs = Array.from(
     htmlSource.matchAll(/<link\s+rel="modulepreload"\s+href="([^"]+)"\s*\/?>/g),
@@ -620,9 +687,20 @@ pageHtmlByLabel.forEach(([label, htmlSource]) => {
   );
   assert.deepEqual(
     modulePreloadHrefs,
-    expectedModulePreloadHrefs,
-    `${label} should modulepreload the app.js static import chain in dependency order`,
+    [
+      ...sharedModulePreloadHrefs,
+      ...pageModulePreloadPaths[label].map((filename) => `/js/${filename}?${assetVersion}`),
+    ],
+    `${label} should modulepreload its shared and page-specific dependency chains in order`,
   );
+  assert.equal((htmlSource.match(/SITE_MODULE_PRELOADS_START/g) || []).length, 1, `${label} should have one preload start marker`);
+  assert.equal((htmlSource.match(/SITE_MODULE_PRELOADS_END/g) || []).length, 1, `${label} should have one preload end marker`);
+});
+runPerformanceContractChecks({
+  assert,
+  pageHtmlByLabel,
+  rootDir: smokeRootDir,
+  sourceText: [indexHtml, blogHtml, postHtml, styleCss, blogPageCss, postPageCss, appJs].join("\n"),
 });
 const appDynamicImports = Array.from(
   appJs.matchAll(/import\(versioned\("(\.\/[^"]+\.js)"\)\)/g),
@@ -630,19 +708,35 @@ const appDynamicImports = Array.from(
 assert.equal(
   appDynamicImports.length,
   expectedAppDynamicImports.length,
-  "app.js should lazy-import each page-specific module exactly once through the shared loadPostRenderingChain helper",
+  "app.js should lazy-import each page-specific module exactly once across its route-specific dependency chains",
 );
 const dynamicImportSet = new Set(appDynamicImports.map(([, src]) => src));
 expectedAppDynamicImports.forEach((src) => {
   assert.ok(dynamicImportSet.has(src), `app.js should lazy-load ${src} through a page loader`);
 });
 expectIncludes(appJs, 'window.PageLoaders = pageLoaders', "app.js should expose page loaders so spa-router can lazy-load on navigation");
+expectIncludes(appJs, "async function loadBlogDataChain", "app.js should keep the blog listing dependency chain explicit");
 expectIncludes(appJs, "async function loadPostRenderingChain", "app.js should use a sequential loading helper to guarantee UMD dependency order");
+expectIncludes(appJs, "await primeBlogInitialData(context).catch(() => null)", "app.js should finish starting blog data before the listing chain can issue a fallback request");
+const blogLoaderSource = appJs.match(/blog:\s*async \(context = \{\}\) => \{([\s\S]*?)\n\s*\},\n\s*post:/)?.[1] || "";
+assert.match(blogLoaderSource, /await loadBlogDataChain\(\)/, "blog route should load only the lightweight listing chain");
+assert.doesNotMatch(blogLoaderSource, /loadPostRenderingChain/, "blog route should not load article rendering modules");
+const postLoaderSource = appJs.match(/post:\s*async \(\) => \{([\s\S]*?)\n\s*\},\n\s*\};/)?.[1] || "";
+assert.match(postLoaderSource, /await loadPostRenderingChain\(\)/, "post route should retain the complete article rendering chain");
 expectIncludes(appJs, "const ASSET_VERSION =", "app.js should declare a single asset version constant for dynamic imports");
 expectIncludes(appJs, "async function bootInitialPage", "app.js should keep initial page boot sequencing explicit");
 expectIncludes(appJs, "markInitialPageLoadFailure", "app.js should record initial page module load failures");
+expectIncludes(appJs, "window.NavigationFeedback?.show?.", "app.js should expose a visible retry when the initial page module fails");
+assert.ok(
+  appJs.indexOf("window.PageRuntime?.start?.();")
+    < appJs.indexOf("} catch (error) {", appJs.indexOf("async function bootInitialPage")),
+  "app.js should route initial PageRuntime init failures through its visible boot failure boundary",
+);
 expectNotIncludes(appJs, ".finally(() =>", "app.js should not start page runtime after a failed initial page module import");
 expectIncludes(spaRouterJs, "window.PageLoaders?.[targetPageId]", "spa-router should call the matching page loader on navigation");
+expectIncludes(spaRouterJs, "hasDocumentAssetVersionMismatch", "spa-router should reject cross-deployment DOM/runtime mixes");
+expectIncludes(spaRouterJs, "preloadDocumentModules", "spa-router should adopt fetched route modulepreloads before page preparation");
+expectIncludes(spaRouterJs, "isHashOnlyHistoryChange", "spa-router should preserve page-local hash history traversal");
 expectNotIncludes(spaRouterJs, "function ensureScript", "spa-router should drop the legacy ensureScript helper now that page modules are dynamic imports");
 expectNoMalformedClosingTags(indexHtml, "index.html should not contain malformed closing tags");
 expectNoMalformedClosingTags(blogHtml, "blog.html should not contain malformed closing tags");
@@ -658,6 +752,7 @@ expectIncludes(postHtml, `href="/css/post-page.css?${assetVersion}"`, "post.html
 expectNotIncludes(packageJson, '"dev:bg"', "package.json should keep local dev scripts simple");
 expectNotIncludes(readmeMd, "dev:bg", "README should not mention removed background dev scripts");
 expectIncludes(gitAttributes, "*.mjs text eol=lf", ".gitattributes should normalize .mjs files to LF");
+expectIncludes(gitAttributes, "*.webmanifest text eol=lf", ".gitattributes should keep fingerprinted web manifests reproducible across platforms");
 expectIncludes(gitIgnore, ".vscode/", ".gitignore should keep empty editor-local folders out of the repo");
 expectIncludes(gitIgnore, "node_modules/", ".gitignore should keep local dependency folders out of the repo");
 assert.ok(!styleCss.includes("\r\n"), "style.css should use LF line endings");
@@ -687,9 +782,9 @@ expectNotIncludes(blogHtml, 'style="font-size: 0.85rem;"', "blog.html should not
 expectNotIncludes(blogPageJs, 'style="font-size: 0.85rem;"', "blog page renderer should not duplicate empty-state hint typography inline");
 expectNotIncludes(postPageCss, "body[data-page=\"post\"] .fab-bookmark", "post-page CSS should not override bookmark visibility that JavaScript owns");
 expectNotIncludes(postPageCss, "display: none !important", "post-page CSS should avoid forcing bookmark controls against JavaScript state");
-expectIncludes(blogPageJs, "EAGER_COVER_IMAGE_COUNT = 3", "blog cards should prioritize the first visible cover images");
-expectIncludes(blogPageJs, "MOBILE_EAGER_COVER_IMAGE_COUNT = 1", "blog cards should reduce eager cover loading on real mobile devices");
-expectIncludes(blogPageJs, "MOBILE_PRELOAD_COVER_IMAGE_COUNT = 1", "blog cards should reduce image preloads on real mobile devices");
+expectIncludes(blogPageJs, "PRIORITY_COVER_IMAGE_COUNT = 1", "blog cards should preload at most one valid LCP cover candidate");
+expectIncludes(blogPageJs, "findIndex((post) => resolveSafeCoverImage(post))", "blog cards should select the first real cover rather than prioritizing placeholders");
+expectIncludes(blogPageJs, "renderCard(post, index === priorityCoverIndex)", "blog cards should give eager/high priority to exactly one real cover candidate");
 expectIncludes(blogPageJs, "mobileDeviceQuery.matches", "blog cards should gate mobile image policy through the shared mobile query");
 expectIncludes(blogPageJs, "resolveSafeCoverImage(post)", "blog cards should use display-safe cover URLs instead of share-image fallbacks");
 expectIncludes(blogPageJs, 'loading="${coverLoading}"', "blog cards should keep lazy loading off the first visible covers");
@@ -698,9 +793,11 @@ expectIncludes(blogPageJs, "preloadCoverImages(data.results)", "blog cards shoul
 expectIncludes(blogPageJs, 'data-blog-cover-preload', "blog cards should mark temporary cover preload links for cleanup");
 expectIncludes(blogPageJs, 'window.addEventListener?.("bookmarks:updated", handleBookmarksUpdated)', "blog page should listen for cross-tab bookmark updates");
 expectNotIncludes(blogPageJs, "@canonical-source", "blog page should not keep dead local copies of shared helper fallbacks");
-expectIncludes(blogPageJs, "const sanitizeCssColor = SHARED_CONTENT.sanitizeCssColorValue;", "blog page should call the shared CSS sanitizer directly");
-expectIncludes(blogPageJs, "const normalizeBookmarkSearchQuery = SHARED_CONTENT.normalizeSearchText;", "blog page should call the shared search normalizer directly");
-expectIncludes(blogPageJs, "const buildSharedPostSearchText = SHARED_CONTENT.buildPostSearchText;", "blog page should call the shared search text builder directly");
+expectIncludes(blogPageJs, "function createListingContentFacade()", "blog page should make its lightweight content dependencies explicit");
+expectIncludes(blogPageJs, "const sanitizeCssColor = LISTING_CONTENT.sanitizeCssColorValue;", "blog page should call the lightweight CSS sanitizer directly");
+expectIncludes(blogPageJs, "const normalizeBookmarkSearchQuery = LISTING_CONTENT.normalizeSearchText;", "blog page should call the lightweight search normalizer directly");
+expectIncludes(blogPageJs, "const buildSharedPostSearchText = LISTING_CONTENT.buildPostSearchText;", "blog page should call the lightweight search text builder directly");
+expectNotIncludes(blogPageJs, "window.NotionContent;", "blog page should not require the full article renderer at module initialization");
 expectIncludes(blogPageJs, "const parseBookmarkListingHash = siteUtils.parseBookmarkListingHash;", "blog page should rely on the shared bookmark hash parser");
 expectIncludes(blogPageJs, "const buildBookmarkListingUrl = siteUtils.buildBookmarkListingUrl;", "blog page should rely on the shared bookmark route builder");
 expectIncludes(blogPageJs, "PUBLIC_CATEGORY_QUERY_MAX_LENGTH = 128", "blog page should cap category query state to match the public API");
@@ -716,26 +813,38 @@ expectNotIncludes(blogPageCss, "border-bottom: 1px solid var(--glass-border);", 
 expectIncludes(blogPageCss, "z-index: 2;\n  border-radius: inherit;", "blog card link layer should stay above cover media");
 expectIncludes(blogPageCss, "pointer-events: none;\n}", "blog card cover media should not swallow clicks meant for the card link");
 expectIncludes(blogPageCss, "z-index: 3;\n  display: inline-flex;", "blog card bookmark button should stay above the card link layer");
-expectIncludes(commonJs, "DESKTOP_PARTICLE_COUNT = 350", "particle runtime should preserve the desktop particle density");
-expectNotIncludes(commonJs, "MOBILE_PARTICLE_COUNT", "particle runtime should not keep a mobile particle profile after disabling mobile particles");
-expectIncludes(commonJs, "const isMobile = isMobileParticleViewport();", "particle runtime should gate the mobile particle count from the shared real-mobile detector");
-expectIncludes(commonJs, "count: isMobile ? 0 : DESKTOP_PARTICLE_COUNT", "particle runtime should keep particles desktop-only");
-expectIncludes(commonJs, "siteUtils.isMobileDeviceViewport", "particle runtime should use the shared real-mobile gate before changing density");
-expectIncludes(commonJs, '(hover: none) and (pointer: coarse)', "particle fallback should avoid treating narrow desktop windows as mobile");
+expectIncludes(commonJs, 'Object.freeze({ name: "high", count: 350', "particle runtime should preserve the full desktop particle density");
+expectIncludes(commonJs, 'Object.freeze({ name: "balanced", count: 220', "particle runtime should provide a visually dense intermediate tier");
+expectIncludes(commonJs, 'Object.freeze({ name: "economy", count: 120', "particle runtime should provide a bounded low-cost tier");
+expectIncludes(commonJs, "siteUtils.isNarrowViewport", "particle runtime should gate work by available width rather than pointer type");
+expectNotIncludes(commonJs, "siteUtils.isMobileDeviceViewport", "particle runtime must not animate behind narrow fine-pointer layouts");
+expectIncludes(commonJs, "window.navigator?.connection?.saveData", "particle runtime should honor the data-saver preference");
+expectIncludes(commonJs, 'reason: disabledReason || (tierIndex > 0 ? "low-hardware"', "particle runtime should downgrade low-capability hardware");
+expectIncludes(commonJs, "recordParticleFrameCost", "particle runtime should adapt to sustained rendering cost");
+expectIncludes(commonJs, 'applyAdaptiveParticleTier(adaptiveParticleTierIndex + 1, "frame-pressure")', "particle runtime should progressively reduce work under frame pressure");
+expectIncludes(commonJs, 'getProfile: () => Object.freeze({ ...particleProfile })', "particle runtime should expose immutable diagnostics for browser checks");
 expectIncludes(commonJs, "bucketArrays[color] = [];", "particle buckets should grow densely instead of preallocating holey arrays");
 expectNotIncludes(commonJs, "bucketArrays[color] = Array(particleCount)", "particle buckets should not allocate holey arrays for every color");
-expectNotIncludes(commonJs, "function shouldReduceMotion", "particle runtime should not stop the old particle animation for reduced-motion settings");
+expectIncludes(commonJs, 'createMediaQueryList("(prefers-reduced-motion: reduce)")', "particle runtime should observe the operating-system motion preference");
+expectIncludes(commonJs, "bindReducedMotionChange(handleParticleContextChange)", "particle runtime should react when the motion preference changes");
+expectIncludes(commonJs, 'connection?.addEventListener?.("change", handleParticleContextChange)', "particle runtime should react when data-saver state changes");
 expectNotIncludes(commonJs, "shouldReduceMobileParticles", "particle runtime should avoid reduced-motion gates in the particle loop");
 expectNotIncludes(commonJs, "particlesPausedForScroll", "particle runtime should not keep mobile scroll-pause state after disabling mobile particles");
 expectNotIncludes(commonJs, "pauseMobileParticlesDuringScroll", "particle runtime should not attach mobile scroll particle work");
+runParticleRuntimeChecks();
 expectIncludes(siteUtilsJs, 'MOBILE_DEVICE_QUERY = "(max-width: 768px) and (hover: none) and (pointer: coarse)"', "site utils should centralize the real-mobile device query");
 expectIncludes(siteUtilsJs, 'MOBILE_DEVICE_CLASS = "is-mobile-device-viewport"', "site utils should expose a JS fallback class for mobile browsers with broken pointer media queries");
 expectIncludes(siteUtilsJs, "hasTouchInput", "site utils should fall back to touch capability for Brave/vivo mobile detection");
+expectIncludes(siteUtilsJs, 'createMediaQueryList("(any-pointer: fine)")', "legacy touch-event fallback should not misclassify a fine-pointer narrow viewport");
 expectIncludes(siteUtilsJs, "syncMobileDeviceViewportClass", "site utils should keep the mobile compatibility class in sync");
 expectIncludes(siteUtilsJs, "createMobileDeviceQueryList", "site utils should expose a reusable mobile media query helper");
-expectIncludes(styleCss, "@media (max-width: 768px) and (hover: none) and (pointer: coarse)", "shared mobile CSS should not affect narrow desktop windows");
-expectIncludes(blogPageCss, "@media (max-width: 768px) and (hover: none) and (pointer: coarse)", "blog mobile CSS should not affect narrow desktop windows");
-expectIncludes(postPageCss, "@media (max-width: 768px) and (hover: none) and (pointer: coarse)", "post mobile CSS should not affect narrow desktop windows");
+expectIncludes(siteUtilsJs, "isNarrowViewport,", "site utils should expose the geometry-only viewport gate");
+expectIncludes(styleCss, "@media (max-width: 768px) {", "shared structure should reflow for every narrow viewport");
+expectIncludes(styleCss, "@media (prefers-reduced-motion: reduce)", "shared CSS should provide a reduced-motion presentation contract");
+expectIncludes(blogPageCss, "@media (max-width: 768px) {", "blog structure should reflow for narrow fine-pointer and touch viewports alike");
+expectIncludes(postPageCss, "@media (max-width: 768px) {", "post structure should reflow for narrow fine-pointer and touch viewports alike");
+expectIncludes(blogPageCss, "@media (max-width: 768px) and (hover: none) and (pointer: coarse)", "blog touch-only effects should retain a capability gate");
+expectIncludes(postPageCss, "@media (max-width: 768px) and (hover: none) and (pointer: coarse)", "post touch-only effects should retain a capability gate");
 expectIncludes(styleCss, "color-scheme: dark;", "shared CSS should tell browsers to render native chrome in dark mode");
 expectIncludes(styleCss, "html {\n  background-color: var(--bg-base);", "shared CSS should paint the root canvas behind mobile browser safe areas");
 expectIncludes(styleCss, "user-select: auto;", "body text should remain selectable by default");
@@ -754,22 +863,35 @@ expectNotIncludes(styleCss, "radial-gradient(1px 1px at 18% 24%", "mobile blog/p
 expectIncludes(blogHtml, '<nav class="pagination" id="pagination" aria-label="文章分页"></nav>', "blog pagination should expose navigation semantics");
 expectIncludes(blogPageJs, 'aria-current="page"', "blog pagination should expose the current page to assistive technology");
 expectIncludes(styleCss, 'body[data-page="post"] .top-actions', "post mobile CSS should explicitly target the article dock");
-expectIncludes(styleCss, 'html.is-mobile-device-viewport body[data-page="post"] .top-actions', "post mobile dock should also hide when the JS mobile compatibility class is active");
-expectIncludes(blogPageCss, "html.is-mobile-device-viewport .blog-grid", "blog mobile grid should also apply through the JS mobile compatibility class");
-runMobileLayoutChecks({ assert, blogPageCss, styleCss });
-expectIncludes(postPageCss, 'html.is-mobile-device-viewport body[data-page="post"] .page-transition-wrapper', "post wrapper clamp should also apply through the JS mobile compatibility class");
-expectIncludes(postPageCss, "Generated mobile compatibility fallback", "post CSS should label the generated mobile fallback block");
+expectNotIncludes(styleCss, 'html.is-mobile-device-viewport body[data-page="post"] .top-actions', "generated pointer fallbacks must not own post structure");
+expectNotIncludes(blogPageCss, "html.is-mobile-device-viewport .blog-grid", "generated pointer fallbacks must not own blog grid reflow");
+runMobileLayoutChecks({ assert, blogPageCss, postPageCss, styleCss });
+expectNotIncludes(postPageCss, 'html.is-mobile-device-viewport body[data-page="post"] .page-transition-wrapper', "generated pointer fallbacks must not own post width clamps");
+expectIncludes(postPageCss, "MOBILE_FALLBACKS_START", "post CSS should start one explicit generated fallback range");
+expectIncludes(postPageCss, "MOBILE_FALLBACKS_END", "post CSS should close its generated fallback range");
 expectIncludes(styleCss, "display: none;", "post mobile dock should be hidden for clean reading");
 expectIncludes(postPageCss, 'body[data-page="post"] .page-transition-wrapper', "post mobile CSS should clamp article layout wrappers to the viewport");
 expectIncludes(postPageJs, "if (element === navBookmark)", "post page should keep the nav bookmark hidden so the floating fab is the sole entry point on every viewport");
 expectIncludes(styleCss, "@media (hover: none) and (pointer: coarse)", "cursor glow should be disabled only for touch-first pointers");
 expectNotIncludes(styleCss, "@media (hover: none), (pointer: coarse)", "cursor glow touch fallback should not use a broad OR media query");
-expectIncludes(styleCss, "@media (max-width: 768px) {\n  html.is-mobile-device-viewport", "shared CSS may add generated fallback refinements behind the mobile compatibility class");
-expectIncludes(styleCss, "@media (max-width: 540px) {\n  html.is-mobile-device-viewport", "shared CSS may add generated narrow fallback refinements behind the mobile compatibility class");
 expectNotIncludes(postPageJs, 'createMediaQueryList("(max-width: 768px)")', "post page should not treat narrow desktop windows as mobile");
 expectIncludes(blogPageCss, "opacity 0.3s ease", "blog cards should use shorter reveal transitions on mobile");
 expectIncludes(blogPageJs, 'window.scrollTo({ top: 0, behavior: "auto" });', "blog pagination should avoid smooth-scroll jank on mobile");
 expectIncludes(notionApiJs, "POSTS_RESPONSE_CACHE_TTL", "notion client should keep a short in-memory list cache for fast returns");
+const notionClientBudgetMatch = /PUBLIC_CONTENT_REQUEST_TIMEOUT_MS\s*=\s*([\d_]+)/.exec(notionApiJs);
+const bootstrapBudgetMatch = /PUBLIC_CONTENT_REQUEST_TIMEOUT_MS\s*=\s*([\d_]+)/.exec(blogBootstrapJs);
+const serverOperationBudgetMatch = /MAX_NOTION_OPERATION_TIMEOUT_MS\s*=\s*([\d_]+)/.exec(serverNotionClientJs);
+assert.ok(notionClientBudgetMatch, "notion client should declare its public-content request budget");
+assert.ok(bootstrapBudgetMatch, "blog bootstrap should declare its public-content request budget");
+assert.ok(serverOperationBudgetMatch, "server notion client should declare its maximum total operation budget");
+const notionClientBudgetMs = Number(notionClientBudgetMatch[1].replaceAll("_", ""));
+const bootstrapBudgetMs = Number(bootstrapBudgetMatch[1].replaceAll("_", ""));
+const serverOperationBudgetMs = Number(serverOperationBudgetMatch[1].replaceAll("_", ""));
+assert.equal(bootstrapBudgetMs, notionClientBudgetMs, "bootstrap and Notion client budgets should stay synchronized");
+assert.ok(
+  notionClientBudgetMs >= serverOperationBudgetMs + 5_000,
+  "browser public-content requests should outlive the complete server Notion operation budget",
+);
 expectIncludes(notionApiJs, "POST_SUMMARY_MEMORY_CACHE_LIMIT = 200", "notion client should bound browser-side post summary memory");
 expectIncludes(notionApiJs, "rememberPostSummaryInMemory", "notion client should centralize post summary memory LRU updates");
 expectIncludes(notionApiJs, "postSummaryMemoryCache.keys().next().value", "notion client should evict the oldest in-memory post summary");
@@ -791,8 +913,9 @@ expectIncludes(serverImageProxyJs, 'readPositiveIntegerEnv("IMAGE_PROXY_TIMEOUT_
 expectIncludes(serverImageProxyJs, 'readPositiveIntegerEnv("IMAGE_PROXY_MAX_BYTES", 8 * 1024 * 1024)', "image proxy size limit should be configurable while keeping its default");
 expectIncludes(serverImageProxyJs, 'readNonNegativeEnvInteger("IMAGE_PROXY_MAX_REDIRECTS", 4)', "image proxy redirect limit should be configurable while keeping its default");
 expectIncludes(packageJson, '"dev": "node scripts/local-server.mjs"', "package scripts should expose the local API-aware dev server");
-expectIncludes(localServerJs, "async function readRequestBody", "local dev server should read request bodies before invoking API handlers");
-expectIncludes(localServerJs, "body,", "local dev server should pass parsed body values to API handlers");
+expectNotIncludes(localServerJs, "async function readRequestBody", "read-only local APIs should never aggregate unsupported request bodies in memory");
+expectIncludes(localServerJs, "req.resume();", "local dev server should drain unsupported request bodies without buffering them");
+expectIncludes(localServerJs, "body: undefined", "local dev server should expose no body surface to read-only API handlers");
 expectIncludes(packageJson, '"notion:live-check": "node scripts/notion-live-check.mjs"', "package scripts should expose the optional live Notion integration check");
 expectIncludes(packageJson, '"mobile:fallbacks": "node scripts/build-mobile-fallbacks.mjs"', "package scripts should expose the mobile fallback generator");
 expectIncludes(packageJson, '"check": "npm run lint && npm run architecture:check && node scripts/build-mobile-fallbacks.mjs --check && node scripts/inject-site-meta.mjs --check && node scripts/smoke-check.mjs"', "package check should run static and architecture analysis before generated assets and smoke checks");
@@ -809,6 +932,8 @@ for (const cssFile of ["css/style.css", "css/blog-page.css", "css/post-page.css"
   );
 }
 expectIncludes(packageJson, '"visual:check": "node scripts/visual-regression.mjs"', "package scripts should expose the browser visual regression check");
+expectIncludes(packageJson, '"assets:stamp": "node scripts/stamp-asset-version.mjs"', "package scripts should expose deterministic asset stamping");
+expectIncludes(packageJson, '"assets:sync": "npm run mobile:fallbacks && npm run meta:inject && npm run assets:stamp"', "package scripts should expose the ordered generated-asset workflow");
 expectIncludes(packageJson, '"verify:release": "node scripts/release-check.mjs"', "package scripts should expose the strict release check");
 expectIncludes(packageJson, '"license": "MIT"', "package metadata should match the published README license");
 expectIncludes(releaseCheckJs, "Promise.all([", "release check should run smoke and strict visual checks in parallel");
@@ -821,16 +946,34 @@ expectNotIncludes(releaseCheckJs, "spawnSync", "release check should not seriali
 expectIncludes(releaseCheckWorkflowYml, "concurrency:", "release workflow should cancel stale runs for the same ref");
 expectIncludes(releaseCheckWorkflowYml, "cancel-in-progress: true", "release workflow should cancel in-progress stale runs");
 expectIncludes(releaseCheckWorkflowYml, "timeout-minutes: 10", "release workflow should bound CI runtime");
-expectIncludes(packageJson, '"node": ">=22"', "package engines should require an active LTS Node runtime");
+assert.equal(
+  packageMetadata.engines?.node,
+  "^22.13.0 || ^24.0.0",
+  "package engines should match the Node lines actually exercised by CI",
+);
+assert.equal(packageMetadata.packageManager, "npm@11.9.0", "package metadata should pin the npm release used for reproducible installs");
+assert.equal(packageMetadata.devDependencies?.postcss, "8.5.19", "PostCSS should stay on the audited exact patch release");
 assert.equal(
   typeof packageMetadata.dependencies?.sharp,
   "string",
   "package.json should keep sharp as a production dependency for cover thumbnail generation",
 );
-expectIncludes(readmeMd, "node-%3E%3D22", "README badge should advertise the supported Node engine floor");
-expectIncludes(readmeMd, "Node.js](https://nodejs.org/) ≥ 22", "README prerequisites should match package engines");
-expectIncludes(siteArchitectureMd, "Node 22/24 matrix", "architecture docs should describe the current release-check Node matrix");
-expectIncludes(releaseCheckWorkflowYml, "node-version: [22, 24]", "release workflow should test the supported Node engine range");
+expectIncludes(
+  readmeMd,
+  "node-22.13--22.x%20%7C%2024.x",
+  "README badge should advertise the supported Node engine ranges",
+);
+expectIncludes(
+  readmeMd,
+  "Node.js](https://nodejs.org/) 22.13.0–22.x，或 24.x",
+  "README prerequisites should match package engines",
+);
+expectIncludes(readmeMd, "npm.cmd ci", "README should document clean lockfile installation on Windows");
+expectIncludes(readmeMd, "npm ci", "README should document clean lockfile installation on macOS and Linux");
+expectIncludes(siteArchitectureMd, "exact Node 22.13.0 lower boundary and Node 24", "architecture docs should describe the current release-check Node matrix boundary");
+expectIncludes(releaseCheckWorkflowYml, 'node-version: ["22.13.0", 24]', "release workflow should test the exact Node 22 lower boundary and current Node 24 line");
+expectIncludes(releaseCheckWorkflowYml, 'NPM_VERSION: "11.9.0"', "release workflow should pin the declared npm toolchain version");
+expectIncludes(releaseCheckWorkflowYml, 'npm install --global "npm@$NPM_VERSION"', "release workflow should activate the pinned npm version before clean install");
 expectIncludes(releaseCheckWorkflowYml, "browser-contract:", "release workflow should include the cross-platform browser contract job");
 expectIncludes(releaseCheckWorkflowYml, 'VISUAL_SKIP_DIFF: "1"', "CI browser contract should avoid platform-specific pixel comparisons");
 expectIncludes(releaseCheckWorkflowYml, 'VISUAL_STRICT: "1"', "CI browser contract should fail closed when browser assertions cannot run");
@@ -858,6 +1001,10 @@ expectIncludes(dotenvHelperJs, "Object.prototype.hasOwnProperty.call(env, key)",
 expectIncludes(localServerJs, '["/api/cover", "../api/cover.js"]', "local server should expose the cover thumbnail handler");
 expectIncludes(localServerJs, '["/api/robots", "../api/robots.js"]', "local server should expose the dynamic robots handler");
 expectIncludes(localServerJs, "write(payload)", "local server response shim should support streaming API handlers");
+expectIncludes(localServerJs, "destroy()", "local server response shim should support aborting interrupted streamed responses");
+expectIncludes(localServerJs, "get writableEnded()", "local server response shim should expose native completion state to request lifecycles");
+expectIncludes(localServerJs, "get finished()", "local server response shim should expose the legacy native completion state");
+expectIncludes(localServerJs, "removeListener(eventName, listener)", "local server response shim should allow request lifecycles to detach close listeners");
 expectIncludes(localServerJs, "function getApiHandler", "local server should lazy-load API handlers by route");
 expectNotIncludes(localServerJs, '["/api/post", require("../api/post.js")]', "local server should not eager-load every API handler at startup");
 expectIncludes(localServerJs, "function isDeniedStaticPath", "local server should centralize static denylist checks");
@@ -872,13 +1019,71 @@ expectIncludes(visualRegressionJs, "desktop particles should remain animated", "
 expectIncludes(visualRegressionJs, "mobile home particles should be disabled", "visual regression should guard mobile home particle removal");
 expectIncludes(visualRegressionJs, "mobile blog bookmark button should compute to 21px width", "visual regression should guard mobile card bookmark sizing");
 expectIncludes(visualRegressionJs, "mobile post top dock should stay hidden", "visual regression should guard mobile article dock visibility");
+expectIncludes(visualRegressionJs, "checkFinePointerNarrowHomeReflow", "visual regression should exercise the 320 CSS px fine-pointer home-title contract");
+expectIncludes(visualRegressionJs, "fine-pointer 320px home title text must fit its content box", "fine-pointer browser coverage should fail when the home title is clipped");
+expectIncludes(visualRegressionJs, "checkFinePointerNarrowBlogReflow", "visual regression should exercise the 320 CSS px fine-pointer reflow contract");
+expectIncludes(visualRegressionJs, 'client.command("Emulation.setEmulatedMedia"', "fine-pointer browser coverage should emulate pointer media features explicitly");
+expectIncludes(visualRegressionJs, "fine-pointer 320px blog should not overflow the root viewport", "fine-pointer browser coverage should fail on horizontal clipping");
+expectIncludes(visualRegressionJs, "await scenario.afterCaptureCheck?.(client)", "structural browser checks should run without changing committed screenshot baselines");
+expectIncludes(visualRegressionJs, "waitForSemanticReadiness", "visual regression should poll semantic page readiness instead of sleeping after load");
+expectIncludes(visualRegressionJs, 'busy === "false"', "visual regression should wait for the blog grid to finish loading");
+expectIncludes(visualRegressionJs, "settledCardCount === 3", "visual regression should wait for representative blog card reveals to settle");
+expectIncludes(visualRegressionJs, 'blockCount >= 8', "visual regression should wait for complete representative post content");
+expectIncludes(visualRegressionJs, 'skeletonDisplay === "none"', "visual regression should wait for post skeleton completion");
+expectIncludes(visualRegressionJs, "document.getAnimations({ subtree: true })", "visual regression should inspect active CSS animations before capture");
+expectIncludes(visualRegressionJs, "animation instanceof CSSTransition", "visual regression should wait for finite CSS transitions as well as keyframe animations");
+expectIncludes(visualRegressionJs, "iterations !== Infinity", "visual regression should ignore infinite decorative CSS animations");
+expectIncludes(visualRegressionJs, "const FINITE_MOTION_TIMEOUT_MS = 4_000", "visual regression should bound finite CSS motion settling");
+expectIncludes(visualRegressionJs, "if (isStrictVisualMode()) throw new Error(message)", "strict visual mode should fail when finite CSS motion does not settle");
+expectNotIncludes(visualRegressionJs, "await sleep(900)", "visual regression should not rely on a fixed post-load delay");
+expectIncludes(visualRegressionJs, "Missing visual baseline:", "visual regression should identify missing pixel baselines explicitly");
+expectIncludes(visualRegressionJs, "throw markVisualRegressionFailure(new Error(message))", "strict visual mode should fail closed when a baseline is missing");
+expectIncludes(
+  read("scripts/visual-baselines/approve.mjs"),
+  'VISUAL_STRICT: "1"',
+  "visual baseline approval should require strict semantic browser capture",
+);
+expectIncludes(
+  read("scripts/visual-baselines/generate.mjs"),
+  'VISUAL_STRICT: "1"',
+  "visual baseline generation should require strict semantic browser capture",
+);
+expectIncludes(
+  read("scripts/visual-baselines/generate.mjs"),
+  "VISUAL_BASELINE_MAX_SAMPLE_DIFF_RATIO",
+  "visual baseline generation should reject non-convergent sample sets",
+);
+expectIncludes(
+  visualRegressionJs,
+  "Page.addScriptToEvaluateOnNewDocument",
+  "visual capture should seed nondeterministic runtime state before page scripts execute",
+);
+expectIncludes(
+  visualRegressionJs,
+  "stabilizeInfiniteCssMotion",
+  "visual capture should freeze infinite CSS motion only after behavior checks",
+);
+for (const scenarioName of VISUAL_SCENARIO_NAMES) {
+  assert.ok(
+    existsSync(path.join(smokeRootDir, "scripts/visual-baselines", `${scenarioName}.png`)),
+    `visual scenario ${scenarioName} should have a committed pixel baseline`,
+  );
+}
+expectIncludes(visualRegressionJs, 'client.command("Browser.close"', "visual regression should close Chrome through CDP before removing its profile");
+expectIncludes(visualRegressionJs, "removeTemporaryDirectory", "visual regression should retry transient Windows profile locks");
+expectIncludes(visualRegressionJs, "async function cleanupBrowserResources", "visual regression should centralize bounded process and profile cleanup");
+expectIncludes(visualRegressionJs, "async function stopWindowsBrowserProcesses", "Windows visual cleanup should terminate the spawned browser tree and profile-specific orphan processes");
+expectIncludes(visualRegressionJs, "Get-CimInstance Win32_Process", "Windows visual cleanup should identify orphan browsers by the unique temporary profile path");
+expectIncludes(visualRegressionJs, "catch (startupError)", "visual browser startup should own partial-startup failure cleanup");
+expectIncludes(visualRegressionJs, "await cleanupBrowserResources(child, profileDir)", "all visual browser paths should terminate the child before deleting its profile");
+expectIncludes(visualRegressionJs, "finally {\n    try {\n      await cleanupBrowserResources(child, profileDir);", "command-line screenshot failures and timeouts should always clean their browser profile");
 expectIncludes(readmeMd, `badge/version-${packageMetadata.version}`, "README badge should match package version");
 expectNotIncludes(readmeMd, "badge/version-4.7.0", "README badge should not keep stale release metadata");
 expectIncludes(readmeMd, "npm.cmd run visual:check", "README should document the browser visual regression check");
 expectIncludes(readmeMd, "VISUAL_STRICT=1", "README should document strict visual regression mode");
 expectIncludes(readmeMd, "npm test` 与 `npm.cmd run check` 等价", "README should document that npm test stays a fast smoke check");
 expectIncludes(readmeMd, "并行运行完整快速门禁和 `VISUAL_STRICT=1`", "README should document parallel strict release checks");
-expectIncludes(readmeMd, "GitHub Actions 除 Node 22/24 快速门禁与高危依赖公告审计外", "README should document the CI browser and dependency gates");
+expectIncludes(readmeMd, "GitHub Actions 在 Node 22.13.0 边界与 Node 24 上运行快速门禁和高危依赖公告审计", "README should document the CI browser and dependency gates");
 expectIncludes(readmeMd, "VISUAL_SKIP_DIFF=1", "README should distinguish the cross-platform browser contract from pixel baselines");
 expectNotIncludes(readmeMd, "GitHub Actions 当前只跑 `npm run check`", "README should not retain the resolved CI visual gap");
 expectIncludes(siteArchitectureMd, `> Version: ${releaseVersion}`, "architecture docs should match the next release commit");
@@ -943,16 +1148,27 @@ expectIncludes(localServerJs, "path.isAbsolute(relativePath)", "local dev server
 expectIncludes(localServerJs, "isMissingStaticFileError", "local dev server should distinguish missing static files from server errors");
 expectIncludes(localServerJs, "getErrorStatusCode", "local dev server should preserve API error status codes instead of converting everything to 404");
 expectIncludes(localServerJs, "statusCode >= 500", "local dev server should log unexpected local request failures");
+expectIncludes(localServerJs, "url: req.url", "local API request shims should preserve the raw URL for canonical validation");
+expectIncludes(localServerJs, "once: req.once.bind(req)", "local API request shims should forward disconnect listeners");
+expectIncludes(localServerJs, "removeListener: req.removeListener.bind(req)", "local API request shims should support lifecycle listener cleanup");
+expectIncludes(localServerJs, "return req.aborted", "local API request shims should expose the underlying aborted state");
+expectIncludes(
+  read("server/canonical-query.js"),
+  'typeof req?.url !== "string" || !req.url) return false',
+  "canonical query validation should fail closed when an adapter omits the raw URL",
+);
 expectNotIncludes(spaRouterJs, "script[src]:not([data-spa-runtime])", "SPA router should not scan HTML script tags now that page modules go through PageLoaders");
 expectIncludes(spaRouterJs, "StructuredData?.syncFromDocument", "SPA router should carry SSR JSON-LD into the active document during navigation");
 expectIncludes(spaRouterJs, "waitForRouteExitCue", "SPA router should preserve the v1.6-style route exit cue");
 expectIncludes(spaRouterJs, "ROUTE_EXIT_CUE_MS = 150", "SPA router should keep the old quick route exit pause");
-expectIncludes(spaRouterJs, "ROUTE_LOCAL_POST_FALLBACK_MS", "SPA router should quickly recover local post route stalls");
-expectIncludes(spaRouterJs, "ROUTE_STUCK_FALLBACK_MS", "SPA router should recover if a route transition gets stuck in the exit state");
-expectIncludes(spaRouterJs, "getNavigationFallbackUrl", "SPA router stuck fallback should use local-compatible post URLs");
+expectIncludes(spaRouterJs, "ROUTE_NETWORK_TIMEOUT_MS = 15000", "SPA router should give HTML transport its own bounded deadline");
+expectIncludes(spaRouterJs, "ROUTE_PREPARE_TIMEOUT_MS = 10000", "SPA router should give module/style preparation a separate bounded deadline");
+expectIncludes(spaRouterJs, "restoreCurrentPage(content, currentToken)", "SPA router deadline failures should restore the existing interactive page");
 expectIncludes(spaRouterJs, "pendingPageFetches", "SPA router should coalesce in-flight page HTML prefetch and navigation requests");
 expectIncludes(spaRouterJs, "MAX_PENDING_PAGE_FETCHES = 4", "SPA router should cap concurrent cacheable page fetches");
 expectIncludes(spaRouterJs, "pendingPageFetches.size >= MAX_PENDING_PAGE_FETCHES", "SPA router should skip new warm prefetches once pending fetches are saturated");
+expectIncludes(spaRouterJs, "function isSameOriginUrl(url)", "SPA warmup should compare parsed origins instead of URL prefixes");
+expectIncludes(spaRouterJs, "cacheKey === getPageCacheKey(activePageUrl)", "SPA warmup should skip the active page");
 expectIncludes(spaRouterJs, "buildPostTemplateFallbackUrl", "SPA router should recover post navigation when the local server lacks /posts rewrites");
 expectIncludes(spaRouterJs, "shouldUsePostTemplateFallbackFirst", "SPA router should prefer the static post template on local dev origins");
 expectIncludes(spaRouterJs, '"127.0.0.1"', "SPA router local post template preference should cover the bundled local server host");
@@ -965,8 +1181,11 @@ expectNotIncludes(spaRouterJs, "ROUTE_ENTER_CLASS", "SPA router should keep v1.6
 expectNotIncludes(styleCss, "spa-layer-rise", "style.css should not ship layered route-entry animation when using the v1.6-style transition");
 expectNotIncludes(blogPageCss, "spa-route-entering", "blog-page.css should not add layered route-entry animations over the v1.6-style transition");
 expectNotIncludes(postPageCss, "spa-route-entering", "post-page.css should not add layered route-entry animations over the v1.6-style transition");
-expectNotIncludes(styleCss, "prefers-reduced-motion: reduce", "CSS should not weaken the old route and ambient motion");
+expectIncludes(styleCss, "prefers-reduced-motion: reduce", "CSS should reduce ambient and route motion when the user requests it");
 expectIncludes(spaRouterJs, "pointerEvents = \"none\"", "SPA router should avoid interactions during route transitions");
+expectIncludes(spaRouterJs, "content.style.pointerEvents = \"\"", "SPA navigation recovery should restore interactions on the existing page");
+expectIncludes(spaRouterJs, "url: targetUrl.href,\n                signal: navigationController.signal", "SPA page loaders should receive the target URL and cancellation signal");
+expectNotIncludes(spaRouterJs, "window.location.href = getNavigationFallbackUrl", "SPA failures should keep the current page instead of forcing a second navigation");
 assert.ok(
   !spaRouterJs.includes("SHARED_RUNTIME_SCRIPT_NAMES"),
   "SPA router should not hardcode the shared runtime script list",
@@ -1028,8 +1247,30 @@ const siteUtilsHarness = loadBrowserScript("js/site-utils.js", {
 });
 assert.equal(
   siteUtilsHarness.window.SiteUtils.buildPostPath("post 1"),
-  "/posts/post%201",
-  "SiteUtils should centralize canonical post-path generation",
+  "/post.html",
+  "SiteUtils should reject invalid identifiers instead of generating ambiguous article routes",
+);
+const compactNotionPostId = "0123456789abcdef0123456789abcdef";
+const hyphenatedNotionPostId = "01234567-89ab-cdef-0123-456789abcdef";
+assert.equal(
+  siteUtilsHarness.window.SiteUtils.arePostIdsEquivalent(compactNotionPostId, hyphenatedNotionPostId),
+  true,
+  "SiteUtils should treat compact and hyphenated forms of the same Notion UUID as one post",
+);
+assert.equal(
+  siteUtilsHarness.window.SiteUtils.buildPostPath(hyphenatedNotionPostId.toUpperCase()),
+  `/posts/${compactNotionPostId}`,
+  "SiteUtils should generate one compact lowercase route for every valid Notion UUID spelling",
+);
+assert.equal(
+  siteUtilsHarness.window.SiteUtils.getPostIdFromUrl(`https://example.com/posts/${hyphenatedNotionPostId}`),
+  compactNotionPostId,
+  "SiteUtils should normalize legacy hyphenated routes before client requests and cache lookup",
+);
+assert.equal(
+  siteUtilsHarness.window.SiteUtils.getPostIdFromUrl(`https://example.com/posts/${compactNotionPostId}/extra`),
+  null,
+  "SiteUtils should not misclassify multi-segment paths as canonical post routes",
 );
 assert.equal(
   siteUtilsHarness.window.SiteUtils.getSiteName(),
@@ -1115,6 +1356,39 @@ const siteUtilsFallbackHarness = loadBrowserScript("js/site-utils.js", {
     referrer: "",
   },
 });
+const finePointerClassList = createClassList();
+const finePointerSiteUtilsHarness = loadBrowserScript("js/site-utils.js", {
+  window: {
+    location: new URL("https://example.com/"),
+    innerWidth: 320,
+    navigator: { maxTouchPoints: 0 },
+    ontouchstart: null,
+    matchMedia: (query) => ({
+      matches: query === "(pointer: fine)" || query === "(any-pointer: fine)",
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+    }),
+  },
+  document: {
+    referrer: "",
+    documentElement: {
+      clientWidth: 320,
+      classList: finePointerClassList,
+    },
+  },
+});
+assert.equal(
+  finePointerSiteUtilsHarness.window.SiteUtils.isMobileDeviceViewport(),
+  false,
+  "legacy ontouchstart exposure should not classify a fine-pointer 320px viewport as touch-first",
+);
+assert.equal(
+  finePointerClassList.contains("is-mobile-device-viewport"),
+  false,
+  "fine-pointer narrow viewports should not receive touch-only compatibility effects",
+);
 assert.equal(
   siteUtilsFallbackHarness.window.SiteUtils.sanitizeImageUrl("http://cdn.example.com/cover.png"),
   null,
@@ -1208,6 +1482,7 @@ assert.equal(
 );
 
 const routerReplaceCalls = [];
+const routerWarmFetches = [];
 const routerHarness = loadBrowserScript("js/spa-router.js", {
   window: {
     location: new URL("https://example.com/index.html"),
@@ -1222,7 +1497,12 @@ const routerHarness = loadBrowserScript("js/spa-router.js", {
       finish() {},
     },
     PageRuntime: {
-      getPageIdFromUrl: () => null,
+      getPageIdFromUrl(url) {
+        const pathname = new URL(url, "https://example.com/").pathname;
+        if (pathname === "/" || pathname === "/index.html") return "index";
+        if (pathname === "/blog.html") return "blog";
+        return null;
+      },
       initializePage: () => null,
       cleanupCurrentPage: () => {},
       register: () => {},
@@ -1245,6 +1525,14 @@ const routerHarness = loadBrowserScript("js/spa-router.js", {
     HTMLLinkElement: class {},
     DOMParser: class {},
   },
+  fetch: async (url, init) => {
+    routerWarmFetches.push({ url: String(url), init });
+    return {
+      ok: true,
+      status: 200,
+      text: async () => "<html></html>",
+    };
+  },
 });
 assert.equal(
   routerReplaceCalls.at(-1),
@@ -1256,6 +1544,129 @@ assert.equal(
   "function",
   "SPA router should expose a navigate() API",
 );
+assert.equal(
+  routerHarness.window.SPARouter.warmPage("https://example.com.evil.invalid/blog.html"),
+  false,
+  "SPA warmup should reject an external origin that merely shares the site URL prefix",
+);
+assert.equal(
+  routerHarness.window.SPARouter.warmPage("https://example.com/"),
+  false,
+  "SPA idle warmup should not request the active page",
+);
+assert.equal(routerWarmFetches.length, 0, "rejected SPA warmup candidates should not issue fetches");
+assert.equal(
+  routerHarness.window.SPARouter.warmPage("https://example.com/blog.html"),
+  true,
+  "SPA should warm a different same-origin cacheable page",
+);
+await Promise.resolve();
+await Promise.resolve();
+assert.equal(routerWarmFetches.length, 1, "accepted SPA warmup should issue one coalesced fetch");
+assert.equal(routerWarmFetches[0].init?.cache, "default", "SPA prefetch should allow the browser HTTP cache instead of forcing no-store");
+await runSpaRouterChecks({ assert, loadBrowserScript });
+
+let bootstrapTimeoutCallback = null;
+let bootstrapTimeoutCleared = false;
+const bootstrapWatchdogHarness = loadBrowserScript("js/blog-bootstrap.js", {
+  window: {
+    location: new URL("https://example.com/blog.html"),
+  },
+  document: {
+    body: { dataset: { page: "" } },
+  },
+  globals: {
+    setTimeout(callback, delay) {
+      assert.equal(delay, 35000, "blog bootstrap should outlive the complete 30 second server operation budget");
+      bootstrapTimeoutCallback = callback;
+      return 7;
+    },
+    clearTimeout(id) {
+      if (id === 7) bootstrapTimeoutCleared = true;
+    },
+  },
+  fetch: async (_url, init) => new Promise((_resolve, reject) => {
+    init.signal.addEventListener("abort", () => {
+      const error = new Error("bootstrap fetch aborted");
+      error.name = "AbortError";
+      reject(error);
+    }, { once: true });
+  }),
+});
+const watchedBootstrap = bootstrapWatchdogHarness.window.BlogBootstrap.ensure();
+assert.equal(typeof bootstrapTimeoutCallback, "function", "blog bootstrap should arm its watchdog immediately");
+bootstrapTimeoutCallback();
+await assert.rejects(
+  watchedBootstrap.promise,
+  (error) => error?.status === 504 && error?.name !== "AbortError",
+  "an unconsumed blog bootstrap deadline should surface as a stable 504",
+);
+assert.equal(watchedBootstrap.controller.signal.aborted, true, "blog bootstrap timeout should abort fetch");
+assert.equal(bootstrapTimeoutCleared, true, "blog bootstrap should clear its watchdog after settling");
+
+let externalBootstrapTimerCleared = false;
+let externalBootstrapFetchCount = 0;
+const externalBootstrapController = new AbortController();
+const externalBootstrapHarness = loadBrowserScript("js/blog-bootstrap.js", {
+  window: {
+    location: new URL("https://example.com/blog.html"),
+  },
+  document: {
+    body: { dataset: { page: "" } },
+  },
+  globals: {
+    setTimeout() {
+      return 8;
+    },
+    clearTimeout(id) {
+      if (id === 8) externalBootstrapTimerCleared = true;
+    },
+  },
+  fetch: async (_url, init) => {
+    externalBootstrapFetchCount += 1;
+    if (externalBootstrapFetchCount > 1) {
+      return {
+        ok: true,
+        json: async () => ({ results: [], categories: [], total: 0, totalPages: 1, currentPage: 1 }),
+      };
+    }
+    return new Promise((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => {
+        const error = new Error("caller aborted bootstrap");
+        error.name = "AbortError";
+        reject(error);
+      }, { once: true });
+    });
+  },
+});
+const externallyCancelledBootstrap = externalBootstrapHarness.window.BlogBootstrap.ensure(
+  undefined,
+  { signal: externalBootstrapController.signal },
+);
+externalBootstrapController.abort();
+await assert.rejects(
+  externallyCancelledBootstrap.promise,
+  (error) => error?.name === "AbortError" && !error?.status,
+  "external blog bootstrap cancellation should remain an AbortError",
+);
+assert.equal(
+  externallyCancelledBootstrap.controller.signal.aborted,
+  true,
+  "external cancellation should propagate to the blog bootstrap fetch",
+);
+assert.equal(externalBootstrapTimerCleared, true, "external cancellation should clear the bootstrap watchdog");
+const retriedBootstrap = externalBootstrapHarness.window.BlogBootstrap.ensure();
+assert.notEqual(
+  retriedBootstrap,
+  externallyCancelledBootstrap,
+  "a later navigation should not reuse an aborted bootstrap entry",
+);
+await retriedBootstrap.promise;
+assert.equal(
+  externalBootstrapFetchCount,
+  2,
+  "a later navigation should start a fresh bootstrap request after cancellation",
+);
 
 expectIncludes(runtimeCoreJs, 'application/ld+json', "runtime-core.js should own structured data script management");
 expectNotIncludes(runtimeCoreJs, "readStructuredDataNonce", "runtime-core.js should treat JSON-LD as a CSP-inert data block");
@@ -1264,11 +1675,14 @@ expectIncludes(runtimeCoreJs, "syncStructuredDataFromDocument", "runtime-core.js
 expectIncludes(runtimeCoreJs, "syncFromDocument", "runtime-core.js should expose structured-data document syncing");
 expectIncludes(runtimeCoreJs, "document.head?.appendChild(script)", "runtime-core.js should append missing JSON-LD data-block scripts");
 expectIncludes(runtimeCoreJs, "page-progress", "runtime-core.js should wire the shared page progress bar");
+expectIncludes(runtimeCoreJs, "const NavigationFeedback = (() => {", "runtime-core.js should own accessible navigation failure feedback");
+expectIncludes(runtimeCoreJs, 'root.setAttribute("role", "alert")', "navigation failure feedback should be announced immediately");
 expectIncludes(runtimeCoreJs, "focusSpaContent", "runtime-core.js should expose SPA focus management");
 expectIncludes(runtimeCoreJs, "cleanupTemporaryFocus", "runtime-core.js should clean up temporary SPA focus tabindex attributes");
 expectIncludes(runtimeCoreJs, 'removeAttribute("tabindex")', "runtime-core.js should remove managed tabindex after programmatic focus");
 expectIncludes(runtimeCoreJs, "const PageRuntime = (() => {", "runtime-core.js should own page module registration and cleanup");
 expectIncludes(runtimeCoreJs, "function start(pageId = getPageIdFromUrl(window.location.href))", "runtime-core.js should split page registration from initial startup");
+expectNotIncludes(runtimeCoreJs, "Page init error", "PageRuntime should propagate init failures instead of swallowing them");
 expectNotIncludes(runtimeCoreJs, "if (pageId === getPageIdFromUrl(window.location.href))", "PageRuntime.register should not initialize pages during module import");
 expectIncludes(appJs, "window.PageRuntime?.start?.();", "app.js should start the current page after all page modules register");
 expectIncludes(bookmarkJs, "parseSerializedTags", "bookmark fallback should recover serialized tags");
@@ -1276,14 +1690,17 @@ expectIncludes(bookmarkJs, "window.CSS.escape(String(value))", "bookmark selecto
 expectNotIncludes(bookmarkJs, "codeUnit.toString(16)", "bookmark selector escaping should not keep the deleted fallback implementation");
 expectIncludes(bookmarkJs, "createBookmarkEntry", "bookmark manager should centralize bookmark record creation");
 expectIncludes(bookmarkJs, "buildCardBookmarkSource", "bookmark manager should centralize DOM snapshot extraction");
-expectIncludes(bookmarkJs, "hydrateMissingMetadata", "bookmark manager should hydrate legacy metadata");
-expectIncludes(bookmarkJs, "BOOKMARK_METADATA_HYDRATION_GENERATION = 5", "bookmark metadata should re-hydrate when the persistence generation bumps");
-expectIncludes(bookmarkJs, 'BOOKMARK_SNAPSHOT_FIELD_SEPARATOR = "\\u0000"', "bookmark snapshot keys should use visible escaped separators");
+expectIncludes(bookmarkJs, "hydrateMissingMetadata", "bookmark manager should hydrate stale metadata");
+expectIncludes(bookmarkJs, "BOOKMARK_METADATA_HYDRATION_GENERATION = 6", "bookmark metadata should re-hydrate when the persistence generation bumps");
+expectIncludes(bookmarkJs, "BOOKMARK_METADATA_FRESHNESS_MS = 1000 * 60 * 30", "bookmark cover signatures should have a bounded freshness window");
+expectIncludes(bookmarkJs, "getDisplayEntries", "bookmark display reads should overlay current volatile cover metadata");
+expectIncludes(blogPageJs, "bookmarkManager.getDisplayEntries", "bookmark views should consume rotation-safe display entries");
+expectIncludes(bookmarkJs, "JSON.stringify(Array.isArray(entries) ? entries : [])", "bookmark snapshot keys should include normalized metadata, not only ids and timestamps");
 assert.ok(
   !Array.from(bookmarkJs).some((character) => [0, 1].includes(character.codePointAt(0))),
   "bookmark.js should not contain raw control-character bytes",
 );
-expectIncludes(bookmarkJs, "no migration logic", "bookmark metadata constant should document that it is a hydration trigger, not a schema version");
+expectIncludes(bookmarkJs, "same stale session summary", "bookmark freshness should document its coupling to the Notion summary TTL");
 expectIncludes(bookmarkJs, "resolveDisplayImageUrl", "bookmark normalization should preserve displayable cover images");
 expectIncludes(bookmarkJs, "coverPlaceholder?.dataset?.coverGradient", "bookmark DOM fallback should preserve card gradients");
 expectIncludes(bookmarkJs, "coverPlaceholder?.dataset?.coverEmoji", "bookmark DOM fallback should preserve card emojis");
@@ -1423,12 +1840,17 @@ const renderedImagePriorityHtml = normalizeHtml(notionContentHelpers.renderBlock
 expectIncludes(
   renderedImagePriorityHtml,
   'src="https://example.com/first.png" alt="First image" loading="eager" decoding="async" fetchpriority="high"',
-  "shared notion content module should prioritize the first article image for cover-like first paint",
+  "shared notion content module should prioritize the first article image without inventing an incorrect aspect ratio",
 );
 expectIncludes(
   renderedImagePriorityHtml,
   'src="https://example.com/second.png" alt="Second image" loading="lazy" decoding="async"',
-  "shared notion content module should keep later article images lazy",
+  "shared notion content module should keep later article images lazy without inventing dimensions",
+);
+expectNotIncludes(
+  renderedImagePriorityHtml,
+  'width="1600" height="900"',
+  "shared notion content module should not force unknown article images into a fake 16:9 intrinsic ratio",
 );
 const renderedEmbedHtml = normalizeHtml(notionContentHelpers.renderBlocks([{
   type: "resource",
@@ -1502,6 +1924,7 @@ const bookmarkManagerHarness = loadBrowserScript("js/bookmark.js", {
       resolveDisplayImageUrl: (value) => (typeof value === "string" && value.startsWith("https://") ? value : null),
       sanitizeImageUrl: () => null,
       sanitizeCoverBackground: (value) => value,
+      normalizeImageProxySignature: (value) => (typeof value === "string" ? value.trim() : ""),
     },
   },
 });
@@ -1524,8 +1947,12 @@ assert.equal(
 );
 assert.equal(
   bookmarkManagerHarness.window.BookmarkManager.getAll()[0]?.metadataVersion,
-  5,
+  6,
   "bookmark manager should persist the upgraded metadata version for new bookmarks",
+);
+assert.ok(
+  bookmarkManagerHarness.window.BookmarkManager.getAll()[0]?.metadataRefreshedAt > 0,
+  "bookmark manager should timestamp new bookmark metadata freshness separately from user ordering",
 );
 assert.equal(
   bookmarkUpdatedEvents.length,
@@ -1594,6 +2021,42 @@ assert.equal(
   true,
   "bookmark manager should refresh its cache before broadcasting cross-tab bookmark updates",
 );
+const metadataSyncTimestamp = 1_700_000_000_000;
+bookmarkStorageHandler?.({
+  key: "bookmarked_posts",
+  newValue: JSON.stringify([{
+    id: "storage-bookmark",
+    title: "Metadata before hydration",
+    metadataVersion: 5,
+    timestamp: metadataSyncTimestamp,
+    tags: ["Cross tab"],
+  }]),
+});
+await new Promise((resolve) => setTimeout(resolve, 130));
+const eventsBeforeMetadataOnlyUpdate = bookmarkUpdatedEvents.length;
+bookmarkStorageHandler?.({
+  key: "bookmarked_posts",
+  newValue: JSON.stringify([{
+    id: "storage-bookmark",
+    title: "Metadata after hydration",
+    metadataVersion: 5,
+    timestamp: metadataSyncTimestamp,
+    tags: ["Cross tab"],
+  }]),
+});
+await new Promise((resolve) => setTimeout(resolve, 130));
+assert.equal(
+  bookmarkUpdatedEvents.length,
+  eventsBeforeMetadataOnlyUpdate + 1,
+  "bookmark manager should broadcast cross-tab metadata updates even when ids and timestamps are unchanged",
+);
+assert.equal(
+  bookmarkUpdatedEvents.at(-1)?.detail?.bookmarks?.[0]?.title,
+  "Metadata after hydration",
+  "cross-tab metadata update events should carry the refreshed bookmark fields",
+);
+
+await runBookmarkRotationChecks();
 const renamedSchema = notionContentHelpers.resolveNotionContentSchema({
   properties: {
     Title: { id: "title", name: "Title", type: "title" },
@@ -1699,8 +2162,9 @@ assert.equal(
   "https://example.com/cover.png",
   "shared notion content helpers should preserve stable article images in structured data",
 );
+const structuredArticlePostId = "0123456789abcdef0123456789abcdef";
 const serverArticleStructuredData = serverNotionHelpers.buildArticleStructuredData({
-  id: "post-1",
+  id: structuredArticlePostId,
   title: "Structured article",
   excerpt: "Structured excerpt",
   category: "Tech",
@@ -1719,7 +2183,7 @@ assert.equal(
   "server notion structured data should preserve normalized article keywords",
 );
 assert.ok(
-  serverArticleStructuredData.mainEntityOfPage.endsWith("/posts/post-1"),
+  serverArticleStructuredData.mainEntityOfPage.endsWith(`/posts/${structuredArticlePostId}`),
   "server notion structured data should point at the canonical post route",
 );
 assert.equal(
@@ -1774,6 +2238,9 @@ await runBlogPageChecks({
   createJsonResponse,
   loadBrowserScript,
   notionContentHelpers,
+  notionContentSharedHelpers,
+  notionContentUrlHelpers,
+  notionContentUtilsHelpers,
   parseBookmarkListingHashMock,
   registeredPages,
   siteUtilsHarness,
@@ -1786,17 +2253,24 @@ await runNotionApiClientChecks({
   ephemeralCoverImage,
   loadBrowserScript,
   notionContentHelpers,
+  notionContentSharedHelpers,
+  notionContentUrlHelpers,
+  notionContentUtilsHelpers,
+  siteUtilsHarness,
 });
 expectIncludes(notionApiJs, "createRequestError", "notion client should preserve HTTP status metadata on failures");
 expectIncludes(notionApiJs, "error.status = Number(status);", "notion client should attach status codes to request errors");
 expectIncludes(notionApiJs, 'postsEndpoint: "/api/posts-data"', "notion client should load post listings from the semantic endpoint");
 expectIncludes(notionApiJs, 'postEndpoint: "/api/post-data"', "notion client should load post details from the restricted endpoint");
-expectIncludes(notionApiJs, "sharedContent.renderPostArticle", "notion client should reuse the shared article renderer instead of duplicating article markup");
+expectIncludes(notionApiJs, 'getArticleRenderer("renderPostArticle")', "notion client should resolve the shared article renderer only when article markup is requested");
 expectIncludes(notionApiJs, "POST_SUMMARY_CACHE_TTL", "notion client should keep a separate summary cache for bookmarks");
-expectIncludes(notionApiJs, "window.NotionContent", "notion client should reuse shared notion content helpers");
-expectIncludes(notionApiJs, "const sharedContent = window.NotionContent;", "notion client should require the shared content module loaded by app.js");
-expectIncludes(notionApiJs, "const escapeHtml = sharedContent.escapeHtml;", "notion client should use the shared HTML escaper directly");
-expectIncludes(notionApiJs, "return sharedContent.normalizeSearchText(value);", "notion client should use the shared search normalizer directly");
+expectIncludes(notionApiJs, "function createListingContentFacade()", "notion client should expose its lightweight listing dependencies explicitly");
+expectIncludes(notionApiJs, "window.NotionContentShared", "notion client listing helpers should come from the lightweight shared constants module");
+expectIncludes(notionApiJs, "window.NotionContentUtils", "notion client listing helpers should come from the lightweight utility module");
+expectIncludes(notionApiJs, "window.NotionContentUrl", "notion client image helpers should come from the lightweight URL module");
+expectIncludes(notionApiJs, "const articleContent = window.NotionContent;", "notion client should defer the full content module lookup until a render method is called");
+expectNotIncludes(notionApiJs, "const sharedContent = window.NotionContent;", "notion client initialization should not require the full article renderer");
+expectIncludes(notionApiJs, "const normalizedPageId = requirePublicPostId(pageId);", "notion client should canonicalize post ids before request deduplication");
 expectNotIncludes(notionApiJs, "@canonical-source", "notion client should not keep dead local copies of shared helper fallbacks");
 expectNotIncludes(notionApiJs, "FALLBACK_REMOTE_BLOG_CATEGORIES", "notion client should not keep duplicated category fallbacks");
 expectIncludes(notionApiJs, 'console.debug("Failed to persist Notion session cache:", error);', "notion client should surface session cache persistence failures for debugging");
@@ -1841,6 +2315,7 @@ expectNotIncludes(indexPageJs, "ctaHome.addEventListener", "index page should le
 expectNotIncludes(indexPageJs, "ctaStart.addEventListener", "index page should leave featured CTA navigation to the shared SPA router");
 expectNotIncludes(indexPageJs, "ctaWiki.addEventListener", "index page should leave bookmark CTA navigation to the shared SPA router");
 expectIncludes(indexPageJs, 'navigateTo(`/blog.html?search=${encodeURIComponent(query)}`);', "index page search navigation should use root-relative paths");
+expectIncludes(indexPageJs, ".trim().slice(0, PUBLIC_SEARCH_QUERY_MAX_LENGTH)", "index page should bound programmatic search URLs before SPA navigation");
 expectIncludes(postPageJs, 'window.StructuredData?.set?.("post-article"', "post page should publish article structured data");
 expectIncludes(postPageJs, "sharedContent.buildArticleStructuredData", "post page should reuse the shared article structured-data helper");
 expectIncludes(postPageJs, "siteUtils.getSiteName", "post page metadata should read the configured site name");
@@ -1896,13 +2371,14 @@ navBookmarkEl.querySelector = () => null;
 const postStatusEl = new FakeElement();
 const initialPostDataScriptEl = new FakeScriptElement();
 initialPostDataScriptEl.textContent = JSON.stringify({
-  id: "post-1",
+  id: hyphenatedNotionPostId,
   title: "SSR fallback title",
   excerpt: "SSR fallback excerpt",
   category: "Tech",
   date: "2026-04-17",
   readTime: "5 min",
   coverImage: null,
+  coverImageSignature: "a".repeat(43),
   coverEmoji: "馃摑",
   coverGradient: "linear-gradient(135deg, #111111, #222222)",
   tags: ["TypeScript"],
@@ -1910,7 +2386,7 @@ initialPostDataScriptEl.textContent = JSON.stringify({
 const fallbackWarnings = [];
 loadBrowserScript("js/post-page.js", {
   window: {
-    location: new URL("https://example.com/posts/post-1"),
+    location: new URL(`https://example.com/posts/${compactNotionPostId}`),
     addEventListener(type, handler) {
       if (type === "bookmarks:updated") {
         postBookmarkUpdateHandlers.add(handler);
@@ -1925,7 +2401,7 @@ loadBrowserScript("js/post-page.js", {
       isBookmarked: () => fallbackBookmarkState,
       toggle(post) {
         fallbackBookmarkToggleCount += 1;
-        if (post?.id !== "post-1") return null;
+        if (post?.id !== hyphenatedNotionPostId) return null;
         fallbackBookmarkState = !fallbackBookmarkState;
         return fallbackBookmarkState;
       },
@@ -1936,7 +2412,8 @@ loadBrowserScript("js/post-page.js", {
       },
     },
     SiteUtils: {
-      getPostIdFromUrl: () => "post-1",
+      arePostIdsEquivalent: siteUtilsHarness.window.SiteUtils.arePostIdsEquivalent,
+      getPostIdFromUrl: () => compactNotionPostId,
       normalizePostId: (value) => String(value || "").trim() || null,
       getPreferredBlogReturnUrl: () => "https://example.com/blog.html",
     },
@@ -2004,6 +2481,79 @@ assert.equal(
   0,
   "post page should remove cross-tab bookmark listeners during cleanup",
 );
+
+const abortablePostPages = new Map();
+const abortablePostSkeleton = new FakeElement();
+const abortablePostContent = new FakeElement();
+const abortablePostEmpty = new FakeElement();
+const abortablePostArticle = new FakeElement();
+const abortablePostFab = new FakeElement();
+const abortablePostBack = new FakeElement();
+const abortablePostStatus = new FakeElement();
+abortablePostArticle.querySelector = (selector) => (
+  selector === ".post-back" ? abortablePostBack : null
+);
+let postRequestSignal = null;
+const postLoadErrors = [];
+loadBrowserScript("js/post-page.js", {
+  window: {
+    location: new URL("https://example.com/posts/abortable-post"),
+    NotionContent: {},
+    NotionAPI: {
+      getPost(postId, { signal } = {}) {
+        assert.equal(postId, "abortable-post");
+        postRequestSignal = signal;
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener("abort", () => {
+            const error = new Error("post request aborted");
+            error.name = "AbortError";
+            reject(error);
+          }, { once: true });
+        });
+      },
+    },
+    PageRuntime: {
+      register(pageId, pageModule) {
+        abortablePostPages.set(pageId, pageModule);
+      },
+    },
+    SiteUtils: {
+      getPostIdFromUrl: () => "abortable-post",
+      normalizePostId: (value) => String(value || "").trim() || null,
+      getPreferredBlogReturnUrl: () => "https://example.com/blog.html",
+    },
+  },
+  document: {
+    getElementById(id) {
+      return {
+        postSkeleton: abortablePostSkeleton,
+        postContent: abortablePostContent,
+        postEmpty: abortablePostEmpty,
+        postArticle: abortablePostArticle,
+        fabBookmark: abortablePostFab,
+        postBack: abortablePostBack,
+        postStatus: abortablePostStatus,
+      }[id] || null;
+    },
+  },
+  globals: {
+    console: {
+      ...console,
+      error(...args) {
+        postLoadErrors.push(args);
+      },
+    },
+    HTMLScriptElement: FakeScriptElement,
+  },
+});
+const abortablePostCleanup = abortablePostPages.get("post")?.init?.();
+assert.equal(postRequestSignal?.aborted, false, "post page should pass a live AbortSignal to getPost");
+abortablePostCleanup?.();
+assert.equal(postRequestSignal?.aborted, true, "post page cleanup should abort its active detail request");
+await Promise.resolve();
+await Promise.resolve();
+assert.equal(postLoadErrors.length, 0, "post page should silently ignore expected AbortError cancellation");
+
 expectIncludes(apiPostJs, 'upsertStructuredDataScript(editor, "post-article"', "article HTML route should emit structured data through the shared template editor");
 expectIncludes(apiPostJs, 'id="initialPostData"', "article HTML route should emit initial post data");
 expectIncludes(apiPostJs, "buildUnavailableContent", "article HTML route should distinguish upstream failures from not-found routes");
@@ -2016,7 +2566,8 @@ expectIncludes(apiPostJs, "fetchPublicPost", "article HTML route should only ren
 expectIncludes(apiPostJs, "renderPostArticle(post, { renderedContent, baseOrigin })", "article HTML route should reuse the shared article-shell renderer for SSR");
 expectIncludes(apiPostJs, 'findElementById(editor.doc, "postContent")', "article HTML route should tolerate harmless postContent template attribute changes");
 expectIncludes(apiPostJs, "Falling back to article insertion", "article HTML route should fall back to article insertion when the postContent anchor changes");
-expectIncludes(apiPostJs, '"Cache-Control", "no-store"', "article HTML route should not cache public post responses");
+expectIncludes(apiPostJs, '"Cache-Control", POST_HTML_CACHE_CONTROL', "article HTML success should use the bounded public-post edge cache policy");
+expectIncludes(apiPostJs, 's-maxage=300, stale-while-revalidate=600', "article HTML cache lifetime should stay below transient Notion asset URL validity");
 expectIncludes(apiPostJs, "templatePromise = null;", "article HTML route should clear a failed production template read before retrying");
 expectIncludes(apiPostJs, "HEAD_META_BLOCK_START", "article HTML route should replace head metadata through explicit template anchors");
 expectIncludes(apiPostJs, "parseTemplate(html)", "article HTML route should parse the SSR template before dynamic replacements");
@@ -2077,6 +2628,7 @@ const initialPostPayload = apiPostHelpers.buildInitialPostPayload({
   date: "2026-04-11",
   readTime: "5 min",
   coverImage: "https://example.com/cover.png",
+  coverImageSignature: "b".repeat(43),
   coverEmoji: "棣冩憫",
   coverGradient: "linear-gradient(135deg, #111111, #222222)",
   tags: ["TypeScript"],
@@ -2086,6 +2638,11 @@ const initialPostPayload = apiPostHelpers.buildInitialPostPayload({
 assert.ok(
   !("content" in initialPostPayload) && !("renderedContent" in initialPostPayload),
   "article HTML route should keep the inline initial payload summary-only when SSR markup is already present",
+);
+assert.equal(
+  initialPostPayload.coverImageSignature,
+  "b".repeat(43),
+  "article HTML route should retain the server-issued cover signature in its hydration summary",
 );
 
 const structuredDataHtml = await apiPostHelpers.upsertStructuredDataScript("<head></head>", "post-article", {
@@ -2247,6 +2804,60 @@ const invalidPostRouteRes = createApiResponseRecorder();
 await apiPostHandler({ method: "GET", query: { id: "unsafe/post?debug=1" } }, invalidPostRouteRes);
 assert.equal(invalidPostRouteRes.statusCode, 404, "article HTML route should reject invalid public post ids before upstream rendering");
 assert.equal(invalidPostRouteRes.getHeader("cache-control"), "no-store", "article HTML route should keep invalid post ids non-cacheable");
+const nonCanonicalPostRouteRes = createApiResponseRecorder();
+await apiPostHandler({
+  method: "GET",
+  query: { id: "550E8400-E29B-41D4-A716-446655440000", tracking: "1" },
+}, nonCanonicalPostRouteRes);
+assert.equal(nonCanonicalPostRouteRes.statusCode, 308, "article HTML route should permanently redirect valid non-canonical ids");
+assert.equal(
+  nonCanonicalPostRouteRes.getHeader("location"),
+  "/posts/550e8400e29b41d4a716446655440000",
+  "article HTML redirects should collapse case, hyphens, and extra query keys to one route",
+);
+assert.equal(
+  nonCanonicalPostRouteRes.getHeader("cache-control"),
+  "public, max-age=86400, s-maxage=604800",
+  "canonical article redirects should be safely edge-cacheable",
+);
+const rawVariantPostRouteRes = createApiResponseRecorder();
+await apiPostHandler({
+  method: "GET",
+  url: "/api/post?id=550e8400e29b41d4a716446655440000&",
+  query: { id: "550e8400e29b41d4a716446655440000" },
+}, rawVariantPostRouteRes);
+assert.equal(rawVariantPostRouteRes.statusCode, 308, "article HTML route should reject raw query-string cache-key variants");
+assert.equal(
+  rawVariantPostRouteRes.getHeader("location"),
+  "/posts/550e8400e29b41d4a716446655440000",
+  "raw article query variants should redirect to the unique public route",
+);
+const legacyPostRouteRes = createApiResponseRecorder();
+await apiPostHandler({
+  method: "GET",
+  url: "/post.html?id=550e8400e29b41d4a716446655440000",
+  query: { id: "550e8400e29b41d4a716446655440000" },
+}, legacyPostRouteRes);
+assert.equal(legacyPostRouteRes.statusCode, 308, "legacy post.html detail URLs should redirect to the canonical article route");
+for (const url of [
+  "/posts/550e8400e29b41d4a716446655440000?",
+  "/posts/550e8400e29b41d4a716446655440000#fragment",
+]) {
+  const noisyCanonicalPathRes = createApiResponseRecorder();
+  await apiPostHandler({
+    method: "GET",
+    url,
+    query: { id: "550e8400e29b41d4a716446655440000" },
+  }, noisyCanonicalPathRes);
+  assert.equal(noisyCanonicalPathRes.statusCode, 308, `article route should reject raw path noise: ${url}`);
+}
+const duplicatePostRouteRes = createApiResponseRecorder();
+await apiPostHandler({
+  method: "GET",
+  query: { id: ["550e8400e29b41d4a716446655440000", "550e8400e29b41d4a716446655440000"] },
+}, duplicatePostRouteRes);
+assert.equal(duplicatePostRouteRes.statusCode, 404, "article HTML route should reject duplicate id query values");
+assert.equal(duplicatePostRouteRes.getHeader("cache-control"), "no-store", "duplicate article ids should not be cached");
 const headReadGuardRes = createApiResponseRecorder();
 assert.equal(
   publicContentHelpers.rejectUnsupportedReadMethod({ method: "HEAD" }, headReadGuardRes),
@@ -2259,7 +2870,8 @@ expectIncludes(apiPostsDataJs, "s-maxage=60", "post list endpoint should allow s
 expectIncludes(apiPostDataJs, "fetchPublicPost", "post data endpoint should only serve posts from the public blog set");
 expectIncludes(apiPostDataJs, "getPublicPostErrorStatus", "post data endpoint should reuse shared public-post error mapping");
 expectIncludes(apiPostDataJs, "readPublicPostId", "post data endpoint should validate route ids before loading public post details");
-expectIncludes(apiPostDataJs, '"Cache-Control", "no-store"', "post data endpoint should not cache public responses");
+expectIncludes(apiPostDataJs, '"Cache-Control", POST_DATA_CACHE_CONTROL', "post data success should use the bounded public-post edge cache policy");
+expectIncludes(apiPostDataJs, 's-maxage=300, stale-while-revalidate=600', "post data cache lifetime should stay below transient Notion asset URL validity");
 expectIncludes(apiPostJs, "readPublicPostId", "article HTML route should validate route ids before rendering public post details");
 expectIncludes(publicContentJs, "rejectUnsupportedReadMethod", "public content helper should centralize read-only method guards");
 expectIncludes(publicContentJs, "function readPublicPostId", "public content helper should centralize public post id validation");
@@ -2337,6 +2949,8 @@ await runRoutingAndVercelChecks({
   createApiResponseRecorder,
   expectIncludes,
   expectNotIncludes,
+  loadCommonJsModule,
   vercelJson,
 });
+await runLocalServerIntegrationChecks({ assert });
 console.log("Smoke check passed.");

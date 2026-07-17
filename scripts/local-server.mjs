@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadDotEnvFile } from "./lib/dotenv.mjs";
+import { getVisualApiFixture } from "./fixtures/visual-api-fixtures.mjs";
 
 const require = createRequire(import.meta.url);
 const rootDir = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
@@ -45,6 +46,12 @@ const apiHandlerSpecifiers = new Map([
   ["/api/sitemap", "../api/sitemap.js"],
 ]);
 const apiHandlers = new Map();
+if (process.env.LOCAL_SERVER_LIFECYCLE_PROBE === "1") {
+  apiHandlerSpecifiers.set(
+    "/api/__lifecycle-probe",
+    "./fixtures/local-server-lifecycle-probe.cjs",
+  );
+}
 const deniedStaticRootSegments = new Set(["api", "node_modules", "server", "scripts"]);
 
 function createHttpError(statusCode, message) {
@@ -121,6 +128,12 @@ function createApiResponse(res) {
     get headersSent() {
       return res.headersSent || didWriteHead;
     },
+    get writableEnded() {
+      return Boolean(res.writableEnded);
+    },
+    get finished() {
+      return Boolean(res.finished);
+    },
     setHeader,
     removeHeader,
     getHeader(name) {
@@ -151,6 +164,17 @@ function createApiResponse(res) {
       res.once(eventName, listener);
       return this;
     },
+    removeListener(eventName, listener) {
+      res.removeListener(eventName, listener);
+      return this;
+    },
+    listenerCount(eventName) {
+      return res.listenerCount(eventName);
+    },
+    destroy() {
+      writeHead();
+      res.destroy();
+    },
     end(payload = "") {
       writeHead();
       res.end(payload);
@@ -159,38 +183,26 @@ function createApiResponse(res) {
   };
 }
 
-async function readRequestBody(req) {
-  const chunks = [];
-  for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-  if (chunks.length === 0) return undefined;
-
-  const rawBody = Buffer.concat(chunks);
-  if (rawBody.length === 0) return undefined;
-
-  const textBody = rawBody.toString("utf8");
-  const contentType = String(req.headers["content-type"] || "");
-  if (contentType.includes("application/json")) {
-    try {
-      return JSON.parse(textBody);
-    } catch {
-      return textBody;
-    }
-  }
-  return textBody;
-}
-
 async function invokeApiHandler(handler, req, res, query = {}) {
-  const body = req.method === "GET" || req.method === "HEAD"
-    ? undefined
-    : await readRequestBody(req);
-  await handler({
+  // Every public API in this project is read-only (the legacy generic proxy is
+  // disabled). Never aggregate an unsupported request body before its method
+  // guard can return 405; drain it in streaming mode so memory stays bounded.
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    req.resume();
+  }
+  const handlerRequest = {
     method: req.method,
     headers: req.headers,
     query,
-    body,
-  }, createApiResponse(res));
+    body: undefined,
+    url: req.url,
+    once: req.once.bind(req),
+    removeListener: req.removeListener.bind(req),
+    get aborted() {
+      return req.aborted;
+    },
+  };
+  await handler(handlerRequest, createApiResponse(res));
 }
 
 function isDeniedStaticPath(relativePath) {
@@ -244,16 +256,45 @@ function isVisualStaticTemplateRoute(url) {
     && url.pathname.endsWith(".html");
 }
 
+function isVisualFixtureRequest(req) {
+  if (process.env.VISUAL_REGRESSION_STATIC_TEMPLATES !== "1") return false;
+  try {
+    const referer = new URL(String(req.headers.referer || ""));
+    return referer.protocol === "http:"
+      && referer.host === String(req.headers.host || "")
+      && referer.pathname.startsWith("/__visual/");
+  } catch {
+    return false;
+  }
+}
+
+function serveVisualApiFixture(req, url, res) {
+  if (!isVisualFixtureRequest(req)) return false;
+  const payload = getVisualApiFixture(url);
+  if (!payload) return false;
+  const body = JSON.stringify(payload);
+  res.writeHead(200, {
+    "Cache-Control": "no-store",
+    "Content-Length": Buffer.byteLength(body),
+    "Content-Type": "application/json; charset=utf-8",
+  });
+  res.end(body);
+  return true;
+}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${host}:${port}`);
 
   try {
+    if (serveVisualApiFixture(req, url, res)) {
+      return;
+    }
     if (isVisualStaticTemplateRoute(url)) {
       await serveStatic(new URL(url.pathname.slice("/__visual".length), `http://${host}:${port}`), res);
       return;
     }
 
-    const postMatch = url.pathname.match(/^\/posts\/([^/?#]+)/);
+    const postMatch = url.pathname.match(/^\/posts\/([^/?#]+)\/?$/);
     if (postMatch) {
       let postId;
       try {
@@ -261,8 +302,12 @@ const server = createServer(async (req, res) => {
       } catch {
         throw createHttpError(400, "Invalid post URL encoding");
       }
+      const routeQuery = readQuery(url);
+      const hadQueryId = Object.prototype.hasOwnProperty.call(routeQuery, "id");
       await invokeApiHandler(getApiHandler("/api/post"), req, res, {
+        ...routeQuery,
         id: postId,
+        ...(hadQueryId ? { __requestQueryId: routeQuery.id } : {}),
       });
       return;
     }

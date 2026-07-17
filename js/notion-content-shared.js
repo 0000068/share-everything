@@ -56,6 +56,18 @@
     border: "rgba(0, 229, 255, 0.2)",
   });
   const DEFAULT_COVER_GRADIENT = "linear-gradient(135deg, #1a1a2e, #16213e)";
+  const CALENDAR_ICON_SVG =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    + '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>'
+    + '<line x1="16" y1="2" x2="16" y2="6"></line>'
+    + '<line x1="8" y1="2" x2="8" y2="6"></line>'
+    + '<line x1="3" y1="10" x2="21" y2="10"></line>'
+    + "</svg>";
+  const CLOCK_ICON_SVG =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    + '<circle cx="12" cy="12" r="10"></circle>'
+    + '<polyline points="12 6 12 12 16 14"></polyline>'
+    + "</svg>";
 
   function getRemoteBlogCategories() {
     return REMOTE_BLOG_CATEGORIES.slice();
@@ -81,8 +93,10 @@
     ALL_CATEGORY,
     BOOKMARK_CATEGORY,
     BOOKMARK_ONLY_CATEGORIES,
+    CALENDAR_ICON_SVG,
     CATEGORY_COLORS,
     CATEGORY_GRADIENTS,
+    CLOCK_ICON_SVG,
     DEFAULT_CATEGORY_COLOR,
     DEFAULT_COVER_GRADIENT,
     DEFAULT_SHARE_IMAGE_PATH,

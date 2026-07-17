@@ -7,8 +7,8 @@
   --glass-border: rgba(255, 255, 255, 0.08);
   --glass-border-hover: rgba(255, 255, 255, 0.15);
   --text-primary: rgba(255, 255, 255, 0.92);
-  --text-secondary: rgba(255, 255, 255, 0.55);
-  --text-tertiary: rgba(255, 255, 255, 0.35);
+  --text-secondary: rgba(255, 255, 255, 0.72);
+  --text-tertiary: rgba(255, 255, 255, 0.58);
   --accent-cyan: #00e5ff;
   --accent-purple: #d500f9;
   --accent-blue: #2979ff;
@@ -51,9 +51,12 @@ html {
 
 body {
   font-family:
-    "Inter",
+    system-ui,
     -apple-system,
     BlinkMacSystemFont,
+    "Segoe UI",
+    "Noto Sans SC",
+    "Microsoft YaHei",
     sans-serif;
   background-color: var(--bg-base);
   color: var(--text-primary);
@@ -116,6 +119,54 @@ button,
 
 .page-progress.is-complete .page-progress-bar {
   opacity: 0;
+}
+
+.navigation-feedback {
+  position: fixed;
+  left: 50%;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  z-index: 240;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(calc(100vw - 32px), 560px);
+  padding: 14px 16px;
+  border: 1px solid rgba(137, 224, 255, 0.28);
+  border-radius: 16px;
+  background: rgba(13, 20, 39, 0.96);
+  color: var(--text-primary);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
+  transform: translateX(-50%);
+}
+
+.navigation-feedback[hidden] {
+  display: none;
+}
+
+.navigation-feedback-message {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.navigation-feedback-action {
+  flex: 0 0 auto;
+  min-width: 64px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid var(--accent-cyan);
+  border-radius: 999px;
+  background: var(--accent-cyan-bg);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.navigation-feedback-action:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 3px;
 }
 
 .visually-hidden {
@@ -375,8 +426,12 @@ body.has-cursor-glow .cursor-glow {
 
 .hero-title {
   font-family:
-    "Google Sans",
+    system-ui,
     -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Noto Sans SC",
+    "Microsoft YaHei",
     sans-serif;
   font-size: clamp(3.5rem, 8vw, 7rem);
   font-weight: 700;
@@ -581,7 +636,7 @@ body.has-cursor-glow .cursor-glow {
 
 .hero-search input {
   width: 100%;
-  padding: 14px 48px 14px 20px;
+  padding: 14px 60px 14px 20px;
   border: 1px solid var(--glass-border);
   border-radius: 100px;
   background: var(--glass-bg);
@@ -608,14 +663,14 @@ body.has-cursor-glow .cursor-glow {
 
 .hero-search .search-icon {
   position: absolute;
-  right: 16px;
+  right: 5px;
   top: 50%;
   transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border: none;
   background: transparent;
@@ -627,8 +682,8 @@ body.has-cursor-glow .cursor-glow {
 }
 
 .hero-search .search-icon svg {
-  width: 100%;
-  height: 100%;
+  width: 18px;
+  height: 18px;
 }
 
 .hero-search input:focus-visible ~ .search-icon,
@@ -664,7 +719,7 @@ body.has-cursor-glow .cursor-glow {
 }
 
 /* ===== Responsive ===== */
-@media (max-width: 768px) and (hover: none) and (pointer: coarse) {
+@media (max-width: 768px) {
   html {
     background-color: #0a0e1a;
   }
@@ -675,7 +730,7 @@ body.has-cursor-glow .cursor-glow {
 
   .ambient-background {
     background-color: #0b1021;
-    background-image: url("/assets/mobile-home-starry-bg.svg?v=20260710-v85");
+    background-image: url("/assets/mobile-home-starry-bg.svg?v=20260717-v86-2a8e2e463e9a");
     background-position: center top;
     background-repeat: no-repeat;
     background-size: cover;
@@ -763,8 +818,8 @@ body.has-cursor-glow .cursor-glow {
   }
 
   .hero-search input {
-    min-height: 32px;
-    padding: 8px 34px 8px 16px;
+    min-height: 44px;
+    padding: 10px 58px 10px 16px;
     border-radius: 999px;
     font-size: 0.72rem;
   }
@@ -777,9 +832,9 @@ body.has-cursor-glow .cursor-glow {
   }
 
   .hero-search .search-icon {
-    right: 14px;
-    width: 13px;
-    height: 13px;
+    right: 5px;
+    width: 44px;
+    height: 44px;
   }
 
   .hero-cta-group {
@@ -805,10 +860,6 @@ body.has-cursor-glow .cursor-glow {
   .hero-cta-group .btn svg {
     width: 14px;
     height: 14px;
-  }
-
-  .btn-tooltip {
-    display: none;
   }
 
 }
@@ -840,7 +891,7 @@ body.has-cursor-glow .cursor-glow {
 }
 
 
-@media (max-width: 768px) and (hover: none) and (pointer: coarse) {
+@media (max-width: 768px) {
   body[data-page="blog"] .top-actions {
     position: fixed;
     top: auto;
@@ -933,7 +984,7 @@ body.has-cursor-glow .cursor-glow {
   }
 } /* end real-mobile blog / post shared styles */
 
-@media (max-width: 540px) and (hover: none) and (pointer: coarse) {
+@media (max-width: 540px) {
   .content-layer {
     padding: 0 16px;
   }
@@ -956,8 +1007,8 @@ body.has-cursor-glow .cursor-glow {
   }
 
   .hero-search input {
-    min-height: 30px;
-    padding: 7px 32px 7px 14px;
+    min-height: 44px;
+    padding: 10px 58px 10px 14px;
     border-radius: 999px;
     font-size: 0.68rem;
   }
@@ -1019,9 +1070,13 @@ body.has-cursor-glow .cursor-glow {
 
 }
 
-@media (max-width: 360px) and (hover: none) and (pointer: coarse) {
+@media (max-width: 360px) {
   .hero-title {
-    font-size: 2.24rem;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-wrap: balance;
+    font-size: clamp(1.85rem, 10vw, 2.24rem);
   }
 
   .hero-search {
@@ -1034,7 +1089,7 @@ body.has-cursor-glow .cursor-glow {
   }
 }
 
-@media (max-width: 768px) and (hover: none) and (pointer: coarse) {
+@media (max-width: 768px) {
   body[data-page="blog"],
   body[data-page="post"] {
     background-color: #111528;
@@ -1070,390 +1125,39 @@ body.has-cursor-glow .cursor-glow {
 }
 
 @media (hover: none) and (pointer: coarse) {
-  .cursor-glow {
+  .cursor-glow,
+  .btn-tooltip {
     display: none;
   }
 }
 
-/* ===== Generated mobile compatibility fallback =====
- * Source: scripts/build-mobile-fallbacks.mjs.
- * Edit the real touch media queries above, then run npm.cmd run mobile:fallbacks.
- * ================================================= */
-
-@media (max-width: 768px) {
-  html.is-mobile-device-viewport {
-    background-color: #0a0e1a;
+/* Respect the user's motion preference without hiding meaningful content. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto !important;
   }
 
-  html.is-mobile-device-viewport body {
-    background-color: #0a0e1a;
+  *,
+  *::before,
+  *::after {
+    animation-delay: 0s !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-delay: 0s !important;
+    transition-duration: 0.001ms !important;
   }
 
-  html.is-mobile-device-viewport .ambient-background {
-    background-color: #0b1021;
-    background-image: url("/assets/mobile-home-starry-bg.svg?v=20260710-v85");
-    background-position: center top;
-    background-repeat: no-repeat;
-    background-size: cover;
+  #particles-canvas,
+  .cursor-glow {
+    display: none !important;
   }
+}
 
-  html.is-mobile-device-viewport #particles-canvas {
-    display: none;
-  }
-
-  html.is-mobile-device-viewport .glow-orb {
-    display: none;
-  }
-
-  html.is-mobile-device-viewport .content-layer {
-    padding: 0 18px;
-  }
-
-  html.is-mobile-device-viewport .hero-section {
-    position: relative;
-    width: 100%;
-    min-height: 100svh;
-    padding: clamp(148px, 21svh, 190px) 0 48px;
-    gap: 12px;
-  }
-
-  html.is-mobile-device-viewport .hero-title {
-    max-width: 100%;
-    white-space: nowrap;
-    overflow-wrap: normal;
-    word-break: normal;
-    position: relative;
-    top: 0;
-    font-size: 2.44rem;
-    line-height: 1;
-    letter-spacing: 0;
-    background: linear-gradient(
-      90deg,
-      #7dfff3 0%,
-      #28eaff 25%,
-      #5da8ff 52%,
-      #a36cff 72%,
-      #f044e9 100%
-    );
-    background-size: 100% auto;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    filter: none;
-    animation: fadeInUp 0.9s var(--transition-smooth) 0.25s both;
-  }
-
-  html.is-mobile-device-viewport .hero-section::after {
-    content: "";
-    position: absolute;
-    left: 50%;
-    top: 55%;
-    transform: translate(-50%, -50%);
-    width: 980px;
-    height: 600px;
-    border-radius: 50%;
-    background: radial-gradient(
-      ellipse at center,
-      rgba(72, 168, 210, 0.20) 0%,
-      rgba(58, 138, 196, 0.14) 24%,
-      rgba(40, 90, 160, 0.07) 54%,
-      rgba(28, 180, 210, 0.02) 80%,
-      transparent 100%
-    );
-    opacity: 0.92;
-    pointer-events: none;
-    z-index: -1;
-  }
-
-  html.is-mobile-device-viewport .hero-search {
-    width: min(66vw, 430px);
-    max-width: none;
-  }
-
-  html.is-mobile-device-viewport .hero-search input,
-  html.is-mobile-device-viewport .blog-search input {
-    background: rgba(255, 255, 255, 0.06);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.06),
-      0 10px 28px rgba(0, 0, 0, 0.18);
-  }
-
-  html.is-mobile-device-viewport .hero-search input {
-    min-height: 32px;
-    padding: 8px 34px 8px 16px;
-    border-radius: 999px;
-    font-size: 0.72rem;
-  }
-
-  html.is-mobile-device-viewport .blog-search input {
-    min-height: 54px;
-    padding: 16px 50px 16px 20px;
-    border-radius: 22px;
-    font-size: 0.95rem;
-  }
-
-  html.is-mobile-device-viewport .hero-search .search-icon {
-    right: 14px;
-    width: 13px;
-    height: 13px;
-  }
-
-  html.is-mobile-device-viewport .hero-cta-group {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    width: 100%;
-    max-width: 176px;
-    gap: 12px;
-    margin-top: 18px;
-  }
-
-  html.is-mobile-device-viewport .hero-cta-group .btn {
-    width: 100%;
-    min-height: 30px;
-    justify-content: center;
-    padding: 5px 0;
-    border-radius: 999px;
-    box-shadow:
-      0 10px 22px rgba(0, 0, 0, 0.16),
-      inset 0 1px 0 rgba(255, 255, 255, 0.18);
-  }
-
-  html.is-mobile-device-viewport .hero-cta-group .btn svg {
-    width: 14px;
-    height: 14px;
-  }
-
+/* MOBILE_FALLBACKS_START — generated by scripts/build-mobile-fallbacks.mjs */
+html.is-mobile-device-viewport .cursor-glow,
   html.is-mobile-device-viewport .btn-tooltip {
     display: none;
   }
-}
 
-@media (max-width: 768px) {
-  html.is-mobile-device-viewport body[data-page="blog"] .top-actions {
-    position: fixed;
-    top: auto;
-    bottom: calc(20px + env(safe-area-inset-bottom));
-    left: max(24px, env(safe-area-inset-left));
-    right: max(24px, env(safe-area-inset-right));
-    box-sizing: border-box;
-    gap: 5px;
-    padding: 6px;
-    border: 1px solid rgba(137, 224, 255, 0.16);
-    border-radius: 999px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.025));
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.07),
-      0 6px 20px rgba(0, 0, 0, 0.18);
-  }
-
-  html.is-mobile-device-viewport body[data-page="blog"] .action-btn {
-    flex: 1;
-    justify-content: center;
-    min-width: 0;
-    gap: 6px;
-    min-height: 42px;
-    padding: 10px 14px;
-    border-radius: 999px;
-    font-size: 0.78rem;
-    background: transparent;
-    border: 1px solid transparent;
-    color: rgba(220, 247, 255, 0.74);
-    box-shadow: none;
-    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
-  }
-
-  html.is-mobile-device-viewport body[data-page="blog"] .action-btn span {
-    display: inline;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  html.is-mobile-device-viewport body[data-page="blog"] .action-btn.active {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.05));
-    border-color: rgba(137, 224, 255, 0.26);
-    color: rgba(240, 252, 255, 0.98);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  }
-
-  html.is-mobile-device-viewport body[data-page="blog"] .action-btn svg {
-    width: 15px;
-    height: 15px;
-  }
-
-  html.is-mobile-device-viewport body[data-page="blog"] .page-container {
-    padding-top: 58px;
-    padding-bottom: 100px;
-  }
-
-  html.is-mobile-device-viewport .page-container,
-  html.is-mobile-device-viewport .post-container {
-    padding: 96px 16px 92px;
-  }
-
-  html.is-mobile-device-viewport .page-header {
-    margin-bottom: 22px;
-  }
-
-  html.is-mobile-device-viewport body[data-page="blog"] .page-header {
-    margin-bottom: 14px;
-  }
-
-  html.is-mobile-device-viewport .page-title {
-    font-size: clamp(1.55rem, 6.4vw, 2.15rem);
-  }
-
-
-  html.is-mobile-device-viewport .empty-state {
-    padding: 64px 20px;
-  }
-
-  html.is-mobile-device-viewport .empty-state svg {
-    width: 56px;
-    height: 56px;
-    margin-bottom: 20px;
-  }
-
-  html.is-mobile-device-viewport .empty-state p {
-    font-size: 1rem;
-  }
-}
-
-@media (max-width: 540px) {
-  html.is-mobile-device-viewport .content-layer {
-    padding: 0 16px;
-  }
-
-  html.is-mobile-device-viewport .hero-section {
-    width: 100%;
-    padding-top: clamp(168px, 24svh, 205px);
-    gap: 12px;
-  }
-
-  html.is-mobile-device-viewport .hero-title {
-    top: 0;
-    font-size: 2.44rem;
-    letter-spacing: 0;
-  }
-
-  html.is-mobile-device-viewport .hero-search {
-    width: min(66vw, 280px);
-    max-width: none;
-  }
-
-  html.is-mobile-device-viewport .hero-search input {
-    min-height: 30px;
-    padding: 7px 32px 7px 14px;
-    border-radius: 999px;
-    font-size: 0.68rem;
-  }
-
-  html.is-mobile-device-viewport .hero-cta-group {
-    max-width: 156px;
-    gap: 12px;
-    margin-top: 18px;
-  }
-
-  html.is-mobile-device-viewport .hero-cta-group .btn {
-    min-height: 28px;
-    padding: 4px 0;
-    border-radius: 999px;
-  }
-
-  html.is-mobile-device-viewport .hero-cta-group .btn svg {
-    width: 12px;
-    height: 12px;
-  }
-
-  html.is-mobile-device-viewport body[data-page="blog"] .top-actions {
-    bottom: calc(16px + env(safe-area-inset-bottom));
-    left: max(18px, env(safe-area-inset-left));
-    right: max(18px, env(safe-area-inset-right));
-    gap: 4px;
-    padding: 5px;
-    border-radius: 999px;
-  }
-
-  html.is-mobile-device-viewport body[data-page="blog"] .action-btn {
-    gap: 5px;
-    min-height: 38px;
-    padding: 8px 12px;
-    border-radius: 999px;
-    font-size: 0.72rem;
-  }
-
-  html.is-mobile-device-viewport body[data-page="blog"] .action-btn svg {
-    width: 14px;
-    height: 14px;
-  }
-
-  html.is-mobile-device-viewport .page-container,
-  html.is-mobile-device-viewport .post-container {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-
-  html.is-mobile-device-viewport body[data-page="blog"] .page-container {
-    padding-top: 66px;
-    padding-bottom: 110px;
-  }
-
-  html.is-mobile-device-viewport body[data-page="blog"] .page-header {
-    margin-bottom: 14px;
-  }
-}
-
-@media (max-width: 360px) {
-  html.is-mobile-device-viewport .hero-title {
-    font-size: 2.24rem;
-  }
-
-  html.is-mobile-device-viewport .hero-search {
-    width: min(70vw, 250px);
-  }
-
-  html.is-mobile-device-viewport .hero-cta-group {
-    max-width: 150px;
-    gap: 10px;
-  }
-}
-
-@media (max-width: 768px) {
-  html.is-mobile-device-viewport body[data-page="blog"],
-  html.is-mobile-device-viewport body[data-page="post"] {
-    background-color: #111528;
-    max-width: 100%;
-    overflow-x: hidden;
-  }
-
-  html.is-mobile-device-viewport body[data-page="blog"] .ambient-background,
-  html.is-mobile-device-viewport body[data-page="post"] .ambient-background {
-    height: 100dvh;
-    min-height: 100svh;
-    background-color: #111528;
-    background-image:
-      linear-gradient(115deg, rgba(0, 136, 168, 0.34) 0%, rgba(17, 21, 40, 0) 38%),
-      linear-gradient(185deg, rgba(255, 64, 129, 0.1) 0%, rgba(19, 21, 43, 0) 48%),
-      linear-gradient(180deg, #101527 0%, #15172d 52%, #111528 100%);
-    background-repeat: no-repeat;
-  }
-
-  html.is-mobile-device-viewport body[data-page="blog"] .glow-orb,
-  html.is-mobile-device-viewport body[data-page="post"] .glow-orb {
-    display: none;
-  }
-
-  html.is-mobile-device-viewport body[data-page="post"] .top-actions {
-    display: none;
-  }
-
-  html.is-mobile-device-viewport body[data-page="post"] .post-container {
-    padding: clamp(64px, 10vw, 90px) clamp(16px, 4.8vw, 24px) calc(70px + env(safe-area-inset-bottom));
-  }
-}
-
-html.is-mobile-device-viewport .cursor-glow {
-    display: none;
-  }
+/* MOBILE_FALLBACKS_END */

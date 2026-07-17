@@ -4,6 +4,7 @@ const net = require("node:net");
 
 const { canonicalizeImageSource } = require("./image-source-policy");
 const { readPositiveIntegerEnv } = require("./request-guard");
+const { createAbortError, waitForPromiseWithSignal } = require("./request-lifecycle");
 
 function readNonNegativeEnvInteger(key, fallback) {
   const value = Number(process.env[key]);
@@ -229,28 +230,6 @@ function normalizeResolvedAddressRecord(record) {
     : null;
 }
 
-function waitForPromiseWithSignal(promise, signal) {
-  if (!signal) return Promise.resolve(promise);
-  if (signal.aborted) return Promise.reject(createAbortError());
-
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const finish = (callback, value) => {
-      if (settled) return;
-      settled = true;
-      signal.removeEventListener?.("abort", onAbort);
-      callback(value);
-    };
-    const onAbort = () => finish(reject, createAbortError());
-
-    signal.addEventListener?.("abort", onAbort, { once: true });
-    Promise.resolve(promise).then(
-      (value) => finish(resolve, value),
-      (error) => finish(reject, error),
-    );
-  });
-}
-
 async function resolvePublicImageHost(hostname, { signal } = {}) {
   const normalizedHostname = normalizeHostname(hostname);
   if (!normalizedHostname) {
@@ -339,12 +318,6 @@ function createResponseHeaders(headers = {}) {
   };
 }
 
-function createAbortError() {
-  const error = new Error("Image request aborted");
-  error.name = "AbortError";
-  return error;
-}
-
 function collectResponseBuffer(response, maxBytes, cleanup) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -372,6 +345,15 @@ function collectResponseBuffer(response, maxBytes, cleanup) {
     });
     response.on("end", () => settle(resolve, Buffer.concat(chunks, totalBytes)));
     response.on("error", (error) => settle(reject, error));
+    response.on("aborted", () => settle(
+      reject,
+      createImageProxyError("Image response was interrupted", 502),
+    ));
+    response.on("close", () => {
+      if (!response.readableEnded) {
+        settle(reject, createImageProxyError("Image response closed before completion", 502));
+      }
+    });
   });
 }
 
@@ -397,12 +379,9 @@ function createImageResponse(response, cleanup) {
         cleanup();
         return;
       }
-      if (typeof response.resume === "function") {
-        response.on("end", cleanup);
-        response.on("error", cleanup);
-        response.resume();
-        return;
-      }
+      // A rejected redirect, content type, or content length must not keep an
+      // unobserved upstream download alive after the API response has ended.
+      response.destroy?.();
       cleanup();
     },
   };
@@ -411,7 +390,7 @@ function createImageResponse(response, cleanup) {
 function requestImage(source, { signal, method = "GET" } = {}) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
-      reject(createAbortError());
+      reject(signal.reason || createAbortError("Image request aborted", "image_request_aborted"));
       return;
     }
 
@@ -421,7 +400,7 @@ function requestImage(source, { signal, method = "GET" } = {}) {
     const requestUrl = new URL(source.href);
     const cleanup = () => signal?.removeEventListener?.("abort", onAbort);
     const onAbort = () => {
-      const error = createAbortError();
+      const error = signal.reason || createAbortError("Image request aborted", "image_request_aborted");
       response?.destroy?.(error);
       request?.destroy?.(error);
       if (!settled) {

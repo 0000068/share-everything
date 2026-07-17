@@ -1,5 +1,6 @@
 (() => {
   const DEFAULT_FEATURED_CATEGORY = "精选";
+  const PUBLIC_SEARCH_QUERY_MAX_LENGTH = 256;
 
   function resolveFeaturedCategoryName(sharedContent) {
     if (typeof sharedContent.getRemoteBlogCategories !== "function") {
@@ -36,7 +37,10 @@
     }
 
     function executeSearch() {
-      const query = searchInput.value.trim();
+      const query = searchInput.value.trim().slice(0, PUBLIC_SEARCH_QUERY_MAX_LENGTH);
+      if (searchInput.value !== query) {
+        searchInput.value = query;
+      }
       if (query) {
         navigateTo(`/blog.html?search=${encodeURIComponent(query)}`);
       }
