@@ -1019,21 +1019,12 @@ expectIncludes(visualRegressionJs, "desktop particles should remain animated", "
 expectIncludes(visualRegressionJs, "mobile home particles should be disabled", "visual regression should guard mobile home particle removal");
 expectIncludes(visualRegressionJs, "mobile blog bookmark button should compute to 21px width", "visual regression should guard mobile card bookmark sizing");
 expectIncludes(visualRegressionJs, "mobile post top dock should stay hidden", "visual regression should guard mobile article dock visibility");
-expectIncludes(visualRegressionJs, "checkFinePointerNarrowHomeReflow", "visual regression should exercise the 320 CSS px fine-pointer home-title contract");
-expectIncludes(visualRegressionJs, "fine-pointer 320px home title text must fit its content box", "fine-pointer browser coverage should fail when the home title is clipped");
-expectIncludes(visualRegressionJs, "checkFinePointerNarrowBlogReflow", "visual regression should exercise the 320 CSS px fine-pointer reflow contract");
-expectIncludes(visualRegressionJs, 'client.command("Emulation.setEmulatedMedia"', "fine-pointer browser coverage should emulate pointer media features explicitly");
-expectIncludes(visualRegressionJs, "fine-pointer 320px blog should not overflow the root viewport", "fine-pointer browser coverage should fail on horizontal clipping");
-const finePointerViewportStart = visualRegressionJs.indexOf("async function configureFinePointerViewport");
-const finePointerViewportEnd = visualRegressionJs.indexOf("\nasync function navigate", finePointerViewportStart);
-const finePointerViewportSource = visualRegressionJs.slice(finePointerViewportStart, finePointerViewportEnd);
-const finePointerGeometryIndex = finePointerViewportSource.indexOf("await configureViewport(client, viewport)");
-const finePointerMediaIndex = finePointerViewportSource.indexOf('client.command("Emulation.setEmulatedMedia"');
-assert.ok(finePointerViewportStart >= 0 && finePointerViewportEnd > finePointerViewportStart, "visual regression should expose a bounded fine-pointer viewport helper");
-assert.ok(
-  finePointerGeometryIndex >= 0 && finePointerMediaIndex > finePointerGeometryIndex,
-  "fine-pointer media features must be installed after device metrics so Linux Chrome cannot reset them",
-);
+expectIncludes(visualRegressionJs, "checkNarrowDesktopHomeReflow", "visual regression should exercise the 320 CSS px desktop home-title contract");
+expectIncludes(visualRegressionJs, "narrow desktop 320px home title text must fit its content box", "narrow desktop browser coverage should fail when the home title is clipped");
+expectIncludes(visualRegressionJs, "checkNarrowDesktopBlogReflow", "visual regression should exercise the 320 CSS px desktop reflow contract");
+expectIncludes(visualRegressionJs, "narrow desktop 320px blog should not overflow the root viewport", "narrow desktop browser coverage should fail on horizontal clipping");
+expectIncludes(visualRegressionJs, "assertNarrowDesktopContext", "narrow desktop browser coverage should centralize device-shape assertions");
+expectIncludes(visualRegressionJs, "userAgentDataMobile", "narrow desktop browser coverage should verify desktop UA client hints when available");
 expectIncludes(visualRegressionJs, "await scenario.afterCaptureCheck?.(client)", "structural browser checks should run without changing committed screenshot baselines");
 expectIncludes(visualRegressionJs, "waitForSemanticReadiness", "visual regression should poll semantic page readiness instead of sleeping after load");
 expectIncludes(visualRegressionJs, 'busy === "false"', "visual regression should wait for the blog grid to finish loading");

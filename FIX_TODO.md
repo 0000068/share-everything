@@ -6,7 +6,7 @@
 
 ## 一、当前待修任务
 
-> v8.6 发布提交已同步到 `origin/main`。提交后的 Linux Chrome 门禁暴露了设备尺寸覆盖可能重置 `pointer` / `hover` 仿真的平台差异；当前收尾修复调整 CDP 调用顺序，并把共享 runner 的 Chrome 冷启动等待限定为 30 秒。部署仍是独立动作，最终同步状态以 Git 与 GitHub Actions 为准。
+> v8.6 发布提交已同步到 `origin/main`。提交后的 Linux Chrome 门禁暴露了 headless runner 不保证存在物理 fine pointer、而真实桌面又可能带触摸屏的平台差异；当前收尾把真实浏览器职责收敛为“桌面 device metrics + UA 形态 + 实际几何”，fine-pointer 分类继续由确定性 SiteUtils smoke 覆盖，并把共享 runner 的 Chrome 冷启动等待限定为 30 秒。部署仍是独立动作，最终同步状态以 Git 与 GitHub Actions 为准。
 
 ---
 
@@ -35,7 +35,7 @@
 - single-flight 仅在最后一个订阅者离开后取消，放弃请求的晚到结果不能覆盖新缓存/cooldown；同分类不同搜索复用分类基础页，未知分类在 Notion 查询前返回空集。
 - sitemap 复用统一请求生命周期；本地只读 API 保留 raw URL/断开事件，非 GET/HEAD 请求体仅流式 drain，不在方法拒绝前聚合到内存。
 - 粒子系统按宽度、省流量、reduced-motion、硬件与实测帧成本在关闭或 350/220/120 档间有界调整；视觉基线的 7 个场景共享单一清单，截图先验证动态效果再固定测试随机源和无限 CSS 动画相位，三样本最大两两差异超过 0.25% 即拒绝安装，并以 staging/backup/install/rollback 事务替换。
-- Linux Chrome 浏览器门禁先应用 device metrics、再注入 fine-pointer media features，避免 viewport 更新清除 `hover` / `pointer` 覆盖；Chrome 冷启动等待使用 30 秒有界上限，smoke 同时锁定常量与调用顺序。
+- Linux Chrome 浏览器门禁不再假设无物理输入设备的 headless runner 能稳定报告 fine pointer，也不把桌面设备误定义为零触点：真实浏览器覆盖 320px 桌面 device metrics、UA 与几何，SiteUtils smoke 独立覆盖 fine-pointer + legacy `ontouchstart` 分类，真实移动场景覆盖 coarse-pointer 分支；Chrome 冷启动等待使用 30 秒有界上限。
 - 本轮仅改变公开内容的传输、缓存与质量边界；专用 Notion 数据库仍按既定产品设计整体公开。
 
 ### v8.5 图片代理与质量门禁加固（2026-07-10）
@@ -283,4 +283,4 @@ v5.7 及之前的 22 项落地内容（A-1 templatePromise 自清 / A-2 SPA 滑�
 
 v8.5 最终结果：提交前复检再次确认快速门禁、严格浏览器/像素回归、完整与生产依赖审计、直接依赖更新检查、干净安装锁文件检查、diff 空白检查全部通过；0 个已知依赖漏洞、0 个过期直接依赖。复检前已刷新 `origin/main`，与本地 `HEAD` 的分叉计数为 `0 0`。Notion live check 因本地未提供集成凭据按设计安全跳过。
 
-v8.6 本地最终结果：完整快速门禁、严格 7 场景像素回归、CI 模式结构浏览器契约、完整与生产依赖审计、直接依赖更新检查、干净安装和 diff 空白检查全部通过；Linux Chrome 收尾修复没有放宽布局或能力断言。
+v8.6 本地最终结果：完整快速门禁、严格 7 场景像素回归、CI 模式结构浏览器契约、完整与生产依赖审计、直接依赖更新检查、干净安装和 diff 空白检查全部通过；Linux Chrome 收尾没有放宽布局断言，并把 fine-pointer 分类从不稳定的 headless 设备仿真移到确定性行为 harness。

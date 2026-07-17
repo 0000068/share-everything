@@ -66,7 +66,7 @@ const scenarios = [
     readiness: "home",
     viewport: { width: 1280, height: 720, mobile: false },
     check: checkDesktopHome,
-    afterCaptureCheck: checkFinePointerNarrowHomeReflow,
+    afterCaptureCheck: checkNarrowDesktopHomeReflow,
   },
   {
     name: VISUAL_SCENARIOS.desktopBlogContent,
@@ -74,7 +74,7 @@ const scenarios = [
     readiness: "blog",
     viewport: { width: 1280, height: 720, mobile: false },
     check: checkDesktopBlogContent,
-    afterCaptureCheck: checkFinePointerNarrowBlogReflow,
+    afterCaptureCheck: checkNarrowDesktopBlogReflow,
   },
   {
     name: VISUAL_SCENARIOS.desktopPostContent,
@@ -895,23 +895,13 @@ async function configureViewport(client, viewport) {
   }
 }
 
-async function configureFinePointerViewport(client, viewport) {
-  // Apply geometry first. Some Linux Chrome builds recalculate input media
-  // capabilities while processing a device-metrics override, which can discard
-  // pointer/hover features that were installed before the viewport update.
+async function configureNarrowDesktopViewport(client, viewport) {
+  // Headless Linux can legitimately expose `pointer: none` because it has no
+  // physical input device, while a real desktop can legitimately expose touch
+  // points. Keep this browser contract responsible for desktop device metrics,
+  // UA shape, and geometry; the deterministic SiteUtils smoke harness separately
+  // covers fine-pointer classification semantics.
   await configureViewport(client, viewport);
-  await client.command("Emulation.setTouchEmulationEnabled", {
-    enabled: false,
-  });
-  await client.command("Emulation.setEmulatedMedia", {
-    media: "screen",
-    features: [
-      { name: "hover", value: "hover" },
-      { name: "any-hover", value: "hover" },
-      { name: "pointer", value: "fine" },
-      { name: "any-pointer", value: "fine" },
-    ],
-  });
 }
 
 async function navigate(client, url) {
@@ -1140,6 +1130,16 @@ function assertRectInsideViewport(rect, viewport, label) {
   assert.ok(rect.right <= viewport.width + 1, `${label} should not overflow right`);
   assert.ok(rect.width > 0, `${label} should be visible`);
   assert.ok(rect.height > 0, `${label} should have height`);
+}
+
+function assertNarrowDesktopContext(metrics, viewport, label) {
+  assert.equal(metrics.narrowViewport, true, `${label} should match its narrow geometry breakpoint`);
+  assert.equal(metrics.viewportWidth, viewport.width, `${label} should retain the requested desktop CSS viewport width`);
+  assert.equal(metrics.screenWidth, viewport.width, `${label} should retain the requested desktop screen width`);
+  assert.doesNotMatch(metrics.userAgent, /\b(?:Android|Mobile)\b/i, `${label} should keep a desktop user agent`);
+  if (typeof metrics.userAgentDataMobile === "boolean") {
+    assert.equal(metrics.userAgentDataMobile, false, `${label} should keep a desktop UA client hint`);
+  }
 }
 
 async function checkMobileHome(client, viewport) {
@@ -1377,19 +1377,20 @@ async function checkDesktopHome(client, viewport) {
   assert.ok(metrics.canvasChanged, "desktop particles should remain animated");
 }
 
-async function checkFinePointerNarrowHomeReflow(client) {
+async function checkNarrowDesktopHomeReflow(client) {
   const viewport = { width: 320, height: 720, mobile: false };
-  await configureFinePointerViewport(client, viewport);
+  await configureNarrowDesktopViewport(client, viewport);
   const metrics = await evaluate(client, `(async () => {
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const title = document.querySelector(".hero-title");
-    if (!title) throw new Error("fine-pointer narrow home contract requires the hero title");
+    if (!title) throw new Error("narrow desktop home contract requires the hero title");
     const titleRect = title.getBoundingClientRect();
     return {
-      finePointer: matchMedia("(hover: hover) and (pointer: fine)").matches,
-      touchFirst: matchMedia("(hover: none) and (pointer: coarse)").matches,
       narrowViewport: matchMedia("(max-width: 360px)").matches,
-      htmlClass: document.documentElement.className,
+      viewportWidth: window.innerWidth,
+      screenWidth: window.screen.width,
+      userAgent: navigator.userAgent,
+      userAgentDataMobile: navigator.userAgentData?.mobile ?? null,
       rootScrollWidth: document.documentElement.scrollWidth,
       titleClientWidth: title.clientWidth,
       titleScrollWidth: title.scrollWidth,
@@ -1398,14 +1399,11 @@ async function checkFinePointerNarrowHomeReflow(client) {
     };
   })()`);
 
-  assert.equal(metrics.finePointer, true, "320 CSS px home contract should emulate a fine pointer");
-  assert.equal(metrics.touchFirst, false, "fine-pointer home contract should not match touch-first media features");
-  assert.equal(metrics.narrowViewport, true, "fine-pointer home contract should match the ultra-narrow geometry breakpoint");
-  assert.ok(!metrics.htmlClass.includes("is-mobile-device-viewport"), "fine-pointer narrow home should not need the touch compatibility class");
-  assert.ok(metrics.rootScrollWidth <= viewport.width + 1, "fine-pointer 320px home should not hide horizontal overflow");
-  assert.ok(metrics.titleScrollWidth <= metrics.titleClientWidth + 1, "fine-pointer 320px home title text must fit its content box");
-  assert.equal(metrics.titleWhiteSpace, "normal", "fine-pointer 320px home title should allow a safe line break when needed");
-  assertRectInsideViewport(metrics.titleRect, viewport, "fine-pointer narrow home title");
+  assertNarrowDesktopContext(metrics, viewport, "narrow desktop home contract");
+  assert.ok(metrics.rootScrollWidth <= viewport.width + 1, "narrow desktop 320px home should not hide horizontal overflow");
+  assert.ok(metrics.titleScrollWidth <= metrics.titleClientWidth + 1, "narrow desktop 320px home title text must fit its content box");
+  assert.equal(metrics.titleWhiteSpace, "normal", "narrow desktop 320px home title should allow a safe line break when needed");
+  assertRectInsideViewport(metrics.titleRect, viewport, "narrow desktop home title");
 }
 
 async function checkDesktopBlogContent(client, viewport) {
@@ -1429,25 +1427,26 @@ async function checkDesktopBlogContent(client, viewport) {
   assert.equal(new Set(metrics.titleTexts).size, 3, "desktop blog should render distinct real fixture cards");
 }
 
-async function checkFinePointerNarrowBlogReflow(client) {
+async function checkNarrowDesktopBlogReflow(client) {
   const viewport = { width: 320, height: 720, mobile: false };
-  await configureFinePointerViewport(client, viewport);
+  await configureNarrowDesktopViewport(client, viewport);
 
   const metrics = await evaluate(client, `(async () => {
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const grid = document.getElementById("blogGrid");
     const cards = [...(grid?.querySelectorAll(".blog-card") || [])].slice(0, 3);
-    if (!grid || cards.length < 3) throw new Error("fine-pointer narrow blog contract requires three cards");
+    if (!grid || cards.length < 3) throw new Error("narrow desktop blog contract requires three cards");
     const gridRect = grid.getBoundingClientRect();
     const cardRects = cards.map((card) => {
       const rect = card.getBoundingClientRect();
       return { left: rect.left, right: rect.right, top: rect.top, width: rect.width, height: rect.height };
     });
     return {
-      finePointer: matchMedia("(hover: hover) and (pointer: fine)").matches,
-      touchFirst: matchMedia("(hover: none) and (pointer: coarse)").matches,
       narrowViewport: matchMedia("(max-width: 768px)").matches,
-      htmlClass: document.documentElement.className,
+      viewportWidth: window.innerWidth,
+      screenWidth: window.screen.width,
+      userAgent: navigator.userAgent,
+      userAgentDataMobile: navigator.userAgentData?.mobile ?? null,
       scrollWidth: document.documentElement.scrollWidth,
       bodyScrollWidth: document.body.scrollWidth,
       gridColumns: getComputedStyle(grid).gridTemplateColumns,
@@ -1456,19 +1455,16 @@ async function checkFinePointerNarrowBlogReflow(client) {
     };
   })()`);
 
-  assert.equal(metrics.finePointer, true, "320 CSS px browser contract should emulate a fine pointer");
-  assert.equal(metrics.touchFirst, false, "fine-pointer browser contract should not match touch-first media features");
-  assert.equal(metrics.narrowViewport, true, "fine-pointer browser contract should match the geometry breakpoint");
-  assert.ok(!metrics.htmlClass.includes("is-mobile-device-viewport"), "fine-pointer narrow blog should not need the touch compatibility class");
-  assert.ok(metrics.scrollWidth <= viewport.width + 1, "fine-pointer 320px blog should not overflow the root viewport");
-  assert.ok(metrics.bodyScrollWidth <= viewport.width + 1, "fine-pointer 320px blog should not overflow the body");
-  assert.equal(metrics.gridColumns.trim().split(/\s+/).length, 2, "fine-pointer 320px blog should reflow to two minmax(0, 1fr) columns");
-  assertRectInsideViewport(metrics.gridRect, viewport, "fine-pointer narrow blog grid");
+  assertNarrowDesktopContext(metrics, viewport, "narrow desktop blog contract");
+  assert.ok(metrics.scrollWidth <= viewport.width + 1, "narrow desktop 320px blog should not overflow the root viewport");
+  assert.ok(metrics.bodyScrollWidth <= viewport.width + 1, "narrow desktop 320px blog should not overflow the body");
+  assert.equal(metrics.gridColumns.trim().split(/\s+/).length, 2, "narrow desktop 320px blog should reflow to two minmax(0, 1fr) columns");
+  assertRectInsideViewport(metrics.gridRect, viewport, "narrow desktop blog grid");
   metrics.cardRects.forEach((rect, index) => {
-    assertRectInsideViewport(rect, viewport, `fine-pointer narrow blog card ${index + 1}`);
-    assert.ok(rect.width > 0 && rect.width < 160, `fine-pointer narrow blog card ${index + 1} should shrink below the old 340px minimum`);
+    assertRectInsideViewport(rect, viewport, `narrow desktop blog card ${index + 1}`);
+    assert.ok(rect.width > 0 && rect.width < 160, `narrow desktop blog card ${index + 1} should shrink below the old 340px minimum`);
   });
-  assert.ok(Math.abs(metrics.cardRects[0].top - metrics.cardRects[1].top) < 1, "fine-pointer narrow blog should keep two cards in the first row");
+  assert.ok(Math.abs(metrics.cardRects[0].top - metrics.cardRects[1].top) < 1, "narrow desktop blog should keep two cards in the first row");
 }
 
 async function checkDesktopPostContent(client, viewport) {
