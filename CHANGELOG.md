@@ -2,7 +2,7 @@
 
 All notable changes to this project are tracked here.
 
-## 8.6.0 - 2026-07-17 (unreleased)
+## 8.6.0 - 2026-07-18 (unreleased)
 
 Cold-load performance, cancellation, accessibility, caching, and executable release-contract hardening.
 
@@ -23,6 +23,7 @@ Cold-load performance, cancellation, accessibility, caching, and executable rele
 - Added 192px, 512px, and maskable PWA icons; raised low-contrast text and interactive target sizes; preserved article-image dimensions only when Notion supplies both intrinsic values, while omitting unknown values instead of inventing a layout-distorting aspect ratio.
 - Declared and CI-pinned `npm@11.9.0`; pinned PostCSS 8.5.19, ESLint 10.7.0, and `globals` 17.7.0; normalized fingerprinted web manifests to LF across platforms; and documented clean reproducible installation through `npm ci` / `npm.cmd ci`.
 - Narrowed the declared Node runtime to `^22.13.0 || ^24.0.0`, matching the supported Node 22.13–22.x and 24.x lines exercised at their CI boundaries. Strict local visual checks fail when any scenario lacks a baseline, and all seven scenario names are shared by capture, approval, and generation tooling.
+- Hardened the Linux Chrome contract after the first synchronized v8.6 run exposed two runner-specific assumptions: browser readiness now has a bounded 30-second cold-start window, and fine-pointer media emulation is installed after device metrics so Chrome cannot reset `hover` / `pointer` overrides during a viewport change. Smoke locks this ordering while the browser test retains the original layout and capability assertions.
 
 ## 8.5.0 - 2026-07-10
 

@@ -1024,6 +1024,16 @@ expectIncludes(visualRegressionJs, "fine-pointer 320px home title text must fit 
 expectIncludes(visualRegressionJs, "checkFinePointerNarrowBlogReflow", "visual regression should exercise the 320 CSS px fine-pointer reflow contract");
 expectIncludes(visualRegressionJs, 'client.command("Emulation.setEmulatedMedia"', "fine-pointer browser coverage should emulate pointer media features explicitly");
 expectIncludes(visualRegressionJs, "fine-pointer 320px blog should not overflow the root viewport", "fine-pointer browser coverage should fail on horizontal clipping");
+const finePointerViewportStart = visualRegressionJs.indexOf("async function configureFinePointerViewport");
+const finePointerViewportEnd = visualRegressionJs.indexOf("\nasync function navigate", finePointerViewportStart);
+const finePointerViewportSource = visualRegressionJs.slice(finePointerViewportStart, finePointerViewportEnd);
+const finePointerGeometryIndex = finePointerViewportSource.indexOf("await configureViewport(client, viewport)");
+const finePointerMediaIndex = finePointerViewportSource.indexOf('client.command("Emulation.setEmulatedMedia"');
+assert.ok(finePointerViewportStart >= 0 && finePointerViewportEnd > finePointerViewportStart, "visual regression should expose a bounded fine-pointer viewport helper");
+assert.ok(
+  finePointerGeometryIndex >= 0 && finePointerMediaIndex > finePointerGeometryIndex,
+  "fine-pointer media features must be installed after device metrics so Linux Chrome cannot reset them",
+);
 expectIncludes(visualRegressionJs, "await scenario.afterCaptureCheck?.(client)", "structural browser checks should run without changing committed screenshot baselines");
 expectIncludes(visualRegressionJs, "waitForSemanticReadiness", "visual regression should poll semantic page readiness instead of sleeping after load");
 expectIncludes(visualRegressionJs, 'busy === "false"', "visual regression should wait for the blog grid to finish loading");
@@ -1034,6 +1044,7 @@ expectIncludes(visualRegressionJs, "document.getAnimations({ subtree: true })", 
 expectIncludes(visualRegressionJs, "animation instanceof CSSTransition", "visual regression should wait for finite CSS transitions as well as keyframe animations");
 expectIncludes(visualRegressionJs, "iterations !== Infinity", "visual regression should ignore infinite decorative CSS animations");
 expectIncludes(visualRegressionJs, "const FINITE_MOTION_TIMEOUT_MS = 4_000", "visual regression should bound finite CSS motion settling");
+expectIncludes(visualRegressionJs, "const BROWSER_READY_TIMEOUT_MS = 30_000", "visual regression should tolerate bounded shared-runner Chrome cold starts");
 expectIncludes(visualRegressionJs, "if (isStrictVisualMode()) throw new Error(message)", "strict visual mode should fail when finite CSS motion does not settle");
 expectNotIncludes(visualRegressionJs, "await sleep(900)", "visual regression should not rely on a fixed post-load delay");
 expectIncludes(visualRegressionJs, "Missing visual baseline:", "visual regression should identify missing pixel baselines explicitly");

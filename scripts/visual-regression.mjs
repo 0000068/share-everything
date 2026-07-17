@@ -29,6 +29,7 @@ const siteName = typeof siteConfig.siteName === "string" && siteConfig.siteName.
 const SEMANTIC_READY_TIMEOUT_MS = 12_000;
 const SEMANTIC_READY_POLL_MS = 100;
 const FINITE_MOTION_TIMEOUT_MS = 4_000;
+const BROWSER_READY_TIMEOUT_MS = 30_000;
 
 const scenarios = [
   {
@@ -304,7 +305,7 @@ async function startBrowser(debugPort) {
       });
     });
     const versionResponse = await Promise.race([
-      waitForHttpOk(`http://${host}:${debugPort}/json/version`),
+      waitForHttpOk(`http://${host}:${debugPort}/json/version`, BROWSER_READY_TIMEOUT_MS),
       earlyBrowserFailure,
     ]);
     const browserWebSocketUrl = JSON.parse(versionResponse.body).webSocketDebuggerUrl;
@@ -895,6 +896,13 @@ async function configureViewport(client, viewport) {
 }
 
 async function configureFinePointerViewport(client, viewport) {
+  // Apply geometry first. Some Linux Chrome builds recalculate input media
+  // capabilities while processing a device-metrics override, which can discard
+  // pointer/hover features that were installed before the viewport update.
+  await configureViewport(client, viewport);
+  await client.command("Emulation.setTouchEmulationEnabled", {
+    enabled: false,
+  });
   await client.command("Emulation.setEmulatedMedia", {
     media: "screen",
     features: [
@@ -904,10 +912,6 @@ async function configureFinePointerViewport(client, viewport) {
       { name: "any-pointer", value: "fine" },
     ],
   });
-  await client.command("Emulation.setTouchEmulationEnabled", {
-    enabled: false,
-  });
-  await configureViewport(client, viewport);
 }
 
 async function navigate(client, url) {

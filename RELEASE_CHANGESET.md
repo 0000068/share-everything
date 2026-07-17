@@ -1,6 +1,6 @@
 # Release Changeset
 
-Updated: 2026-07-17
+Updated: 2026-07-18
 Target: v8.6.0 (unreleased)
 
 ## Scope
@@ -50,7 +50,7 @@ This working tree is one release-sized performance, request-lifecycle, accessibi
 - Smoke recomputes the shipped asset fingerprint, starts the real local server, verifies PWA image metadata, and exercises router/request cancellation behavior.
 - The local API adapter forwards raw URLs and request disconnect state, and real-HTTP smoke proves noncanonical list queries are rejected exactly as in deployment.
 - Visual regression uses deterministic real blog and full-article fixtures on mobile and desktop rather than synthetic card-only markup. Each CDP scenario polls a bounded semantic readiness contract, requires representative card reveals to finish, waits at most four seconds for finite CSS animations/transitions, proves live desktop motion, then seeds visual-only randomness and fixes infinite CSS animation phase for pixel capture. It fails strict runs on timeout and closes Chrome gracefully before profile cleanup. Baseline generation requires three samples with no pairwise diff above 0.25% and transactionally replaces all seven PNGs with rollback on partial failure.
-- CI tests the exact Node 22.13.0 lower boundary and Node 24, then runs a strict Linux Chrome structure/behavior contract. Local release verification retains Windows pixel baselines for all seven shared scenarios and fails closed if any is absent. Workflow permissions are read-only, checkout credentials are not persisted, and reviewed action releases are full-SHA pinned.
+- CI tests the exact Node 22.13.0 lower boundary and Node 24, then runs a strict Linux Chrome structure/behavior contract. Chrome readiness has a bounded 30-second shared-runner cold-start window, and fine-pointer media overrides are applied after device metrics so a viewport change cannot reset them. Smoke locks that CDP ordering. Local release verification retains Windows pixel baselines for all seven shared scenarios and fails closed if any is absent. Workflow permissions are read-only, checkout credentials are not persisted, and reviewed action releases are full-SHA pinned.
 - Package publishing is disabled with `private: true`; runtime and tooling dependencies are exact and current at audit time. CI activates the declared `npm@11.9.0`, and `.webmanifest` files are normalized to LF so the asset fingerprint is cross-platform reproducible.
 
 ## Suggested Review Order
@@ -63,12 +63,13 @@ This working tree is one release-sized performance, request-lifecycle, accessibi
 
 ## Validation Status
 
-Completed against the local v8.6 working tree on 2026-07-17:
+Completed against the delivered v8.6 tree on 2026-07-18:
 
 ```powershell
 npm.cmd run assets:sync
 npm.cmd test
 npm.cmd run verify:release
+$env:VISUAL_SKIP_DIFF="1"; $env:VISUAL_STRICT="1"; npm.cmd run visual:check
 npm.cmd audit --audit-level=low
 npm.cmd audit --omit=dev
 npm.cmd outdated --long
@@ -76,6 +77,6 @@ npm.cmd ci --dry-run
 git diff --check
 ```
 
-`npm.cmd test` and strict seven-scenario `npm.cmd run verify:release` passed; both dependency audits reported zero vulnerabilities; `npm.cmd outdated --long` returned no outdated packages; lockfile dry-run and a clean `npm.cmd ci` completed; and `git diff --check` reported no patch-format errors. The final release gate is rerun after documentation is frozen so this evidence covers the delivered bytes.
+`npm.cmd test`, strict seven-scenario `npm.cmd run verify:release`, and the CI-mode structural browser contract passed locally; both dependency audits reported zero vulnerabilities; `npm.cmd outdated --long` returned no outdated packages; lockfile dry-run and a clean `npm.cmd ci` completed; and `git diff --check` reported no patch-format errors. The final release gate is rerun after documentation is frozen so this evidence covers the delivered bytes.
 
-v8.6 remains an uncommitted local working tree. It has not been pushed or deployed, and this document makes no branch-divergence or `origin/main` claim.
+The v8.6 release commit has been synchronized to `origin/main`. This follow-up closes the Linux Chrome compatibility issue discovered by the post-push gate; deployment remains separate from repository synchronization.
