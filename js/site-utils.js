@@ -1,13 +1,9 @@
 (() => {
-  // NotionContentShared is loaded synchronously before site-utils via app.js;
-  // its URL helpers (resolveDisplayImageUrl, resolveProxiedDisplayImageUrl,
-  // etc.) live in NotionContent which is dynamic-imported later inside
-  // loadPostRenderingChain(). Look them up at call time so blog cards and
-  // bookmarks actually route through /api/image instead of falling through
-  // to the local-only fallback that returns raw Notion S3 URLs.
+  // URL helpers load after this module on both listing and article routes.
+  // Resolve them at call time without requiring the full article renderer.
   const sharedConstants = window.NotionContentShared || {};
   function getNotionContent() {
-    return window.NotionContent || sharedConstants;
+    return window.NotionContentUrl || window.NotionContent || sharedConstants;
   }
   const BLOG_RETURN_URL_STORAGE_KEY = "spa:last-blog-url";
   const BOOKMARK_HASH_PREFIX = "#bookmarks";

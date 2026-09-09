@@ -24,7 +24,7 @@
     const POST_SUMMARY_MEMORY_CACHE_LIMIT = 200;
     const POST_SUMMARY_SESSION_MAX_TITLE_LENGTH = 160;
     const POST_SUMMARY_SESSION_MAX_EXCERPT_LENGTH = 320;
-    const POST_SUMMARY_SESSION_MAX_CATEGORY_LENGTH = 48;
+    const PUBLIC_CATEGORY_QUERY_MAX_LENGTH = 128;
     const POST_SUMMARY_SESSION_MAX_CATEGORY_LABEL_LENGTH = 64;
     const POST_SUMMARY_SESSION_MAX_READ_TIME_LENGTH = 48;
     const POST_SUMMARY_SESSION_MAX_TAGS = 8;
@@ -148,7 +148,7 @@
 
     function normalizeCategoryItem(category) {
       if (!category || typeof category !== "object") return null;
-      const name = truncateText(category.name, POST_SUMMARY_SESSION_MAX_CATEGORY_LENGTH);
+      const name = truncateText(category.name, PUBLIC_CATEGORY_QUERY_MAX_LENGTH);
       if (!name) return null;
 
       return {
@@ -412,7 +412,7 @@
         id: summary.id,
         title: truncateText(summary.title, POST_SUMMARY_SESSION_MAX_TITLE_LENGTH, "Untitled"),
         excerpt: truncateText(summary.excerpt, POST_SUMMARY_SESSION_MAX_EXCERPT_LENGTH),
-        category: truncateText(summary.category, POST_SUMMARY_SESSION_MAX_CATEGORY_LENGTH),
+        category: truncateText(summary.category, PUBLIC_CATEGORY_QUERY_MAX_LENGTH),
         categoryLabel: truncateText(summary.categoryLabel, POST_SUMMARY_SESSION_MAX_CATEGORY_LABEL_LENGTH),
         categoryColor: normalizeCategoryColor(summary.categoryColor),
         date: truncateText(summary.date, 32),
@@ -554,6 +554,11 @@
 
       const summary = normalizePostSummary(cached.data);
       if (!summary) return null;
+
+      // Session summaries omit temporary covers and shorten other metadata.
+      // They can populate an article placeholder, but cannot replace complete
+      // persisted bookmark metadata or count as a successful metadata refresh.
+      summary.isPartial = true;
 
       rememberPostSummaryInMemory(summary, timestamp);
       return {

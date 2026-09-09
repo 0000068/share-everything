@@ -1,7 +1,7 @@
 # Share Everything Site Architecture
 
-> Version: v8.6
-> Updated: 2026-07-17
+> Version: v8.7
+> Updated: 2026-09-09
 
 ## 1. Overview
 
@@ -37,6 +37,17 @@ Notion Database
 ```
 
 ## 2. Release Highlights
+
+### Version v8.7 Highlights
+
+v8.7 repairs article availability and the integration defects found in the September source audit.
+
+- Canonical article requests accept the matching `id` parameter injected by Vercel's rewrite. Previously the preserved `/posts/:id` path plus this internal query could trigger an endless redirect to the same public URL. Other noncanonical paths and queries still redirect before loading content; browser redirects must revalidate instead of persisting for a day.
+- SPA article fetches recover from a transport failure or missing rewrite through `/api/post?id=<id>` while preserving the public address. HTML requests now share the 35-second budget used by JSON clients, above the server's 30-second maximum. Bootstrap errors retain status, diagnostic codes, and `Retry-After` for accurate feedback.
+- URL helpers resolve the lightweight `NotionContentUrl` module on list and article entry paths. Bookmark metadata generation 7 repairs previously lost covers/signatures; compact session summaries are marked partial and cannot overwrite complete persisted metadata or satisfy a full refresh.
+- Table rows are consumed once. Archived and trashed pages fail public access checks; the dedicated database still intentionally exposes all active pages regardless of publication fields.
+- Template metadata is applied before page initialization, so category/search/bookmark state owns the final SEO. Pagination also updates canonical metadata. Category identifiers retain the full 128-character query contract, and the homepage preserves its generated featured-category configuration.
+- Sharp is upgraded to 0.35.4, PostCSS to 8.5.28, and affected transitive dependencies are updated. `parse5` is a production dependency because SSR imports it at runtime. Integration smoke exercises real module combinations, rewrite-shaped requests, reload/migration storage, and slow article responses.
 
 ### Version v8.6 Highlights
 

@@ -32,7 +32,7 @@ const IS_DEVELOPMENT = process.env.NODE_ENV === "development";
 const HEAD_META_BLOCK_START = "<!--SSR_HEAD_META_START-->";
 const HEAD_META_BLOCK_END = "<!--SSR_HEAD_META_END-->";
 const POST_HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=300, stale-while-revalidate=600";
-const POST_CANONICAL_REDIRECT_CACHE_CONTROL = "public, max-age=86400, s-maxage=604800";
+const POST_CANONICAL_REDIRECT_CACHE_CONTROL = "public, max-age=0, s-maxage=3600, must-revalidate";
 
 function shouldRedirectToCanonicalPost(req, routeId) {
   let requestUrl = null;
@@ -49,8 +49,13 @@ function shouldRedirectToCanonicalPost(req, routeId) {
     return !hasCanonicalRequestSearch(req, [["id", routeId]]);
   }
   if (requestUrl?.pathname.startsWith("/posts/")) {
+    // Vercel can preserve the public pathname while appending destination
+    // query parameters from /api/post?id=:id to req.url. That matching id is
+    // routing metadata, not a reason to redirect the page back to itself.
+    const hasValidSearch = hasCanonicalRequestSearch(req, [])
+      || hasCanonicalRequestSearch(req, [["id", routeId]]);
     return requestUrl.pathname !== buildPostPath(routeId)
-      || !hasCanonicalRequestSearch(req, []);
+      || !hasValidSearch;
   }
 
   return req.query?.id !== routeId

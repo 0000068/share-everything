@@ -21,7 +21,10 @@ function buildPublicAccessPolicyFromDatabase() {
 }
 
 function isPageInPublicDatabase(page) {
-  return normalizeNotionId(page?.parent?.database_id) === normalizeNotionId(getDatabaseId());
+  return Boolean(page)
+    && page.archived !== true
+    && page.in_trash !== true
+    && normalizeNotionId(page.parent?.database_id) === normalizeNotionId(getDatabaseId());
 }
 
 function isPagePublicByPolicy(page, publicAccessPolicy) {

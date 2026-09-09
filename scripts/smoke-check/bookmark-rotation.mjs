@@ -5,7 +5,7 @@ import {
 } from "./harness.mjs";
 
 const BOOKMARK_KEY = "bookmarked_posts";
-const CURRENT_METADATA_GENERATION = 6;
+const CURRENT_METADATA_GENERATION = 7;
 const METADATA_FRESHNESS_MS = 1000 * 60 * 30;
 const NOTION_POST_ID_PATTERN = /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 

@@ -1,6 +1,6 @@
 {
   "name": "share-everything",
-  "version": "8.6.0",
+  "version": "8.7.0",
   "packageManager": "npm@11.9.0",
   "type": "commonjs",
   "private": true,
@@ -35,11 +35,11 @@
     "@eslint/js": "10.0.1",
     "eslint": "10.7.0",
     "globals": "17.7.0",
-    "parse5": "8.0.1",
-    "postcss": "8.5.19",
+    "postcss": "8.5.28",
     "postcss-selector-parser": "7.1.4"
   },
   "dependencies": {
-    "sharp": "0.35.3"
+    "parse5": "8.0.1",
+    "sharp": "0.35.4"
   }
 }

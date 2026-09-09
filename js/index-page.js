@@ -2,7 +2,17 @@
   const DEFAULT_FEATURED_CATEGORY = "精选";
   const PUBLIC_SEARCH_QUERY_MAX_LENGTH = 256;
 
-  function resolveFeaturedCategoryName(sharedContent) {
+  function resolveFeaturedCategoryName(sharedContent, cta) {
+    // The build step writes the configured category into this link. Preserve
+    // it on first load and after an SPA visit instead of replacing it with a
+    // category from the shared fallback list.
+    try {
+      const href = cta?.getAttribute?.("href") || cta?.href;
+      const configured = href && new URL(href, window.location.href).searchParams.get("category")?.trim();
+      if (configured) return configured;
+    } catch {
+      // A malformed/missing template link can still use the default category.
+    }
     if (typeof sharedContent.getRemoteBlogCategories !== "function") {
       return DEFAULT_FEATURED_CATEGORY;
     }
@@ -17,7 +27,6 @@
   function initIndexPage() {
     const sharedContent = window.NotionContent || window.NotionContentShared || {};
     const siteUtils = window.SiteUtils || {};
-    const featuredCategory = resolveFeaturedCategoryName(sharedContent);
     const searchForm = document.getElementById("heroSearchForm");
     const searchInput = document.getElementById("heroSearch");
     const ctaHome = document.getElementById("ctaHome");
@@ -27,6 +36,7 @@
     if (!searchForm || !searchInput || !ctaHome || !ctaStart || !ctaWiki) {
       return null;
     }
+    const featuredCategory = resolveFeaturedCategoryName(sharedContent, ctaStart);
 
     function navigateTo(url) {
       if (window.SPARouter?.navigate) {

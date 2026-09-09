@@ -1221,7 +1221,13 @@
   const blockRenderers = createBlockRenderers();
 
   function renderBlock(block, options = {}) {
-    const childrenHtml = renderBlocks(block.children || [], options);
+    const children = Array.isArray(block.children) ? block.children : [];
+    // A table consumes its rows as one table; only other child blocks belong
+    // in the generic trailing content. Standalone rows still render normally.
+    const childrenHtml = renderBlocks(
+      block.type === "table" ? children.filter((child) => child?.type !== "table_row") : children,
+      options,
+    );
     const baseOrigin = options.baseOrigin;
     const renderer = blockRenderers[block.type];
 

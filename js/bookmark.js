@@ -10,7 +10,7 @@
     // a signing-key rotation. Keep it aligned with NotionAPI's summary-cache
     // TTL so an expired bookmark refresh cannot be satisfied indefinitely by
     // the same stale session summary.
-    const BOOKMARK_METADATA_HYDRATION_GENERATION = 6;
+    const BOOKMARK_METADATA_HYDRATION_GENERATION = 7;
     const BOOKMARK_METADATA_FRESHNESS_MS = 1000 * 60 * 30;
     const BOOKMARK_METADATA_FUTURE_CLOCK_SKEW_MS = 1000 * 60 * 5;
     const siteUtils = window.SiteUtils || {};
@@ -137,7 +137,8 @@
 
     function getCurrentPostSummary(id) {
       try {
-        return window.NotionAPI?.getPostSummary?.(id) || null;
+        const summary = window.NotionAPI?.getPostSummary?.(id);
+        return summary && !summary.isPartial ? summary : null;
       } catch (error) {
         return null;
       }

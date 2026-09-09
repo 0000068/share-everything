@@ -1,6 +1,8 @@
 const nativeSetTimeout = globalThis.setTimeout;
 const nativeClearTimeout = globalThis.clearTimeout;
 
+export { createHarness as createSpaRouterHarness, createRouteDocument };
+
 async function waitForValue(readValue, message) {
   for (let attempt = 0; attempt < 50; attempt += 1) {
     const value = readValue();
@@ -268,7 +270,7 @@ export async function runSpaRouterChecks({ assert, loadBrowserScript }) {
     },
     pageLoader: async () => {},
     setTimeout(callback, delay) {
-      if (delay === 15_000) queueMicrotask(callback);
+      if (delay === 35_000) queueMicrotask(callback);
       else nativeSetTimeout(callback, 0);
       return 1;
     },
@@ -324,7 +326,7 @@ export async function runSpaRouterChecks({ assert, loadBrowserScript }) {
       return new Promise(() => {});
     },
     setTimeout(callback, delay) {
-      if (delay === 15_000) return nativeSetTimeout(callback, 1_000);
+      if (delay === 35_000) return nativeSetTimeout(callback, 1_000);
       if (delay === 150) return nativeSetTimeout(callback, 0);
       if (delay === 10_000) return nativeSetTimeout(callback, 10);
       return nativeSetTimeout(callback, 0);
@@ -362,7 +364,7 @@ export async function runSpaRouterChecks({ assert, loadBrowserScript }) {
     }),
     setTimeout(callback, delay) {
       if (delay === 150) return nativeSetTimeout(callback, 0);
-      if (delay === 15_000 || delay === 10_000) return nativeSetTimeout(callback, 1_000);
+      if (delay === 35_000 || delay === 10_000) return nativeSetTimeout(callback, 1_000);
       return nativeSetTimeout(callback, 0);
     },
   });
@@ -411,7 +413,7 @@ export async function runSpaRouterChecks({ assert, loadBrowserScript }) {
     }),
     setTimeout(callback, delay) {
       if (delay === 150) return nativeSetTimeout(callback, 0);
-      if (delay === 15_000 || delay === 10_000) return nativeSetTimeout(callback, 1_000);
+      if (delay === 35_000 || delay === 10_000) return nativeSetTimeout(callback, 1_000);
       return nativeSetTimeout(callback, 0);
     },
   });
@@ -479,7 +481,7 @@ export async function runSpaRouterChecks({ assert, loadBrowserScript }) {
     }),
     setTimeout(callback, delay) {
       if (delay === 150) return nativeSetTimeout(callback, 0);
-      if (delay === 15_000 || delay === 10_000) return nativeSetTimeout(callback, 1_000);
+      if (delay === 35_000 || delay === 10_000) return nativeSetTimeout(callback, 1_000);
       return nativeSetTimeout(callback, 0);
     },
   });
@@ -533,7 +535,7 @@ export async function runSpaRouterChecks({ assert, loadBrowserScript }) {
     routeDocument: createRouteDocument({ assetVersion: "" }),
     setTimeout(callback, delay) {
       if (delay === 150) return nativeSetTimeout(callback, 0);
-      if (delay === 15_000 || delay === 10_000) return nativeSetTimeout(callback, 1_000);
+      if (delay === 35_000 || delay === 10_000) return nativeSetTimeout(callback, 1_000);
       return nativeSetTimeout(callback, 0);
     },
   });
@@ -565,7 +567,7 @@ export async function runSpaRouterChecks({ assert, loadBrowserScript }) {
     }),
     setTimeout(callback, delay) {
       if (delay === 150) return nativeSetTimeout(callback, 0);
-      if (delay === 15_000 || delay === 10_000) return nativeSetTimeout(callback, 1_000);
+      if (delay === 35_000 || delay === 10_000) return nativeSetTimeout(callback, 1_000);
       return nativeSetTimeout(callback, 0);
     },
   });
@@ -599,7 +601,7 @@ export async function runSpaRouterChecks({ assert, loadBrowserScript }) {
     routeDocument: createRouteDocument({ assetVersion: "release-a" }),
     setTimeout(callback, delay) {
       if (delay === 150) return nativeSetTimeout(callback, 0);
-      if (delay === 15_000 || delay === 10_000) return nativeSetTimeout(callback, 1_000);
+      if (delay === 35_000 || delay === 10_000) return nativeSetTimeout(callback, 1_000);
       return nativeSetTimeout(callback, 0);
     },
   });
@@ -658,7 +660,7 @@ export async function runSpaRouterChecks({ assert, loadBrowserScript }) {
     routeDocument: createRouteDocument({ assetVersion: "release-a", hasContent: false }),
     setTimeout(callback, delay) {
       if (delay === 150) return nativeSetTimeout(callback, 0);
-      if (delay === 15_000 || delay === 10_000) return nativeSetTimeout(callback, 1_000);
+      if (delay === 35_000 || delay === 10_000) return nativeSetTimeout(callback, 1_000);
       return nativeSetTimeout(callback, 0);
     },
   });

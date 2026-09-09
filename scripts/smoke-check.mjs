@@ -14,6 +14,7 @@ import { runRoutingAndVercelChecks } from "./smoke-check/routing-vercel.mjs";
 import { runServerModuleChecks } from "./smoke-check/server-modules.mjs";
 import { runSpaRouterChecks } from "./smoke-check/spa-router.mjs";
 import { runToolingChecks } from "./smoke-check/tooling.mjs";
+import { runIntegrationRegressionChecks } from "./smoke-check/integration-regressions.mjs";
 import * as parse5ForSmokeCheck from "parse5";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -880,14 +881,17 @@ expectIncludes(blogPageJs, 'window.scrollTo({ top: 0, behavior: "auto" });', "bl
 expectIncludes(notionApiJs, "POSTS_RESPONSE_CACHE_TTL", "notion client should keep a short in-memory list cache for fast returns");
 const notionClientBudgetMatch = /PUBLIC_CONTENT_REQUEST_TIMEOUT_MS\s*=\s*([\d_]+)/.exec(notionApiJs);
 const bootstrapBudgetMatch = /PUBLIC_CONTENT_REQUEST_TIMEOUT_MS\s*=\s*([\d_]+)/.exec(blogBootstrapJs);
+const routeBudgetMatch = /ROUTE_NETWORK_TIMEOUT_MS\s*=\s*([\d_]+)/.exec(spaRouterJs);
 const serverOperationBudgetMatch = /MAX_NOTION_OPERATION_TIMEOUT_MS\s*=\s*([\d_]+)/.exec(serverNotionClientJs);
 assert.ok(notionClientBudgetMatch, "notion client should declare its public-content request budget");
 assert.ok(bootstrapBudgetMatch, "blog bootstrap should declare its public-content request budget");
+assert.ok(routeBudgetMatch, "SPA HTML requests should declare their public-content request budget");
 assert.ok(serverOperationBudgetMatch, "server notion client should declare its maximum total operation budget");
 const notionClientBudgetMs = Number(notionClientBudgetMatch[1].replaceAll("_", ""));
 const bootstrapBudgetMs = Number(bootstrapBudgetMatch[1].replaceAll("_", ""));
 const serverOperationBudgetMs = Number(serverOperationBudgetMatch[1].replaceAll("_", ""));
 assert.equal(bootstrapBudgetMs, notionClientBudgetMs, "bootstrap and Notion client budgets should stay synchronized");
+assert.equal(Number(routeBudgetMatch[1].replaceAll("_", "")), notionClientBudgetMs, "article HTML and JSON transports must share the complete server operation budget");
 assert.ok(
   notionClientBudgetMs >= serverOperationBudgetMs + 5_000,
   "browser public-content requests should outlive the complete server Notion operation budget",
@@ -952,7 +956,8 @@ assert.equal(
   "package engines should match the Node lines actually exercised by CI",
 );
 assert.equal(packageMetadata.packageManager, "npm@11.9.0", "package metadata should pin the npm release used for reproducible installs");
-assert.equal(packageMetadata.devDependencies?.postcss, "8.5.19", "PostCSS should stay on the audited exact patch release");
+assert.equal(packageMetadata.devDependencies?.postcss, "8.5.28", "PostCSS should stay on the audited exact patch release");
+assert.equal(typeof packageMetadata.dependencies?.parse5, "string", "SSR HTML parsing must be available in a production-only install");
 assert.equal(
   typeof packageMetadata.dependencies?.sharp,
   "string",
@@ -1163,7 +1168,7 @@ expectNotIncludes(spaRouterJs, "script[src]:not([data-spa-runtime])", "SPA route
 expectIncludes(spaRouterJs, "StructuredData?.syncFromDocument", "SPA router should carry SSR JSON-LD into the active document during navigation");
 expectIncludes(spaRouterJs, "waitForRouteExitCue", "SPA router should preserve the v1.6-style route exit cue");
 expectIncludes(spaRouterJs, "ROUTE_EXIT_CUE_MS = 150", "SPA router should keep the old quick route exit pause");
-expectIncludes(spaRouterJs, "ROUTE_NETWORK_TIMEOUT_MS = 15000", "SPA router should give HTML transport its own bounded deadline");
+expectIncludes(spaRouterJs, "ROUTE_NETWORK_TIMEOUT_MS = 35000", "SPA HTML transport should outlive the complete 30 second server budget");
 expectIncludes(spaRouterJs, "ROUTE_PREPARE_TIMEOUT_MS = 10000", "SPA router should give module/style preparation a separate bounded deadline");
 expectIncludes(spaRouterJs, "restoreCurrentPage(content, currentToken)", "SPA router deadline failures should restore the existing interactive page");
 expectIncludes(spaRouterJs, "pendingPageFetches", "SPA router should coalesce in-flight page HTML prefetch and navigation requests");
@@ -1693,7 +1698,7 @@ expectNotIncludes(bookmarkJs, "codeUnit.toString(16)", "bookmark selector escapi
 expectIncludes(bookmarkJs, "createBookmarkEntry", "bookmark manager should centralize bookmark record creation");
 expectIncludes(bookmarkJs, "buildCardBookmarkSource", "bookmark manager should centralize DOM snapshot extraction");
 expectIncludes(bookmarkJs, "hydrateMissingMetadata", "bookmark manager should hydrate stale metadata");
-expectIncludes(bookmarkJs, "BOOKMARK_METADATA_HYDRATION_GENERATION = 6", "bookmark metadata should re-hydrate when the persistence generation bumps");
+expectIncludes(bookmarkJs, "BOOKMARK_METADATA_HYDRATION_GENERATION = 7", "bookmark metadata should repair previously lost covers when the persistence generation bumps");
 expectIncludes(bookmarkJs, "BOOKMARK_METADATA_FRESHNESS_MS = 1000 * 60 * 30", "bookmark cover signatures should have a bounded freshness window");
 expectIncludes(bookmarkJs, "getDisplayEntries", "bookmark display reads should overlay current volatile cover metadata");
 expectIncludes(blogPageJs, "bookmarkManager.getDisplayEntries", "bookmark views should consume rotation-safe display entries");
@@ -1949,7 +1954,7 @@ assert.equal(
 );
 assert.equal(
   bookmarkManagerHarness.window.BookmarkManager.getAll()[0]?.metadataVersion,
-  6,
+  7,
   "bookmark manager should persist the upgraded metadata version for new bookmarks",
 );
 assert.ok(
@@ -2819,8 +2824,8 @@ assert.equal(
 );
 assert.equal(
   nonCanonicalPostRouteRes.getHeader("cache-control"),
-  "public, max-age=86400, s-maxage=604800",
-  "canonical article redirects should be safely edge-cacheable",
+  "public, max-age=0, s-maxage=3600, must-revalidate",
+  "canonical article redirects should revalidate in browsers and use bounded edge caching",
 );
 const rawVariantPostRouteRes = createApiResponseRecorder();
 await apiPostHandler({
@@ -2955,4 +2960,5 @@ await runRoutingAndVercelChecks({
   vercelJson,
 });
 await runLocalServerIntegrationChecks({ assert });
+await runIntegrationRegressionChecks();
 console.log("Smoke check passed.");

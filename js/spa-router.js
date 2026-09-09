@@ -43,7 +43,8 @@
   const ROUTE_ENTER_END_TRANSFORM = "translateY(0)";
   const ROUTE_TRANSITION_RESET_MS = 300;
   const ROUTE_EXIT_CUE_MS = 150;
-  const ROUTE_NETWORK_TIMEOUT_MS = 15000;
+  // Article HTML waits for the complete server-side Notion operation (30s).
+  const ROUTE_NETWORK_TIMEOUT_MS = 35000;
   const ROUTE_PREPARE_TIMEOUT_MS = 10000;
 
   const SPARouter = (() => {
@@ -149,7 +150,10 @@
       const postId = getPostIdFromUrl(resolved.href);
       if (!postId) return null;
 
-      const templateUrl = new URL("/post.html", resolved.origin);
+      // This direct SSR endpoint does not traverse the public rewrite or any
+      // previously cached canonical redirect. The document still declares the
+      // public /posts/:id URL and navigation history keeps that public URL.
+      const templateUrl = new URL("/api/post", resolved.origin);
       templateUrl.searchParams.set("id", postId);
       return templateUrl.href;
     }
@@ -185,7 +189,8 @@
       try {
         return await requestPageHtml(routeKey, { signal, cacheMode });
       } catch (error) {
-        if (error?.status !== 404 || !fallbackUrl) throw error;
+        const transportFailed = error?.name === "TypeError";
+        if (signal?.aborted || !fallbackUrl || (error?.status !== 404 && !transportFailed)) throw error;
 
         return requestPageHtml(fallbackUrl, {
           signal,
@@ -785,7 +790,6 @@
           element.style.transform = "none";
         });
 
-        PageRuntime.initializePage(targetPageId);
         updateSeoMeta({
           title: nextTitle,
           description: nextDescription,
@@ -799,6 +803,9 @@
           robots: nextRobots,
         });
         window.StructuredData?.syncFromDocument?.(doc);
+        // Page-specific URL state owns the final metadata (category, search,
+        // local bookmarks). Apply template defaults before initializing it.
+        PageRuntime.initializePage(targetPageId);
         activePageUrl = targetUrl.href;
         pageSwapPendingCommit = false;
         window.NavigationFeedback?.clear?.();

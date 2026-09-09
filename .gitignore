@@ -30,6 +30,8 @@ npm-debug.log*
 # Build output
 dist/
 .output/
+.playwright-cli/
+output/playwright/
 
 # Temporary files
 *.tmp

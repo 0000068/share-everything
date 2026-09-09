@@ -74,6 +74,20 @@ function requestInitialData(requestUrl, controller) {
     if (!response.ok) {
       const error = new Error(`HTTP ${response.status}`);
       error.status = response.status;
+      // Preserve the same server diagnostics as the full API client. The
+      // bootstrap response is consumed directly, so dropping these fields
+      // would turn configuration/permission errors into a generic failure.
+      const payload = typeof response.json === "function"
+        ? await response.json().catch(() => null)
+        : null;
+      if (payload && typeof payload === "object") {
+        for (const key of ["code", "notionCode"]) {
+          if (typeof payload[key] === "string") error[key] = payload[key];
+        }
+        error.detail = [payload.detail, payload.message, payload.error]
+          .find((value) => typeof value === "string" && value) || "";
+      }
+      error.retryAfter = response.headers?.get?.("retry-after") || "";
       throw error;
     }
     return response.json();

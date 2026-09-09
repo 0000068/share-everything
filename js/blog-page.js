@@ -360,6 +360,10 @@
         return "Notion API 响应超时，请稍后重试。";
       }
 
+      if (status >= 500) {
+        return "内容服务暂时不可用，请稍后重试。";
+      }
+
       return "请检查网络后重试";
     }
 
@@ -1035,6 +1039,7 @@
         if (currentPage !== data.currentPage) {
           currentPage = data.currentPage;
           syncListingUrl();
+          updatePageUI();
         }
 
         if (data.results.length === 0) {
@@ -1132,6 +1137,7 @@
 
       currentPage = nextPage;
       syncListingUrl(HISTORY_MODE_PUSH);
+      updatePageUI();
       renderPosts();
       window.scrollTo({ top: 0, behavior: "auto" });
     }

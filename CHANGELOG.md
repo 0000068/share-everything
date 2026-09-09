@@ -2,7 +2,19 @@
 
 All notable changes to this project are tracked here.
 
-## 8.6.0 - 2026-07-18 (unreleased)
+## 8.7.0 - 2026-09-09
+
+Restore live article navigation and repair the defects found in the full source audit.
+
+- Fixed canonical article redirects looping on Vercel's rewrite-injected `id` query. Redirects now require browser revalidation; malformed path/query variants still canonicalize before content loading.
+- Added a direct SSR recovery path for article transport/404 failures while preserving the canonical public address. Aligned SPA HTML's timeout with the existing 35-second JSON budget and retained bootstrap error diagnostics instead of reporting every service failure as a network problem.
+- Fixed list-entry URL helpers dropping bookmark cover signatures. Partial session summaries no longer replace full saved metadata; bookmark generation 7 refreshes affected older records.
+- Fixed duplicate table rows, stale category/bookmark SEO after SPA navigation, and pagination canonical URLs. Preserved 128-character category identifiers and configured homepage featured links.
+- Rejected archived/trashed Notion pages at the public-policy boundary while retaining database-wide publication of active pages.
+- Upgraded Sharp to 0.35.4 and PostCSS to 8.5.28, updated vulnerable transitive dependencies, and moved runtime HTML parser `parse5` into production dependencies.
+- Added cross-module regression checks covering these behaviors, rewrite-shaped SSR requests, a successful 16-second article response, and service diagnostics. Refreshed generated assets with the `20260909-v87` content fingerprint.
+
+## 8.6.0 - 2026-07-18
 
 Cold-load performance, cancellation, accessibility, caching, and executable release-contract hardening.
 
