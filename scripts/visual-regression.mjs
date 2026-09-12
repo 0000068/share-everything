@@ -52,6 +52,7 @@ const scenarios = [
     readiness: "post-content",
     viewport: { width: 390, height: 844, mobile: true },
     check: checkMobilePostContent,
+    afterCaptureCheck: checkLongInlineMath,
   },
   {
     name: VISUAL_SCENARIOS.mobilePostEmpty,
@@ -82,6 +83,7 @@ const scenarios = [
     readiness: "post-content",
     viewport: { width: 1280, height: 720, mobile: false },
     check: checkDesktopPostContent,
+    afterCaptureCheck: checkPostFragmentMotion,
   },
 ];
 
@@ -1297,6 +1299,45 @@ async function checkMobilePostContent(client, viewport) {
   assert.equal(metrics.hasCode, true, "mobile full post should render code content");
   assert.equal(metrics.emptyDisplay, "none", "mobile full post should hide the empty state");
   assert.equal(metrics.skeletonDisplay, "none", "mobile full post should hide the skeleton after loading");
+}
+
+async function checkLongInlineMath(client) {
+  const metrics = await evaluate(client, `(() => {
+    const content = document.querySelector(".post-content");
+    const expression = Array.from({ length: 24 }, (_, index) => "a_{" + (index + 1) + "}").join("+") + "=S";
+    const paragraph = document.createElement("p");
+    paragraph.innerHTML = window.NotionContent.renderMathExpression(expression);
+    content.appendChild(paragraph);
+    const math = paragraph.querySelector(".post-math-inline");
+    math.scrollLeft = 10000;
+    const result = { scrollLeft: math.scrollLeft, clientWidth: math.clientWidth, scrollWidth: math.scrollWidth,
+      pageWidth: document.documentElement.scrollWidth, viewport: innerWidth };
+    paragraph.remove();
+    return result;
+  })()`);
+  assert.ok(metrics.scrollWidth > metrics.clientWidth, "long math fixture must exceed its mobile container");
+  assert.ok(metrics.scrollLeft > 0, "the end of long inline math must remain reachable by scrolling");
+  assert.ok(metrics.pageWidth <= metrics.viewport + 1, "math scrolling must not widen the page");
+}
+
+async function checkPostFragmentMotion(client) {
+  const metrics = await evaluate(client, `(async () => {
+    const target = document.getElementById("postContent");
+    history.replaceState(null, "", location.pathname + location.search + "#postContent");
+    const enter = target.animate([{ transform: "translateY(24px)" }, { transform: "none" }], { duration: 100 });
+    window.scrollToPageFragment();
+    await enter.finished;
+    await new Promise(requestAnimationFrame);
+    const finalTop = target.getBoundingClientRect().top;
+    const second = target.animate([{ transform: "translateY(24px)" }, { transform: "none" }], { duration: 100 });
+    window.scrollToPageFragment();
+    window.scrollTo({ top: 0, behavior: "instant" });
+    await second.finished;
+    await new Promise(requestAnimationFrame);
+    return { finalTop, userScrollY: scrollY };
+  })()`);
+  assert.ok(Math.abs(metrics.finalTop) <= 1, "fragment positioning must remain correct after entry motion");
+  assert.equal(metrics.userScrollY, 0, "late animation completion must not override user scrolling");
 }
 
 async function checkMobilePostEmpty(client, viewport) {

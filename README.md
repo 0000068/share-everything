@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-8.7.0-00e5ff?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/version-8.8.0-00e5ff?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/node-22.13--22.x%20%7C%2024.x-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/deploy-Vercel-000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel" />
   <img src="https://img.shields.io/badge/CMS-Notion-000?style=flat-square&logo=notion&logoColor=white" alt="Notion" />
@@ -70,7 +70,7 @@
 - 后续图片全部 `lazy` + `decoding="async"`
 - SPA 路由 HTML 缓存（5 分钟 / 最多 6 页）
 - 悬停 + 聚焦预取（尊重 `saveData` 和 2G 网络）
-- 服务端六层缓存体系 + 三层请求去重
+- 服务端缓存与共享请求：元数据、全量摘要、分类查询和文章详情均合并并发读取，分类查询独立于搜索词共享
 - `<=768px`、`saveData`、reduced-motion 关闭粒子 canvas；宽屏上限 350 个，并根据低硬件能力或持续帧成本降到 220 / 120
 
 ### 🔒 安全
@@ -320,10 +320,12 @@ npm.cmd run verify:release
 1. Fork 本仓库
 2. 在 [Vercel](https://vercel.com) 导入项目
 3. 添加环境变量 `NOTION_TOKEN` 和 `NOTION_DATABASE_ID`；推荐再设置独立随机的 `IMAGE_PROXY_SIGNING_SECRET`
-4. 发布前运行 `npm.cmd run assets:sync` 和 `npm.cmd run check`，并提交生成后的 HTML/CSS/manifest 与资源指纹
-5. 部署完成 ✅
+4. 发布前运行 `npm.cmd run assets:sync`、`npm.cmd run verify:release` 和 `npm.cmd run build`，并提交生成后的 HTML/CSS/manifest 与资源指纹
+5. 发布后检查首页、列表、文章、封面及收藏功能，确认生产版本与提交一致
 
-项目自带 `vercel.json` 配置，无需额外设置。
+项目自带 `vercel.json`：构建命令为 `npm run build`，静态输出目录为 `dist`。构建只复制首页、列表、manifest、图标、分享图以及浏览器 JS/CSS/assets；服务端、开发脚本、配置和文章模板不作为静态文件发布。`api/` 继续由 Vercel 构建为函数，`api/post.js` 显式携带私有 `post.html` 模板。不要把 `server/` 或模板加入上传排除规则，以免破坏函数依赖。
+
+回滚时，优先恢复已验证且仍可用的 Vercel deployment；需要从 Git 重建时，使用回退提交保留主分支历史，再同步资源、运行完整验证并发布。不要通过强制推送旧提交覆盖 `main` 历史。
 
 远程图片代理只接受服务端为公开 Notion 内容签发的 HMAC URL。未设置 `IMAGE_PROXY_SIGNING_SECRET` 时会从 `NOTION_TOKEN` 派生密钥，部署可直接工作；生产环境推荐使用至少 32 UTF-8 字节的独立稳定随机值，避免轮换 Notion Token 时让旧书签中的签名失效。轮换时先把旧值放入 `IMAGE_PROXY_SIGNING_SECRET_PREVIOUS`、再把新值写入 `IMAGE_PROXY_SIGNING_SECRET`；服务端只继续验证这一把旧密钥，待旧签名 URL 的缓存兼容窗口结束后删除。书签封面元数据最多复用 30 分钟：页面会优先合并当前 Notion 摘要中的封面 URL/签名并持久化；刷新失败或离线时仅暂时隐藏过期封面并保留书签、标题、标签、时间与渐变/Emoji fallback，恢复联网后仍可重试。因此删除 previous secret 不会让旧书签永久卡在 403，也不会用数据删除来掩盖签名失败。两个显式值都必须至少 32 UTF-8 字节，否则会 fail-closed，不会静默改用另一把密钥。旧缓存或旧书签中没有签名的图片会安全回退为浏览器直连 HTTPS 源图，不会开放匿名代理。
 

@@ -42,6 +42,7 @@ const {
 } = require("./notion-schema");
 const {
   createLruTtlCache,
+  createKeyedSingleFlight,
   createPendingRequestMap,
   createSingleFlight,
   createTtlSlot,
@@ -75,6 +76,10 @@ const databaseMetadataSingleFlight = createSingleFlight({
   errorCooldownMs: NOTION_SINGLE_FLIGHT_ERROR_COOLDOWN_MS,
 });
 const publicPageQueryCache = createLruTtlCache({ maxEntries: PUBLIC_PAGE_QUERY_CACHE_MAX_ENTRIES });
+const publicPageQuerySingleFlight = createKeyedSingleFlight({
+  maxEntries: PUBLIC_PAGE_QUERY_CACHE_MAX_ENTRIES,
+  errorCooldownMs: NOTION_SINGLE_FLIGHT_ERROR_COOLDOWN_MS,
+});
 const publicPageSummaryCache = createTtlSlot({
   onExpire: () => publicPageQueryCache.clear(),
 });
@@ -423,8 +428,15 @@ async function queryPublicPages(query = {}, { operation, signal } = {}) {
     return applyPostFilters(cachedPages, filters);
   }
 
-  const { pages, expiresAt } = await loadPublicPagesForQuery(filters, { operation });
-  cachePublicPageQuery(cacheKey, pages, expiresAt, { operation });
+  const pages = await publicPageQuerySingleFlight.run(cacheKey, ({ signal: sharedSignal }) => (
+    runWithNotionOperation(async (sharedOperation) => {
+      const cachedDuringWait = getCachedPublicPageQuery(cacheKey);
+      if (cachedDuringWait) return cachedDuringWait;
+      const loaded = await loadPublicPagesForQuery(filters, { operation: sharedOperation });
+      cachePublicPageQuery(cacheKey, loaded.pages, loaded.expiresAt, { operation: sharedOperation });
+      return loaded.pages;
+    }, { signal: sharedSignal })
+  ), { signal: operation.signal });
   return applyPostFilters(pages, filters);
 }
 

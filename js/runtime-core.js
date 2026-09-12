@@ -3,6 +3,37 @@
  */
 
 (function initRuntimeCore() {
+  let fragmentScrollToken = 0;
+  function scrollToPageFragment() {
+    const token = ++fragmentScrollToken;
+    const hash = window.location.hash.slice(1);
+    if (!hash) return false;
+    let id;
+    try { id = decodeURIComponent(hash); } catch { return false; }
+    const target = document.getElementById(id);
+    if (!target?.scrollIntoView) return false;
+    target.scrollIntoView({ block: "start", behavior: "instant" });
+    const href = window.location.href;
+    const scrollY = window.scrollY;
+    const animations = [];
+    for (let node = target; node; node = node.parentElement) {
+      for (const animation of node.getAnimations?.() || []) {
+        const endTime = animation.effect?.getComputedTiming?.().endTime;
+        if (Number.isFinite(endTime) && endTime <= 2_000) animations.push(animation.finished);
+      }
+    }
+    // Native scrolling uses the current transformed rectangle. Correct it
+    // after finite entry motion, unless navigation or user scrolling intervened.
+    if (animations.length) Promise.allSettled(animations).then(() => {
+      if (token === fragmentScrollToken && target.isConnected
+        && window.location.href === href && window.scrollY === scrollY) {
+        target.scrollIntoView({ block: "start", behavior: "instant" });
+      }
+    });
+    return true;
+  }
+  window.scrollToPageFragment = scrollToPageFragment;
+
   function ensureStructuredDataTag(key) {
     const selector = `script[type="application/ld+json"][data-structured-data="${key}"]`;
     let script = document.head?.querySelector(selector);

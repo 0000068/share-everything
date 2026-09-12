@@ -416,6 +416,7 @@
         categoryLabel: truncateText(summary.categoryLabel, POST_SUMMARY_SESSION_MAX_CATEGORY_LABEL_LENGTH),
         categoryColor: normalizeCategoryColor(summary.categoryColor),
         date: truncateText(summary.date, 32),
+        updatedAt: truncateText(summary.updatedAt, 32),
         readTime: truncateText(summary.readTime, POST_SUMMARY_SESSION_MAX_READ_TIME_LENGTH),
         coverImage: normalizeSessionCoverImage(summary.coverImage),
         coverImageSignature: truncateText(
@@ -484,6 +485,7 @@
         categoryLabel,
         categoryColor,
         date: post.date || "",
+        updatedAt: post.updatedAt || "",
         readTime,
         coverImage,
         coverImageSignature,

@@ -283,9 +283,13 @@ function serveVisualApiFixture(req, url, res) {
 }
 
 const server = createServer(async (req, res) => {
-  const url = new URL(req.url || "/", `http://${host}:${port}`);
-
   try {
+    let url;
+    try {
+      url = new URL(req.url || "/", `http://${host}:${port}`);
+    } catch {
+      throw createHttpError(400, "Invalid request URL");
+    }
     if (serveVisualApiFixture(req, url, res)) {
       return;
     }

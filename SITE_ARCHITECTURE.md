@@ -1,7 +1,7 @@
 # Share Everything Site Architecture
 
-> Version: v8.7
-> Updated: 2026-09-09
+> Version: v8.8
+> Updated: 2026-09-12
 
 ## 1. Overview
 
@@ -10,6 +10,14 @@ Share Everything is a small static-first site with Notion as the content source,
 `/` and `/blog.html` are static HTML shells; the browser loads listing data through `/api/posts-data`. Only canonical `/posts/:id` article routes are server-rendered HTML. SPA navigation reuses those same route contracts rather than turning the home or listing shell into SSR pages.
 
 It is not a React, Next.js, Vue, Cloudflare Workers, or Cloudflare Pages app. Cloudflare only handles DNS.
+
+The v8.8 static build publishes an explicit allowlist into `dist`; repository source is not the static web root. Vercel still builds `api/` as functions, including traced `server/` dependencies, and `api/post.js` explicitly includes the private root `post.html` template. Build configuration follows [Vercel outputDirectory](https://vercel.com/docs/project-configuration/vercel-json#outputdirectory).
+
+Startup recovery is owned by the independent classic `js/boot-guard.js`, loaded before the module entry. It observes module-graph errors and slow startup and provides a document reload without relying on failed foundations. Runtime completion removes the guard's timer, error observer and notice. SPA navigation rejects abandoned HTML entries; fragment positioning is repeated after asynchronous article rendering and finite entry motion, with stale navigation/user scroll checks.
+
+Category base queries use a bounded keyed single-flight with subscriber-aware cancellation and per-key error cooldown. Bookmark re-adds can restore a complete recently removed record; partial DOM/session summaries remain eligible for authoritative hydration. `updatedAt` preserves Notion `last_edited_time` independently of the publication date through summaries, SSR/client Article metadata and sitemap.
+
+Cover cancellation stops the response wait without calling `Sharp.destroy(error)`: that stream operation cannot cancel native `toBuffer()` work. The handler retains its concurrency slot and invocation until native settlement; [Sharp processing timeout](https://sharp.pixelplumbing.com/api-output/#timeout) bounds processing, while the request lifecycle independently ends timed-out responses. Sharp's processing clock excludes time queued for a libuv thread. Real native WebP/AVIF cancellation and timeout checks run in an isolated process without an uncaught-exception suppressor.
 
 | Layer | Technology | Responsibility |
 |---|---|---|
@@ -37,6 +45,10 @@ Notion Database
 ```
 
 ## 2. Release Highlights
+
+### Version v8.8 Highlights
+
+This revision repairs the twelve September 12 audit findings: native image cancellation, startup recovery, superseded navigation, complete bookmark metadata, concurrent category queries, TeX argument semantics, mobile formula overflow, fragment positioning, modification dates, malformed local URLs, configurable branding and modified link clicks. Static deployment now uses an allowlist. See the current contracts in the overview and final evidence in `RELEASE_CHANGESET.md`.
 
 ### Version v8.7 Highlights
 
@@ -928,6 +940,4 @@ The smoke suite currently covers:
 
 ## 16. Latest Verification
 
-Latest in-worktree verification evidence is dated 2026-07-17. `npm.cmd test` passed ESLint, generated-file checks, the complete smoke suite, and the architecture gate across 45 production modules with no missing imports, boundary violations, or cycles. `npm.cmd run verify:release` then passed the same read-only gate in parallel with strict pixel comparison for all seven mobile/desktop scenarios. Three independent visual-generation samples also converged before the baselines were transactionally installed and inspected.
-
-Both full and production-only dependency audits reported zero vulnerabilities; `npm.cmd outdated --long` returned no outdated packages; clean `npm.cmd ci` and its dry run completed from the lockfile. This evidence applies to the uncommitted local working tree only. It makes no commit, push, branch-divergence, deployment, or `origin/main` claim; Git synchronization remains a separate user-authorized release action.
+Current verification and deployment status are maintained only in [RELEASE_CHANGESET.md](RELEASE_CHANGESET.md). Historical release sections above describe their own versions; they are not evidence that the current working tree or production deployment has passed those checks.

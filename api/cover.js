@@ -28,7 +28,7 @@ const {
   readClientKey,
   readPositiveIntegerEnv,
 } = require("../server/request-guard");
-const { createRequestLifecycle } = require("../server/request-lifecycle");
+const { createRequestLifecycle, waitForPromiseWithSignal } = require("../server/request-lifecycle");
 const { hasCanonicalRequestSearch } = require("../server/canonical-query");
 
 const COVER_IMAGE_WIDTHS = Object.freeze([320, 640, 960]);
@@ -104,8 +104,7 @@ function getCoverHeight(width) {
 async function optimizeCoverImage(body, {
   width,
   format,
-  signal,
-  timeoutSeconds = 0,
+  timeoutSeconds = Math.ceil(IMAGE_PROXY_TIMEOUT_MS / 1_000),
 }) {
   const outputFormat = COVER_IMAGE_FORMATS[format];
   const pipeline = sharp(body, {
@@ -123,15 +122,10 @@ async function optimizeCoverImage(body, {
     pipeline.timeout({ seconds: timeoutSeconds });
   }
 
-  const outputPipeline = outputFormat.transform(pipeline);
-  const onAbort = () => outputPipeline.destroy(signal.reason);
-  if (signal?.aborted) onAbort();
-  else signal?.addEventListener?.("abort", onAbort, { once: true });
-  try {
-    return await outputPipeline.toBuffer();
-  } finally {
-    signal?.removeEventListener?.("abort", onAbort);
-  }
+  // destroy(error) emits a separate stream error and does not cancel an
+  // already-running native toBuffer() job. Keep native completion observable;
+  // the handler cancels its wait and retains capacity until this job settles.
+  return outputFormat.transform(pipeline).toBuffer();
 }
 
 function applyCoverSuccessHeaders(res, outputFormat, { contentLength } = {}) {
@@ -208,6 +202,7 @@ async function handler(req, res) {
     timeoutMs: IMAGE_PROXY_TIMEOUT_MS,
     timeoutMessage: "Cover image request timed out",
   });
+  let conversionTask = null;
 
   try {
     const source = await normalizeSourceUrl(authorization.source, undefined, {
@@ -233,15 +228,15 @@ async function handler(req, res) {
       if (lifecycle.signal.aborted) {
         throw lifecycle.signal.reason;
       }
-      optimizedBody = await optimizeCoverImage(body, {
+      conversionTask = optimizeCoverImage(body, {
         width,
         format: selectedFormat.format,
-        signal: lifecycle.signal,
         timeoutSeconds: Math.max(
           1,
           Math.ceil((lifecycle.deadlineAt - Date.now()) / 1_000),
         ),
       });
+      optimizedBody = await waitForPromiseWithSignal(conversionTask, lifecycle.signal);
       if (lifecycle.signal.aborted) {
         throw lifecycle.signal.reason;
       }
@@ -271,6 +266,10 @@ async function handler(req, res) {
     );
   } finally {
     lifecycle.dispose();
+    // A timeout response can end immediately, but native work still owns its
+    // slot until completion (or Sharp's processing timeout). Releasing early
+    // would let repeated disconnects bypass the concurrency limit.
+    if (conversionTask) await conversionTask.catch(() => {});
     releaseConcurrency();
   }
 }
@@ -279,6 +278,7 @@ handler.__test = Object.freeze({
   COVER_IMAGE_MAX_CONCURRENT_REQUESTS,
   COVER_IMAGE_RATE_LIMIT_PER_MINUTE,
   applyCoverSuccessHeaders,
+  optimizeCoverImage,
   readCoverFormat,
   readCoverWidth,
   selectCoverFormat,

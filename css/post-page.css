@@ -597,6 +597,9 @@
 .post-math-inline {
   display: inline-block;
   max-width: 100%;
+  overflow-x: auto;
+  padding-block: 0.12em;
+  scrollbar-width: thin;
   vertical-align: -0.08em;
 }
 

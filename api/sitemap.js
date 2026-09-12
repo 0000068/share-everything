@@ -43,7 +43,7 @@ module.exports = async function handler(req, res) {
       formatUrlEntry(`${siteOrigin}/`, { changefreq: "daily", priority: 1.0 }),
       formatUrlEntry(`${siteOrigin}/blog.html`, { changefreq: "daily", priority: 0.9 }),
       ...posts.map((post) => formatUrlEntry(buildPostUrl(post.id), {
-        lastmod: post.date || undefined,
+        lastmod: post.updatedAt || undefined,
         changefreq: "weekly",
         priority: 0.7,
       })),

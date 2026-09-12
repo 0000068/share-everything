@@ -93,6 +93,12 @@ async function checkBookmarkModuleComposition() {
     sessionStorage, localStorage,
     fetch: async () => { reloadFetches += 1; return createJsonResponse(completePost); },
   });
+  assert.equal(reloaded.BookmarkManager.toggleById(completePost.id), false);
+  assert.equal(reloaded.BookmarkManager.toggleById(completePost.id), true);
+  const restored = reloaded.BookmarkManager.getAll()[0];
+  for (const key of ["title", "excerpt", "coverImage", "coverImageSignature", "tags"]) {
+    assert.equal(JSON.stringify(restored[key]), JSON.stringify(completePost[key]), `rapid re-add must preserve full ${key}`);
+  }
   assert.equal(reloaded.NotionAPI.getPostSummary(postId).isPartial, true);
   assert.equal(reloaded.BookmarkManager.getDisplayEntries()[0].coverImage, completePost.coverImage);
   assert.equal(await reloaded.BookmarkManager.hydrateMissingMetadata(), false);
@@ -102,15 +108,28 @@ async function checkBookmarkModuleComposition() {
   assert.equal(persisted.title, completePost.title);
   assert.equal(persisted.tags.length, 12);
 
+  const partialOnly = createContentBrowser({
+    sessionStorage,
+    fetch: async () => createJsonResponse(completePost),
+  });
+  assert.equal(partialOnly.BookmarkManager.toggleById(completePost.id), true);
+  assert.equal(partialOnly.BookmarkManager.hasStaleMetadata(), true, "a compact session summary must remain marked for hydration");
+  assert.equal(await partialOnly.BookmarkManager.hydrateMissingMetadata(), true);
+  assert.equal(partialOnly.BookmarkManager.getAll()[0].title, completePost.title);
+
   // Repair records saved by the previous generation, even if that generation
   // recently persisted an omitted cover as null. Never use the compact cache
   // as a full metadata refresh.
-  localStorage.setItem("bookmarked_posts", JSON.stringify([{ ...persisted, metadataVersion: 6, coverImage: null }]));
+  localStorage.setItem("bookmarked_posts", JSON.stringify([{
+    ...persisted, metadataVersion: 7, coverImage: null,
+    title: persisted.title.slice(0, 160), excerpt: persisted.excerpt.slice(0, 320), tags: persisted.tags.slice(0, 8),
+  }]));
   const migrated = createContentBrowser({
     sessionStorage, localStorage,
     fetch: async () => { reloadFetches += 1; return createJsonResponse(completePost); },
   });
   assert.equal(await migrated.BookmarkManager.hydrateMissingMetadata(), true);
+  assert.equal(migrated.BookmarkManager.hasStaleMetadata(), false, "authoritative hydration must complete the metadata migration");
   assert.equal(reloadFetches, 1);
   persisted = JSON.parse(localStorage.getItem("bookmarked_posts"))[0];
   assert.equal(persisted.coverImage, completePost.coverImage);

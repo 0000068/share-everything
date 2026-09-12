@@ -14,7 +14,9 @@ import { runRoutingAndVercelChecks } from "./smoke-check/routing-vercel.mjs";
 import { runServerModuleChecks } from "./smoke-check/server-modules.mjs";
 import { runSpaRouterChecks } from "./smoke-check/spa-router.mjs";
 import { runToolingChecks } from "./smoke-check/tooling.mjs";
+import { checkSiteBrand } from "./smoke-check/site-brand.mjs";
 import { runIntegrationRegressionChecks } from "./smoke-check/integration-regressions.mjs";
+import { runReliabilityRegressionChecks } from "./smoke-check/reliability-regressions.mjs";
 import * as parse5ForSmokeCheck from "parse5";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -463,16 +465,8 @@ runServerModuleChecks({
   expectIncludes(htmlSource, `content="${expectedUrl}"`, `${label} should keep fallback og:url in sync with site.config.json`);
   expectIncludes(htmlSource, `href="${expectedUrl}"`, `${label} should keep fallback canonical in sync with site.config.json`);
   expectIncludes(htmlSource, `content="${configuredSiteOrigin}${defaultShareImagePath}"`, `${label} should keep fallback og:image in sync with site.config.json`);
-  expectIncludes(htmlSource, `name="application-name" content="${configuredSiteName}"`, `${label} should expose the configured site name`);
-  expectIncludes(htmlSource, `property="og:image:alt" content="${configuredSiteName}"`, `${label} should keep og:image:alt in sync with site.config.json`);
 });
-expectIncludes(indexHtml, `<title>${configuredSiteName}</title>`, "index.html title should follow site.config.json siteName");
-expectIncludes(indexHtml, `content="${configuredSiteName} — 探索、记录、分享"`, "index.html description should follow site.config.json siteName");
-expectIncludes(indexHtml, `<h1 class="hero-title" data-page-focus>${configuredSiteName}</h1>`, "index hero title should follow site.config.json siteName");
-expectIncludes(blogHtml, `<title>总览 — ${configuredSiteName}</title>`, "blog.html title should follow site.config.json siteName");
-expectIncludes(blogHtml, `property="og:title" content="总览 — ${configuredSiteName}"`, "blog.html og:title should follow site.config.json siteName");
-expectIncludes(postHtml, `<title>文章 — ${configuredSiteName}</title>`, "post.html title should follow site.config.json siteName");
-expectIncludes(postHtml, `property="og:title" content="${configuredSiteName}"`, "post.html fallback og:title should follow site.config.json siteName");
+checkSiteBrand({ siteName: configuredSiteName, indexHtml, blogHtml, postHtml, manifest: webManifest });
 expectIncludes(injectSiteMetaJs, "readSiteName", "metadata injection should own static site-name hydration");
 
 expectIncludes(indexHtml, 'property="og:image"', "index.html should declare og:image");
@@ -488,11 +482,8 @@ expectIncludes(postHtml, 'property="og:image"', "post.html should declare og:ima
   expectIncludes(htmlSource, '<meta name="mobile-web-app-capable" content="yes" />', `${label} should opt into standalone mobile display when installed`);
   expectIncludes(htmlSource, '<meta name="apple-mobile-web-app-capable" content="yes" />', `${label} should opt into iOS standalone display when saved to home screen`);
   expectIncludes(htmlSource, '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />', `${label} should let the starfield extend under the standalone status bar`);
-  expectIncludes(htmlSource, `<meta name="apple-mobile-web-app-title" content="${configuredSiteName}" />`, `${label} standalone title should follow site.config.json siteName`);
   expectNotIncludes(htmlSource, "favicon.svg", `${label} should not let a mismatched SVG favicon override the approved PNG artwork`);
 });
-assert.equal(webManifest.name, configuredSiteName, "web manifest name should follow site.config.json siteName");
-assert.equal(webManifest.short_name, "Share", "web manifest should keep a compact launcher title");
 assert.equal(webManifest.display, "standalone", "web manifest should request standalone display without the browser address bar");
 assert.ok(!Object.prototype.hasOwnProperty.call(webManifest, "orientation"), "web manifest should allow installed apps to follow the user's device orientation");
 assert.equal(webManifest.background_color, "#0a0e1a", "web manifest background should match the mobile safe-area background");
@@ -610,12 +601,13 @@ pageHtmlByLabel.forEach(([label, htmlSource]) => {
     `<script type="module" src="/js/app.js?${assetVersion}" data-spa-runtime></script>`,
     `${label} should load the shared SPA runtime through its ES module entry`,
   );
-  const expectedScriptCount = label === "blog.html" ? 2 : 1;
+  const expectedScriptCount = label === "blog.html" ? 3 : 2;
   assert.equal(
     Array.from(htmlSource.matchAll(/<script\b[^>]*\bsrc="\/js\//g)).length,
     expectedScriptCount,
-    `${label} should expose only its intentional module entries`,
+    `${label} should expose its boot guard and intentional module entries`,
   );
+  assert.ok(htmlSource.indexOf('/js/boot-guard.js?') < htmlSource.indexOf('data-spa-runtime'), `${label} needs an independent recovery guard before app.js`);
 });
 assert.ok(
   blogHtml.indexOf('data-blog-bootstrap') < blogHtml.indexOf('data-spa-runtime'),
@@ -1698,7 +1690,7 @@ expectNotIncludes(bookmarkJs, "codeUnit.toString(16)", "bookmark selector escapi
 expectIncludes(bookmarkJs, "createBookmarkEntry", "bookmark manager should centralize bookmark record creation");
 expectIncludes(bookmarkJs, "buildCardBookmarkSource", "bookmark manager should centralize DOM snapshot extraction");
 expectIncludes(bookmarkJs, "hydrateMissingMetadata", "bookmark manager should hydrate stale metadata");
-expectIncludes(bookmarkJs, "BOOKMARK_METADATA_HYDRATION_GENERATION = 7", "bookmark metadata should repair previously lost covers when the persistence generation bumps");
+expectIncludes(bookmarkJs, "BOOKMARK_METADATA_HYDRATION_GENERATION = 8", "bookmark metadata should repair records damaged by partial summaries in previous generations");
 expectIncludes(bookmarkJs, "BOOKMARK_METADATA_FRESHNESS_MS = 1000 * 60 * 30", "bookmark cover signatures should have a bounded freshness window");
 expectIncludes(bookmarkJs, "getDisplayEntries", "bookmark display reads should overlay current volatile cover metadata");
 expectIncludes(blogPageJs, "bookmarkManager.getDisplayEntries", "bookmark views should consume rotation-safe display entries");
@@ -1954,7 +1946,7 @@ assert.equal(
 );
 assert.equal(
   bookmarkManagerHarness.window.BookmarkManager.getAll()[0]?.metadataVersion,
-  7,
+  8,
   "bookmark manager should persist the upgraded metadata version for new bookmarks",
 );
 assert.ok(
@@ -2961,4 +2953,5 @@ await runRoutingAndVercelChecks({
 });
 await runLocalServerIntegrationChecks({ assert });
 await runIntegrationRegressionChecks();
+await runReliabilityRegressionChecks();
 console.log("Smoke check passed.");

@@ -408,6 +408,11 @@
           window.StructuredData?.clear?.("post-article");
         }
         const spaContent = document.getElementById("spa-content");
+        // Client-rendered headings do not exist at the router's initial scroll.
+        // Resolve the fragment again when this post's content becomes readable.
+        window.requestAnimationFrame(() => {
+          if (!isDisposed) window.scrollToPageFragment?.();
+        });
         if (spaContent?.dataset.pendingFocus) {
           window.requestAnimationFrame(() => {
             if (!isDisposed) {

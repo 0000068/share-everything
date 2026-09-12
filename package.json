@@ -1,6 +1,6 @@
 {
   "name": "share-everything",
-  "version": "8.7.0",
+  "version": "8.8.0",
   "packageManager": "npm@11.9.0",
   "type": "commonjs",
   "private": true,
@@ -18,6 +18,7 @@
   "scripts": {
     "assets:stamp": "node scripts/stamp-asset-version.mjs",
     "assets:sync": "npm run mobile:fallbacks && npm run meta:inject && npm run assets:stamp",
+    "build": "node scripts/build-mobile-fallbacks.mjs --check && node scripts/inject-site-meta.mjs --check && node scripts/build-static.mjs",
     "architecture:check": "node scripts/architecture-check.mjs",
     "check": "npm run lint && npm run architecture:check && node scripts/build-mobile-fallbacks.mjs --check && node scripts/inject-site-meta.mjs --check && node scripts/smoke-check.mjs",
     "dev": "node scripts/local-server.mjs",

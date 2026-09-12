@@ -21,7 +21,7 @@ function reservePort() {
 
 function request(origin, pathname, { method = "GET", timeoutMs = 3_000 } = {}) {
   return new Promise((resolve, reject) => {
-    const req = http.request(`${origin}${pathname}`, { method }, (res) => {
+    const req = http.request(origin, { path: pathname, method }, (res) => {
       const chunks = [];
       res.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
       res.once("end", () => resolve({
@@ -128,6 +128,10 @@ export async function runLocalServerIntegrationChecks({ assert }) {
   try {
     const indexResponse = await waitForServer(origin, child, () => output.trim());
     assert.match(indexResponse.body.toString("utf8"), /<!doctype html>/i, "local server should serve the real home document");
+
+    const malformedResponse = await request(origin, "//[");
+    assert.equal(malformedResponse.statusCode, 400, "malformed request targets must return 400");
+    assert.equal((await request(origin, "/")).statusCode, 200, "malformed URLs must not kill the server");
 
     const cssHeadResponse = await request(origin, "/css/style.css", { method: "HEAD" });
     assert.equal(cssHeadResponse.statusCode, 200, "local server should serve static HEAD requests");

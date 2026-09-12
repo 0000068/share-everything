@@ -10,7 +10,7 @@
     // a signing-key rotation. Keep it aligned with NotionAPI's summary-cache
     // TTL so an expired bookmark refresh cannot be satisfied indefinitely by
     // the same stale session summary.
-    const BOOKMARK_METADATA_HYDRATION_GENERATION = 7;
+    const BOOKMARK_METADATA_HYDRATION_GENERATION = 8;
     const BOOKMARK_METADATA_FRESHNESS_MS = 1000 * 60 * 30;
     const BOOKMARK_METADATA_FUTURE_CLOCK_SKEW_MS = 1000 * 60 * 5;
     const siteUtils = window.SiteUtils || {};
@@ -22,6 +22,7 @@
     let bookmarksCache = null;
     let metadataHydrationPromise = null;
     let storageSyncTimer = null;
+    const recentlyRemoved = new Map();
 
     function escapeSelectorValue(value) {
       return window.CSS.escape(String(value));
@@ -86,6 +87,7 @@
         category: normalizeText(entry.category),
         excerpt,
         date: normalizeText(entry.date),
+        updatedAt: normalizeText(entry.updatedAt),
         readTime: normalizeText(entry.readTime),
         coverImage: normalizePersistentCoverImage(entry.coverImage),
         coverImageSignature:
@@ -135,10 +137,10 @@
       return [...readBookmarks()];
     }
 
-    function getCurrentPostSummary(id) {
+    function getCurrentPostSummary(id, { allowPartial = false } = {}) {
       try {
         const summary = window.NotionAPI?.getPostSummary?.(id);
-        return summary && !summary.isPartial ? summary : null;
+        return summary && (allowPartial || !summary.isPartial) ? summary : null;
       } catch (error) {
         return null;
       }
@@ -259,7 +261,7 @@
 
     function createBookmarkEntry(
       source,
-      { timestamp = Date.now(), metadataRefreshedAt = Date.now() } = {},
+      { timestamp = Date.now(), metadataRefreshedAt = source?.metadataRefreshedAt ?? Date.now() } = {},
     ) {
       return normalizeBookmark({
         id: source?.id,
@@ -267,14 +269,15 @@
         category: source?.category || "",
         excerpt: source?.excerpt || "",
         date: source?.date || "",
+        updatedAt: source?.updatedAt || "",
         readTime: source?.readTime || "",
         coverImage: source?.coverImage || null,
         coverImageSignature: source?.coverImageSignature || "",
         coverEmoji: source?.coverEmoji || "📝",
         coverGradient: source?.coverGradient || null,
         tags: Array.isArray(source?.tags) ? source.tags : [],
-        metadataVersion: BOOKMARK_METADATA_HYDRATION_GENERATION,
-        metadataRefreshedAt,
+        metadataVersion: source?.metadataVersion ?? BOOKMARK_METADATA_HYDRATION_GENERATION,
+        metadataRefreshedAt: source?.isPartial ? 0 : metadataRefreshedAt,
         timestamp,
       });
     }
@@ -297,6 +300,9 @@
 
       return {
         id: postId,
+        // DOM text may contain formatted dates or a cover fallback. Keep it
+        // readable immediately, then hydrate authoritative metadata.
+        isPartial: true,
         title,
         excerpt,
         category,
@@ -315,7 +321,8 @@
       if (!postId) return null;
 
       let bookmarks = getAll();
-      const exists = bookmarks.some((bookmark) => bookmark.id === postId);
+      const removed = bookmarks.find((bookmark) => bookmark.id === postId);
+      const exists = Boolean(removed);
 
       if (exists) {
         bookmarks = bookmarks.filter((bookmark) => bookmark.id !== postId);
@@ -329,6 +336,16 @@
       }
 
       if (!save(bookmarks)) return null;
+      for (const [id, entry] of recentlyRemoved) {
+        if (Date.now() - entry.removedAt > 5_000) recentlyRemoved.delete(id);
+      }
+      if (removed) {
+        recentlyRemoved.delete(postId);
+        recentlyRemoved.set(postId, { post: removed, removedAt: Date.now() });
+        if (recentlyRemoved.size > 16) recentlyRemoved.delete(recentlyRemoved.keys().next().value);
+      } else {
+        recentlyRemoved.delete(postId);
+      }
       dispatchBookmarksUpdated();
       return !exists;
     }
@@ -337,42 +354,15 @@
       const normalizedPostId = normalizeBookmarkId(postId);
       if (!normalizedPostId) return null;
 
-      let bookmarks = getAll();
-      const exists = bookmarks.some((bookmark) => bookmark.id === normalizedPostId);
-      let didPersist = false;
-
-      if (exists) {
-        bookmarks = bookmarks.filter((bookmark) => bookmark.id !== normalizedPostId);
-        didPersist = true;
-      } else {
-        const cachedSummary = window.NotionAPI?.getPostSummary?.(normalizedPostId);
-        if (cachedSummary) {
-          const normalizedBookmark = createBookmarkEntry({
-            ...cachedSummary,
-            id: normalizedPostId,
-          });
-          if (normalizedBookmark) {
-            bookmarks.unshift(normalizedBookmark);
-            didPersist = true;
-          }
-        } else {
-          const card = document.querySelector(
-            `[data-post-id="${escapeSelectorValue(normalizedPostId)}"]`,
-          );
-          const normalizedBookmark = createBookmarkEntry(
-            buildCardBookmarkSource(card, normalizedPostId),
-          );
-          if (normalizedBookmark) {
-            bookmarks.unshift(normalizedBookmark);
-            didPersist = true;
-          }
-        }
-      }
-
-      if (!didPersist) return null;
-      if (!save(bookmarks)) return null;
-      dispatchBookmarksUpdated();
-      return !exists;
+      if (isBookmarked(normalizedPostId)) return toggle({ id: normalizedPostId });
+      const removed = recentlyRemoved.get(normalizedPostId);
+      const retained = removed && Date.now() - removed.removedAt <= 5_000 ? removed.post : null;
+      const source = getCurrentPostSummary(normalizedPostId) || retained
+        || buildCardBookmarkSource(document.querySelector(
+          `[data-post-id="${escapeSelectorValue(normalizedPostId)}"]`,
+        ), normalizedPostId)
+        || getCurrentPostSummary(normalizedPostId, { allowPartial: true });
+      return source ? toggle({ ...source, id: normalizedPostId }) : null;
     }
 
     async function hydrateMissingMetadata() {
@@ -416,6 +406,7 @@
           const hydratedBookmark = createBookmarkEntry({
             ...bookmark,
             ...source,
+            metadataVersion: BOOKMARK_METADATA_HYDRATION_GENERATION,
           }, {
             timestamp: bookmark.timestamp,
             metadataRefreshedAt: Date.now(),

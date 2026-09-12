@@ -172,9 +172,19 @@ assert.equal(
   "blog page should replace the current history entry while live search text changes",
 );
 let didPreventOverviewNav = false;
+for (const options of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]) {
+  let prevented = false;
+  blogTopActionsEl.dispatch("click", {
+    ...options,
+    target: { closest: () => ({ href: "https://example.com/blog.html", hasAttribute: () => false }) },
+    preventDefault: () => { prevented = true; },
+  });
+  assert.equal(prevented, false, "modified and non-primary clicks must retain browser navigation");
+}
 blogTopActionsEl.dispatch("click", {
   target: {
     href: "https://example.com/blog.html",
+    hasAttribute: () => false,
     closest(selector) {
       return selector === "a[href]" ? this : null;
     },

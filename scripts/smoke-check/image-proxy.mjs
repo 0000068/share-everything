@@ -65,7 +65,6 @@ export async function runImageProxyChecks(context) {
   expectIncludes(apiCoverJs, "COVER_IMAGE_WIDTHS", "cover endpoint should constrain supported thumbnail widths");
   expectNotIncludes(apiCoverJs, '"Vary", "Accept"', "cover endpoint should use explicit formats instead of Accept-varying cache keys");
   expectIncludes(apiCoverJs, "optimizeCoverImage", "cover endpoint should generate real resized image assets");
-  expectIncludes(apiCoverJs, "outputPipeline.destroy", "cover endpoint should cancel Sharp work after client disconnects");
   expectIncludes(apiCoverJs, "sharp.strategy.attention", "cover endpoint should use content-aware crop positioning");
   expectIncludes(apiCoverJs, "../server/image-proxy", "cover endpoint should reuse the shared image fetch service");
   expectIncludes(apiImageJs, "../server/image-proxy", "image endpoint should delegate SSRF and upstream I/O to the shared service");

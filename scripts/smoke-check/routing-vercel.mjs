@@ -88,6 +88,7 @@ const sitemapHandler = loadCommonJsModule("api/sitemap.js", [], {
           return Promise.resolve([{
             id: "550e8400e29b41d4a716446655440000",
             date: "2026-07-17",
+            updatedAt: "2026-09-12T00:00:00.000Z",
           }]);
         }
 
@@ -141,6 +142,8 @@ const successfulSitemapRequest = attachLifecycleEvents({ method: "GET", headers:
 const successfulSitemapResponse = createSitemapResponse();
 await sitemapHandler(successfulSitemapRequest, successfulSitemapResponse);
 assert.equal(successfulSitemapResponse.statusCode, 200, "dynamic sitemap should return HTTP 200");
+assert.ok(successfulSitemapResponse.textBody.includes("<lastmod>2026-09-12T00:00:00.000Z</lastmod>"));
+assert.ok(!successfulSitemapResponse.textBody.includes("<lastmod>2026-07-17</lastmod>"), "sitemap must use modification time, not publication time");
 assert.equal(successfulSitemapResponse.getHeader("content-type"), "application/xml; charset=utf-8", "dynamic sitemap should send XML");
 assert.equal(
   successfulSitemapResponse.getHeader("cache-control"),

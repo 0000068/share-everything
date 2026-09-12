@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { escapeHtmlAttribute } from "./lib/html-escape.mjs";
+import { readShortSiteName } from "./lib/site-brand.mjs";
 import {
   findElement,
   findElementById,
@@ -104,10 +105,6 @@ function readFeaturedName(config) {
   return typeof featuredName === "string" && featuredName.trim()
     ? featuredName.trim()
     : "精选";
-}
-
-function readShortSiteName(siteName) {
-  return siteName === defaultSiteName ? "Share" : siteName.slice(0, 12);
 }
 
 function resolveTemplate(value, context) {

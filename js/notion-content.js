@@ -490,8 +490,7 @@
       return wrapMathRow(html);
     }
 
-    const atom = parseLatexAtom(state);
-    return atom ? applyLatexScripts(state, atom) : wrapMathRow("");
+    return parseLatexAtom(state, { singleToken: true }) || wrapMathRow("");
   }
 
   function parseLatexScriptArgument(state) {
@@ -503,7 +502,7 @@
       return wrapMathRow(html);
     }
 
-    return parseLatexAtom(state) || wrapMathRow("");
+    return parseLatexAtom(state, { singleToken: true }) || wrapMathRow("");
   }
 
   function parseLatexOptionalArgument(state) {
@@ -615,7 +614,7 @@
     return createMathIdentifier(command);
   }
 
-  function parseLatexAtom(state) {
+  function parseLatexAtom(state, { singleToken = false } = {}) {
     skipLatexSpaces(state);
     const character = state.source[state.index];
     if (!character) return "";
@@ -634,7 +633,7 @@
     if (isLatexDigit(character) || (character === "." && isLatexDigit(state.source[state.index + 1]))) {
       const start = state.index;
       state.index += 1;
-      while (state.index < state.source.length && /[0-9.]/.test(state.source[state.index])) {
+      while (!singleToken && state.index < state.source.length && /[0-9.]/.test(state.source[state.index])) {
         state.index += 1;
       }
       return `<mn>${escapeHtml(state.source.slice(start, state.index))}</mn>`;
@@ -846,6 +845,8 @@
       excerpt,
       category,
       date: dateProperty?.date?.start || "",
+      updatedAt: typeof page.last_edited_time === "string" && Number.isFinite(Date.parse(page.last_edited_time))
+        ? page.last_edited_time : "",
       readTime,
       coverImage,
       coverEmoji: page?.icon?.emoji || "📝",
@@ -1281,7 +1282,7 @@
       articleSection: post?.categoryLabel || post?.category || undefined,
       keywords: normalizedTags.length > 0 ? normalizedTags.join(", ") : undefined,
       datePublished: post?.date || undefined,
-      dateModified: post?.date || undefined,
+      dateModified: post?.updatedAt || undefined,
       image: [resolvedImageUrl],
       mainEntityOfPage: resolvedCanonicalUrl,
       url: resolvedCanonicalUrl,

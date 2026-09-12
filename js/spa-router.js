@@ -451,7 +451,7 @@
 
       if (canCacheHtml) {
         const pendingEntry = pendingPageFetches.get(cacheKey);
-        if (pendingEntry) {
+        if (pendingEntry && !pendingEntry.controller.signal.aborted) {
           return consumePendingPageFetch(pendingEntry, signal);
         }
       }
@@ -810,13 +810,13 @@
         pageSwapPendingCommit = false;
         window.NavigationFeedback?.clear?.();
 
-        window.scrollTo({ top: 0, behavior: "auto" });
         window.requestAnimationFrame(() => {
           if (currentToken !== navigationToken) return;
           focusSpaContent({
             root: content,
             clearPendingFocus: targetPageId !== "post",
           });
+          if (!window.scrollToPageFragment?.()) window.scrollTo({ top: 0, behavior: "auto" });
         });
 
         content.style.opacity = "0";
@@ -894,7 +894,7 @@
       if (!(target instanceof Element)) return;
 
       const link = target.closest("a");
-      if (!link || !link.href || link.target === "_blank" || link.hasAttribute("download")) return;
+      if (!link || !link.href || (link.target && link.target.toLowerCase() !== "_self") || link.hasAttribute("download")) return;
 
       const nextUrl = resolveUrl(link.href);
       const currentUrl = resolveUrl(window.location.href);

@@ -1,12 +1,12 @@
-import "./notion-content-shared.js?v=20260909-v87-e7f9cae5b87d";
-import "./runtime-core.js?v=20260909-v87-e7f9cae5b87d";
-import "./site-utils.js?v=20260909-v87-e7f9cae5b87d";
-import "./common.js?v=20260909-v87-e7f9cae5b87d";
-import "./ui-effects.js?v=20260909-v87-e7f9cae5b87d";
-import "./seo-meta.js?v=20260909-v87-e7f9cae5b87d";
-import "./spa-router.js?v=20260909-v87-e7f9cae5b87d";
+import "./notion-content-shared.js?v=20260912-v88-52d5b6aa4775";
+import "./runtime-core.js?v=20260912-v88-52d5b6aa4775";
+import "./site-utils.js?v=20260912-v88-52d5b6aa4775";
+import "./common.js?v=20260912-v88-52d5b6aa4775";
+import "./ui-effects.js?v=20260912-v88-52d5b6aa4775";
+import "./seo-meta.js?v=20260912-v88-52d5b6aa4775";
+import "./spa-router.js?v=20260912-v88-52d5b6aa4775";
 
-const ASSET_VERSION = "20260909-v87-e7f9cae5b87d";
+const ASSET_VERSION = "20260912-v88-52d5b6aa4775";
 const versioned = (path) => `${path}?v=${ASSET_VERSION}`;
 window.AppAssetVersion = ASSET_VERSION;
 
@@ -68,6 +68,10 @@ const loader = initialPageId ? pageLoaders[initialPageId] : null;
 
 function markInitialPageLoadFailure(error) {
   console.error("Failed to load page module:", error);
+  if (window.AppBoot) {
+    window.AppBoot.fail();
+    return;
+  }
   if (document.body) {
     document.body.dataset.pageModuleError = initialPageId || "unknown";
   }
@@ -91,6 +95,7 @@ async function bootInitialPage() {
       await loader({ url: window.location.href });
     }
     window.PageRuntime?.start?.();
+    window.AppBoot?.complete?.();
   } catch (error) {
     markInitialPageLoadFailure(error);
   }

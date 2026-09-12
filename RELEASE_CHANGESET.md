@@ -1,32 +1,50 @@
-# Release Changeset
+# v8.8 修复与验证记录
 
-Updated: 2026-09-09
-Target: v8.7.0
+Updated: 2026-09-12
+Target: v8.8.0
+状态：12 项审计缺陷已修复并通过本地发布门禁，作为 v8.8 发布。生产部署状态与线上验收记录独立保存，避免把本地检查结果当作线上可用证明。
 
-## Problem and resulting behavior
+本轮处理 9 月 12 日审计的 A01–A12，并收紧静态发布范围、更新维护说明。继续保留专用 Notion 数据库整体公开的既定产品行为，没有引入新的生产依赖。
 
-Opening a canonical article on the live site returned a 308 redirect to the same URL. The browser eventually reported `ERR_TOO_MANY_REDIRECTS`; SPA feedback displayed a generic network failure while the direct SSR endpoint still returned the article successfully.
+| 编号 | 修复后的行为 | 验证 |
+|---|---|---|
+| A01 | 图片请求取消或超时不再调用会产生独立流错误的 Sharp.destroy(error)；响应等待可取消，原生转换完成前保留并发槽 | 隔离子进程使用真实 WebP、AVIF，分别验证客户端断开和超时；检查 504、503、后续 200、进程存活和监听器清理 |
+| A02 | 独立启动守卫不依赖模块链；入口、基础模块或页面模块失败时提供重新加载，慢启动提供提示，成功后清理守卫 | Chrome 分别阻断 site-utils.js、app.js、blog-page.js，再实际点击重新加载，列表恢复 |
+| A03 | 新导航拒绝已取消的 pending HTML 请求，旧请求清理不会删除新条目 | 组合测试和 Chrome 均验证重叠导航发起两个请求，第二个查询自行成功，没有误报网络失败 |
+| A04 | 快速重新收藏保留完整记录；只有 DOM/精简摘要时标记待补全；代次 8 自动修复旧代次损坏记录 | 刷新收藏页后以 80ms 间隔双击：标题 200 字符、摘要 400 字符、12 个标签和封面均保留；损坏的代次 7 记录完成迁移 |
+| A05 | 分类基础查询按分类共享，与搜索词无关；支持订阅者取消、错误冷却和容量限制 | 8 个并发请求只查询上游 1 次；一个读者离开不影响其他读者，最后读者取消后新请求重新发起 |
+| A06 | 未分组 TeX 参数读取单个 token，普通数字仍可连续读取 | 验证分数、上下标、分组参数及分数后的幂，比较实际 MathML 结构 |
+| A07 | 长行内公式在自己的区域横向滚动，页面宽度保持稳定 | 390px Chrome 视口中可见宽 353px、内容宽 952px，能够滚动 599px 到公式末尾；已加入视觉门禁的浏览器行为检查 |
+| A08 | 跨页锚点在异步正文和进入动画结束后定位，旧导航和用户滚动不会被晚到回调覆盖 | Chrome 跨页及历史前进后退的目标最终 top 均为 0；补充有限动画结束及用户主动滚动回归 |
+| A09 | updatedAt 独立保留 Notion last_edited_time，并贯穿摘要、SSR/客户端 Article 数据及 sitemap；未知时省略修改日期 | 2020 年发布日期与 2026 年修改日期分别输出，sitemap 不再把发布日期当 lastmod |
+| A10 | 非法请求目标返回 400，不退出开发进程 | 真实 HTTP 请求 `//[` 之后，再请求首页仍返回 200 |
+| A11 | 品牌检查比较解析后的文本、属性和配置推导的短名，不再写死 Share；短名不会截断 Unicode 代理对 | 在独立副本运行真实生成器，覆盖默认品牌、中文、HTML 特殊字符及 Emoji |
+| A12 | 总览导航保留 Ctrl/Meta/Shift/Alt、非主键、下载和指定目标窗口行为 | 单元检查与 Chrome Ctrl 点击确认新标签页打开，原页面不变 |
 
-`api/post.js` now accepts the exact matching `id` injected by Vercel's rewrite alongside the canonical public path. Extra, duplicate, malformed, and noncanonical query/path variants remain normalized before content loading. Future redirects require browser revalidation. SPA article requests can recover from transport/404 failures through the direct SSR endpoint, retaining the public address, and their 35-second deadline accommodates the complete 30-second server budget.
+## 发布与维护
 
-## Additional audit repairs
+- `npm run build` 只生成 31 个允许公开的文件到 `dist`。开发脚本、服务端源码、配置、旧产物和文章模板不作为静态资源发布。
+- `vercel.json` 明确构建命令和输出目录。`api/` 继续构建为函数，`api/post.js` 显式携带私有 `post.html`；服务器依赖仍留在构建输入中。
+- 构建检查资源指纹，并拒绝指向项目外部的输出目录和链接资源。测试验证旧输出被清理、非公开文件不进入产物、服务器构建依赖保留。
+- README / FIX_TODO 更新当前版本和构建流程；架构文档不再保留互相矛盾的“最新验证”记录。旧回滚说明改为回退提交或恢复已验证 deployment，保留主分支历史。
+- 当前资源版本：`20260912-v88-52d5b6aa4775`。
 
-- Real lightweight URL helpers preserve signed bookmark covers on initial list entry. Compact session summaries are marked partial and cannot overwrite complete persisted metadata. Generation 7 refreshes damaged older bookmarks.
-- Table rows render once; archived and trashed pages fail public access checks. Active pages in the dedicated Notion database remain intentionally public.
-- Page initialization owns final category/search/bookmark SEO after template defaults, and pagination updates canonical metadata. Classification identifiers retain 128 characters, and the homepage uses its generated featured-category link.
-- Bootstrap errors preserve server codes and retry timing for accurate feedback. Sharp 0.35.4, PostCSS 8.5.28, and patched transitive dependencies replace the vulnerable versions. Runtime parser `parse5` belongs to production dependencies.
-- Regression checks load actual browser modules together and cover both list/article entry paths, storage reload/migration, long categories, table semantics, rewrite-shaped SSR requests, cross-page metadata, transport recovery, a valid 16-second article response, and server diagnostics.
+## 验证结果
 
-## Validation
+本地 Windows、Node 24.14.0、npm 11.9.0：
 
-Completed locally on Windows with Node 24.14.0 and npm 11.9.0:
+- `npm run verify:release` 通过：ESLint、46 个生产模块的依赖边界、生成文件、资源指纹、完整 smoke/integration 与严格视觉检查。
+- 7 个桌面/移动视觉场景通过，原有像素基线未放宽、未重新批准。
+- 新增行为回归覆盖原生转换生命周期、分类并发、启动恢复、路由取消、收藏数据、公式、日期、开发服务器、品牌生成和静态构建。
+- 独立 Chrome 故障注入和交互验证通过；图片与 API 使用本地受控输入，没有向生产实施故障注入或写入 Notion。
+- `npm run build` 通过；`npm audit --json` 为 0 条已知漏洞公告；`git diff --check` 通过。
 
-- `npm.cmd run check`: lint, 45-module architecture checks, generated assets, and smoke/integration regressions passed.
-- `VISUAL_STRICT=1 npm.cmd run visual:check`: all seven desktop/mobile scenarios passed against the existing pixel baselines.
-- `npm.cmd audit --audit-level=low` and `npm.cmd audit --omit=dev`: zero known vulnerabilities.
-- A separate temporary directory installed only production dependencies with `npm ci --omit=dev`; actual dynamic `parse5` imports rendered successful canonical/rewrite/API article pages and 404 fallback pages. Native Sharp generated and decoded a WebP image.
-- Asset generation/stamping completed and `git diff --check` passed.
+详细浏览器记录和视觉结果保存在本地 `.output/repair-2026-09-12/`；截图保存在 `output/playwright/`。
 
-The final combined release gate runs before committing. Post-deployment public HTTP and browser results are recorded in local `.output/repair/` and `output/playwright/` artifacts after the production deployment finishes.
+## 发布前后边界
 
-Notion credentials are not present in the local workspace. Credentialed `notion:live-check` is therefore unavailable locally; public production HTTP and browser checks separately validate the deployed content path.
+上述结果来自本地检查。线上验收需要另外确认静态源码路径返回 404、首页/列表/文章/封面可用，以及线上资源版本与本次构建一致。Git 提交、远端部署状态和线上请求结果保存在本地 `.output/repair-2026-09-12/production-verification.json`；该文件只在实际发布验证后生成。
+
+Sharp 原生任务不能由 AbortSignal 立即中断；修复通过独立响应截止时间、Sharp 处理超时和真实完成前保留并发槽控制它。Sharp 的处理超时不包含等待 libuv 线程的时间。
+
+本地没有 Notion 凭据。审计时文章“222”的公开详情返回零个内容块；这项内容状态没有被伪装成网络错误，也没有凭空补写正文，需要在源 Notion 页面核查。

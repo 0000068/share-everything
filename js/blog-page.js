@@ -1143,8 +1143,11 @@
     }
 
     function handleTopActionsClick(event) {
+      if (event.defaultPrevented || (event.button != null && event.button !== 0)
+        || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       const link = event.target.closest("a[href]");
       if (!link || !topActionsEl?.contains(link)) return;
+      if ((link.target && link.target.toLowerCase() !== "_self") || link.hasAttribute("download")) return;
       if (!isSameBlogListingPath(link.href)) return;
 
       const nextState = readListingStateFromUrl(link.href);

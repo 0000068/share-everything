@@ -267,6 +267,34 @@ function createSingleFlight({
   };
 }
 
+function createKeyedSingleFlight({ maxEntries = 24, ...options } = {}) {
+  const flights = new Map();
+  const capacity = Math.max(1, Math.trunc(Number(maxEntries) || 24));
+  return {
+    run(key, loader, { signal } = {}) {
+      if (signal?.aborted) return Promise.reject(signal.reason);
+      let flight = flights.get(key);
+      if (!flight) {
+        // Retain active jobs: evicting one would permit duplicate upstream work.
+        // Idle entries only hold bounded error-cooldown state, in LRU order.
+        for (const [idleKey, candidate] of flights) {
+          if (flights.size < capacity) break;
+          if (!candidate.get()) flights.delete(idleKey);
+        }
+        if (flights.size >= capacity) {
+          return Promise.reject(Object.assign(new Error("Too many concurrent content queries"), {
+            status: 503, code: "single_flight_busy", retryAfter: "1",
+          }));
+        }
+        flight = createSingleFlight(options);
+      }
+      flights.delete(key);
+      flights.set(key, flight);
+      return flight.run(loader, { signal });
+    },
+  };
+}
+
 function createPendingRequestMap() {
   const pendingRequests = new Map();
 
@@ -368,6 +396,7 @@ function createPendingRequestMap() {
 }
 
 module.exports = {
+  createKeyedSingleFlight,
   createLruTtlCache,
   createPendingRequestMap,
   createSingleFlight,
