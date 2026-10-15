@@ -19,6 +19,10 @@ const post = {
   id: postId,
   title: "Integration article",
   category: "Tech",
+  categoryLabel: "工程实践",
+  categoryColor: { bg: "#102030", color: "#aabbcc", border: "#445566" },
+  date: "2020-01-01",
+  updatedAt: "2026-10-15T00:00:00.000Z",
   coverImage: "https://assets.example.com/cover.png",
   coverImageSignature: signature,
   tags: [],
@@ -69,6 +73,8 @@ async function checkBookmarkModuleComposition() {
     browser.BookmarkManager.toggle(post);
     const saved = browser.BookmarkManager.getAll()[0];
     assert.equal(saved.coverImageSignature, signature, "listing and article entry points must preserve the actual cover signature");
+    assert.equal(saved.categoryLabel, post.categoryLabel);
+    assert.equal(JSON.stringify(saved.categoryColor), JSON.stringify(post.categoryColor));
     assert.match(browser.SiteUtils.resolveCoverImageUrl(saved.coverImage, { signature }), /\/api\/cover\?/);
     assert.match(browser.SiteUtils.buildCoverImageSrcSet(saved.coverImage, { signature }), /\/api\/cover\?/);
   }
@@ -96,7 +102,7 @@ async function checkBookmarkModuleComposition() {
   assert.equal(reloaded.BookmarkManager.toggleById(completePost.id), false);
   assert.equal(reloaded.BookmarkManager.toggleById(completePost.id), true);
   const restored = reloaded.BookmarkManager.getAll()[0];
-  for (const key of ["title", "excerpt", "coverImage", "coverImageSignature", "tags"]) {
+  for (const key of ["title", "excerpt", "coverImage", "coverImageSignature", "tags", "categoryLabel", "categoryColor", "updatedAt"]) {
     assert.equal(JSON.stringify(restored[key]), JSON.stringify(completePost[key]), `rapid re-add must preserve full ${key}`);
   }
   assert.equal(reloaded.NotionAPI.getPostSummary(postId).isPartial, true);
@@ -121,7 +127,7 @@ async function checkBookmarkModuleComposition() {
   // recently persisted an omitted cover as null. Never use the compact cache
   // as a full metadata refresh.
   localStorage.setItem("bookmarked_posts", JSON.stringify([{
-    ...persisted, metadataVersion: 7, coverImage: null,
+    ...persisted, metadataVersion: 8, coverImage: null, categoryLabel: "", categoryColor: null,
     title: persisted.title.slice(0, 160), excerpt: persisted.excerpt.slice(0, 320), tags: persisted.tags.slice(0, 8),
   }]));
   const migrated = createContentBrowser({
@@ -135,6 +141,8 @@ async function checkBookmarkModuleComposition() {
   assert.equal(persisted.coverImage, completePost.coverImage);
   assert.equal(persisted.title, completePost.title);
   assert.equal(persisted.tags.length, 12);
+  assert.equal(persisted.categoryLabel, completePost.categoryLabel, "generation 8 records must recover their omitted category label");
+  assert.equal(JSON.stringify(persisted.categoryColor), JSON.stringify(completePost.categoryColor));
 }
 
 async function checkCategoryIdentifiers() {
@@ -180,6 +188,43 @@ function checkTablesAndPublicPolicy() {
   });
 }
 
+function checkArticleHydration(html) {
+  const scripts = Array.from(html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g));
+  const initialJson = scripts.find(([, attrs]) => attrs.includes('id="initialPostData"'))?.[2];
+  const serverArticle = JSON.parse(scripts.find(([, attrs]) => attrs.includes('data-structured-data="post-article"'))[2]);
+  assert.ok(initialJson, "SSR must emit hydration data");
+  const browser = createContentBrowser({
+    fullArticle: true,
+    fetch: () => { assert.fail("SSR hydration must not refetch article JSON"); },
+  });
+  const elements = new Map(["postSkeleton", "postContent", "postEmpty", "postArticle", "fabBookmark", "initialPostData"]
+    .map((id) => [id, new FakeElement()]));
+  const content = elements.get("postContent");
+  content.innerHTML = "Article SSR sentinel";
+  content.childElementCount = 1;
+  elements.get("initialPostData").textContent = initialJson;
+  browser.HTMLScriptElement = FakeElement;
+  browser.document.getElementById = (id) => elements.get(id) || null;
+  browser.location = new URL(`https://example.com/posts/${postId}`);
+  browser.requestAnimationFrame = () => 0;
+  let page;
+  let clientArticle;
+  browser.PageRuntime = { register: (_, value) => { page = value; } };
+  browser.StructuredData = { set: (_, value) => { clientArticle = value; }, clear() {} };
+  vm.runInContext(read("js/post-page.js"), browser);
+  const dispose = page.init();
+  assert.equal(content.innerHTML, "Article SSR sentinel", "hydration must retain the original SSR content");
+  assert.equal(clientArticle?.datePublished, serverArticle.datePublished);
+  assert.equal(clientArticle?.dateModified, post.updatedAt, "client startup must preserve the server's modification date");
+  assert.equal(clientArticle?.articleSection, post.categoryLabel, "hydration must retain the display category");
+  elements.get("fabBookmark").dispatch("click");
+  const saved = browser.BookmarkManager.getAll()[0];
+  assert.equal(saved.updatedAt, post.updatedAt);
+  assert.equal(saved.categoryLabel, post.categoryLabel);
+  assert.equal(JSON.stringify(saved.categoryColor), JSON.stringify(post.categoryColor));
+  dispose();
+}
+
 async function checkRewrittenArticleRoutes() {
   const serverHelpers = loadCommonJsModule("server/notion-server.js");
   let rendered = 0;
@@ -201,6 +246,7 @@ async function checkRewrittenArticleRoutes() {
     assert.equal(res.getHeader("location"), undefined);
     assert.match(res.textBody, /Article SSR sentinel/);
     assert.match(res.textBody, new RegExp(`rel="canonical" href="https://example.com/posts/${postId}"`));
+    checkArticleHydration(res.textBody);
   }
   assert.equal(rendered, 3);
   for (const suffix of ["?tracking=1", `?id=${postId}&tracking=1`, `?id=${postId}&id=${postId}`, "?id=wrong", "?"]) {

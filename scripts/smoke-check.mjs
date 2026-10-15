@@ -1694,7 +1694,7 @@ expectNotIncludes(bookmarkJs, "codeUnit.toString(16)", "bookmark selector escapi
 expectIncludes(bookmarkJs, "createBookmarkEntry", "bookmark manager should centralize bookmark record creation");
 expectIncludes(bookmarkJs, "buildCardBookmarkSource", "bookmark manager should centralize DOM snapshot extraction");
 expectIncludes(bookmarkJs, "hydrateMissingMetadata", "bookmark manager should hydrate stale metadata");
-expectIncludes(bookmarkJs, "BOOKMARK_METADATA_HYDRATION_GENERATION = 8", "bookmark metadata should repair records damaged by partial summaries in previous generations");
+expectIncludes(bookmarkJs, "BOOKMARK_METADATA_HYDRATION_GENERATION = 9", "bookmark metadata should repair records with omitted category presentation");
 expectIncludes(bookmarkJs, "BOOKMARK_METADATA_FRESHNESS_MS = 1000 * 60 * 30", "bookmark cover signatures should have a bounded freshness window");
 expectIncludes(bookmarkJs, "getDisplayEntries", "bookmark display reads should overlay current volatile cover metadata");
 expectIncludes(blogPageJs, "bookmarkManager.getDisplayEntries", "bookmark views should consume rotation-safe display entries");
@@ -1950,7 +1950,7 @@ assert.equal(
 );
 assert.equal(
   bookmarkManagerHarness.window.BookmarkManager.getAll()[0]?.metadataVersion,
-  8,
+  9,
   "bookmark manager should persist the upgraded metadata version for new bookmarks",
 );
 assert.ok(

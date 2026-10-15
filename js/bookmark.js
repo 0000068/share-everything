@@ -10,7 +10,7 @@
     // a signing-key rotation. Keep it aligned with NotionAPI's summary-cache
     // TTL so an expired bookmark refresh cannot be satisfied indefinitely by
     // the same stale session summary.
-    const BOOKMARK_METADATA_HYDRATION_GENERATION = 8;
+    const BOOKMARK_METADATA_HYDRATION_GENERATION = 9;
     const BOOKMARK_METADATA_FRESHNESS_MS = 1000 * 60 * 30;
     const BOOKMARK_METADATA_FUTURE_CLOCK_SKEW_MS = 1000 * 60 * 5;
     const siteUtils = window.SiteUtils || {};
@@ -85,6 +85,12 @@
         id,
         title,
         category: normalizeText(entry.category),
+        categoryLabel: normalizeText(entry.categoryLabel),
+        categoryColor: entry.categoryColor && typeof entry.categoryColor === "object" ? {
+          bg: normalizeText(entry.categoryColor.bg),
+          color: normalizeText(entry.categoryColor.color),
+          border: normalizeText(entry.categoryColor.border),
+        } : null,
         excerpt,
         date: normalizeText(entry.date),
         updatedAt: normalizeText(entry.updatedAt),
@@ -264,18 +270,8 @@
       { timestamp = Date.now(), metadataRefreshedAt = source?.metadataRefreshedAt ?? Date.now() } = {},
     ) {
       return normalizeBookmark({
-        id: source?.id,
-        title: source?.title || "",
-        category: source?.category || "",
-        excerpt: source?.excerpt || "",
-        date: source?.date || "",
-        updatedAt: source?.updatedAt || "",
-        readTime: source?.readTime || "",
-        coverImage: source?.coverImage || null,
-        coverImageSignature: source?.coverImageSignature || "",
+        ...source,
         coverEmoji: source?.coverEmoji || "📝",
-        coverGradient: source?.coverGradient || null,
-        tags: Array.isArray(source?.tags) ? source.tags : [],
         metadataVersion: source?.metadataVersion ?? BOOKMARK_METADATA_HYDRATION_GENERATION,
         metadataRefreshedAt: source?.isPartial ? 0 : metadataRefreshedAt,
         timestamp,

@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v8.9
+> Version: v8.10
 > Updated: 2026-09-12
 
 ## 1. Overview
@@ -45,6 +45,10 @@ Notion Database
 ```
 
 ## 2. Release Highlights
+
+### Version v8.10 Highlights
+
+文章元数据完整性与收藏精简. See `CHANGELOG.md` and `RELEASE_CHANGESET.md` for changes and verification.
 
 ### Version v8.9 Highlights
 
