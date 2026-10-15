@@ -49,9 +49,12 @@ jobs:
       - name: Run smoke checks
         run: npm run check
 
+      - name: Build public output
+        run: npm run build
+
       - name: Audit dependency tree
         if: matrix.node-version == 24
-        run: npm audit --audit-level=high
+        run: npm run audit:dependencies
 
   browser-contract:
     name: Browser Contract (Node 24)

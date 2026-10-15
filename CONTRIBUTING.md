@@ -28,7 +28,7 @@ npm.cmd run check
 npm.cmd run verify:release
 ```
 
-`check` 依次执行 ESLint、生产模块边界/循环依赖检查、生成文件一致性检查、性能契约和 smoke suite。`verify:release` 在此基础上并行执行严格的真实浏览器与本机像素 baseline 回归；缺失任何已声明场景的 baseline 会失败。Pull request CI 还会在 Linux Chrome 中执行不依赖平台字体像素的结构契约。
+`check` 依次执行 ESLint、生产模块边界/循环依赖检查、生成文件一致性检查、性能契约和 smoke suite。`verify:release` 并行执行 `check`、正式静态构建、依赖审计和严格的真实浏览器与本机像素 baseline 回归；高危依赖或缺失任何已声明场景的 baseline 都会失败。依赖审计需要访问 npm registry。Pull request CI 同样检查构建和依赖，并在 Linux Chrome 中执行不依赖平台字体像素的结构契约。
 
 `notion:live-check` is optional and requires real `NOTION_TOKEN` and `NOTION_DATABASE_ID` values.
 

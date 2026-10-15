@@ -976,7 +976,11 @@ expectIncludes(releaseCheckWorkflowYml, 'VISUAL_SKIP_DIFF: "1"', "CI browser con
 expectIncludes(releaseCheckWorkflowYml, 'VISUAL_STRICT: "1"', "CI browser contract should fail closed when browser assertions cannot run");
 expectIncludes(releaseCheckWorkflowYml, "permissions:\n  contents: read", "release workflow should keep the token read-only");
 expectIncludes(releaseCheckWorkflowYml, "persist-credentials: false", "release workflow should not retain unused checkout credentials");
-expectIncludes(releaseCheckWorkflowYml, "npm audit --audit-level=high", "release workflow should reject high-severity dependency advisories");
+expectIncludes(releaseCheckWorkflowYml, "npm run audit:dependencies", "CI should share the local dependency audit");
+assert.equal(packageMetadata.scripts["audit:dependencies"], "npm audit --audit-level=high");
+expectIncludes(releaseCheckJs, 'runNpmScript("audit:dependencies", {}, stopSiblingsAfterFailure)', "local releases should reject vulnerable dependencies");
+expectIncludes(releaseCheckJs, 'runNpmScript("build", {}, stopSiblingsAfterFailure)', "local releases should validate public output");
+expectIncludes(releaseCheckWorkflowYml, "run: npm run build", "CI should build the actual public output");
 expectIncludes(
   releaseCheckWorkflowYml,
   "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0",

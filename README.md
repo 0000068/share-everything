@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-8.8.0-00e5ff?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/version-8.9.0-00e5ff?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/node-22.13--22.x%20%7C%2024.x-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/deploy-Vercel-000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel" />
   <img src="https://img.shields.io/badge/CMS-Notion-000?style=flat-square&logo=notion&logoColor=white" alt="Notion" />
@@ -320,7 +320,7 @@ npm.cmd run verify:release
 1. Fork 本仓库
 2. 在 [Vercel](https://vercel.com) 导入项目
 3. 添加环境变量 `NOTION_TOKEN` 和 `NOTION_DATABASE_ID`；推荐再设置独立随机的 `IMAGE_PROXY_SIGNING_SECRET`
-4. 发布前运行 `npm.cmd run assets:sync`、`npm.cmd run verify:release` 和 `npm.cmd run build`，并提交生成后的 HTML/CSS/manifest 与资源指纹
+4. 发布前运行 `npm.cmd run assets:sync` 和 `npm.cmd run verify:release`（包含正式构建、依赖审计与严格浏览器检查），并提交生成后的 HTML/CSS/manifest 与资源指纹
 5. 发布后检查首页、列表、文章、封面及收藏功能，确认生产版本与提交一致
 
 项目自带 `vercel.json`：构建命令为 `npm run build`，静态输出目录为 `dist`。构建只复制首页、列表、manifest、图标、分享图以及浏览器 JS/CSS/assets；服务端、开发脚本、配置和文章模板不作为静态文件发布。`api/` 继续由 Vercel 构建为函数，`api/post.js` 显式携带私有 `post.html` 模板。不要把 `server/` 或模板加入上传排除规则，以免破坏函数依赖。

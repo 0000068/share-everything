@@ -2,6 +2,19 @@
 
 All notable changes to this project are tracked here.
 
+## 8.9.0 - 2026-10-15
+
+依赖安全与发布门禁
+
+- 升级 Sharp 0.35.5、postcss-selector-parser 7.1.6，以及 brace-expansion / source-map-js 的修复版本；保留现有 Node 与 npm 版本要求。
+- 本地发布门禁同时执行代码检查、正式构建、依赖审计和严格视觉回归，避免本地通过后才被 CI 的依赖检查阻断。
+- CI 的两种 Node 版本均验证实际静态构建；依赖审计与本地使用同一脚本。
+
+## 8.8.0 - 2026-09-12
+
+- 修复原生图片转换取消、启动恢复、导航取消、收藏完整性、分类并发、公式与锚点定位等审计问题。
+- 静态构建改用公开文件白名单，补充真实浏览器、原生 Sharp 和发布行为回归。详细记录可在 v8.8 提交的 `RELEASE_CHANGESET.md` 中查看。
+
 ## 8.7.0 - 2026-09-09
 
 Restore live article navigation and repair the defects found in the full source audit.

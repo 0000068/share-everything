@@ -86,9 +86,11 @@ process.once("SIGTERM", () => {
   process.exit(143);
 });
 
-console.log("Running release checks in parallel: check, visual:check (VISUAL_STRICT=1)");
+console.log("Running release checks in parallel: check, build, audit:dependencies, visual:check (VISUAL_STRICT=1)");
 const results = await Promise.all([
   runNpmScript("check", {}, stopSiblingsAfterFailure),
+  runNpmScript("build", {}, stopSiblingsAfterFailure),
+  runNpmScript("audit:dependencies", {}, stopSiblingsAfterFailure),
   runNpmScript("visual:check", { VISUAL_STRICT: "1" }, stopSiblingsAfterFailure),
 ]);
 
