@@ -50,7 +50,7 @@ for (const format of ["webp", "avif"]) {
           createRequestLifecycle(req, res, options) {
             lifecycleCount += 1;
             return require("../../server/request-lifecycle.js").createRequestLifecycle(req, res, {
-              ...options, timeoutMs: cancellation === "timeout" && lifecycleCount === 1 ? 30 : 5_000,
+              ...options, timeoutMs: cancellation === "timeout" && lifecycleCount <= 2 ? 30 : 5_000,
             });
           },
         },
@@ -60,7 +60,7 @@ for (const format of ["webp", "avif"]) {
         },
         "../server/request-guard": {
           ...require("../../server/request-guard.js"),
-          readPositiveIntegerEnv: (key, fallback) => key === "COVER_IMAGE_MAX_CONCURRENT_REQUESTS" ? 1 : fallback,
+          readPositiveIntegerEnv: (key, fallback) => ["COVER_IMAGE_MAX_CONCURRENT_REQUESTS", "COVER_IMAGE_MAX_QUEUED_REQUESTS"].includes(key) ? 1 : fallback,
         },
       },
     });
@@ -84,11 +84,25 @@ for (const format of ["webp", "avif"]) {
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(handlerSettled, false, "native work must retain its invocation and capacity");
     const busy = request();
-    await handler(busy.req, busy.res);
-    assert.equal(busy.res.statusCode, 503, "cancelled native work must still count against the gate");
+    const queued = handler(busy.req, busy.res);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(busy.res.ended, false, "a normal burst must queue behind native work");
+    const overflow = request();
+    await handler(overflow.req, overflow.res);
+    assert.equal(overflow.res.statusCode, 503, "native work and queued requests must both count against capacity");
+    if (cancellation === "client") busy.req.emit("aborted");
+    await queued;
+    assert.equal(busy.req.listenerCount("aborted"), 0);
+    assert.equal(busy.res.listenerCount("close"), 0);
+    if (cancellation === "timeout") assert.equal(busy.res.statusCode, 504, "queue time must count against the total request budget");
+    else assert.equal(busy.res.headersSent, false, "cancelled queued work must not write a response");
+    assert.equal(handlerSettled, false, "cancelling a queued request must not release active native work");
+    const successor = request();
+    const successorTask = handler(successor.req, successor.res);
     releaseCompletion();
-    await pending;
-    assert.equal(nativeCompleted, 1);
+    await Promise.all([pending, successorTask]);
+    assert.equal(successor.res.statusCode, 200, "cancellation must free queue capacity for a replacement reader");
+    assert.equal(nativeCompleted, 2, "cancelled queued requests must never start native conversion");
     assert.equal(first.req.listenerCount("aborted"), 0);
     assert.equal(first.res.listenerCount("close"), 0);
     if (cancellation === "client") assert.equal(first.res.headersSent, false);

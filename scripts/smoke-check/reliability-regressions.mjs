@@ -10,6 +10,7 @@ import { readShortSiteName } from "../lib/site-brand.mjs";
 import { checkSiteBrand } from "./site-brand.mjs";
 import { createJsonResponse, FakeElement, loadBrowserScript, loadCommonJsModule, read, withEnvOverrides } from "./harness.mjs";
 import { createSpaRouterHarness } from "./spa-router.mjs";
+import { runConcurrencyChecks } from "./concurrency.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const tick = () => new Promise((resolve) => setImmediate(resolve));
@@ -259,6 +260,7 @@ function checkBrandAndDeployment() {
 }
 
 export async function runReliabilityRegressionChecks() {
+  await runConcurrencyChecks();
   const native = execFileSync(process.execPath, [path.join(root, "scripts/fixtures/cover-lifecycle-probe.mjs")], {
     cwd: root, encoding: "utf8", timeout: 20_000, windowsHide: true,
   });

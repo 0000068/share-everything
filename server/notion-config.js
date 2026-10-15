@@ -108,17 +108,20 @@ function createAsyncLimiter(limit) {
       await new Promise((resolve) => {
         pendingResolvers.push(resolve);
       });
+    } else {
+      activeCount += 1;
     }
-
-    activeCount += 1;
 
     try {
       return await task();
     } finally {
-      activeCount -= 1;
       const next = pendingResolvers.shift();
       if (next) {
+        // Hand the occupied slot directly to the next caller. Decrementing
+        // first lets a new microtask claim it before that caller resumes.
         next();
+      } else {
+        activeCount -= 1;
       }
     }
   };

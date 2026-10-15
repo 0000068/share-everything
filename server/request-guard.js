@@ -1,3 +1,5 @@
+const { createAbortError } = require("./request-lifecycle");
+
 function normalizePositiveInteger(value, fallback) {
   const numericValue = Number(value);
   return Number.isSafeInteger(numericValue) && numericValue > 0 ? numericValue : fallback;
@@ -92,26 +94,64 @@ function createFixedWindowRateLimiter({
   });
 }
 
-function createConcurrencyGate(maxConcurrent) {
+function createConcurrencyGate(maxConcurrent, { maxQueued = 0 } = {}) {
   const safeMaxConcurrent = normalizePositiveInteger(maxConcurrent, 1);
+  const queueCapacity = Number.isSafeInteger(maxQueued) && maxQueued >= 0 ? maxQueued : 0;
+  const pending = new Set();
   let activeCount = 0;
+
+  function createRelease() {
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const next = pending.values().next().value;
+      if (next) {
+        pending.delete(next);
+        // Transfer the occupied slot before the queued promise resumes.
+        next.grant();
+      } else {
+        activeCount -= 1;
+      }
+    };
+  }
 
   function tryAcquire() {
     if (activeCount >= safeMaxConcurrent) return null;
     activeCount += 1;
-    let released = false;
+    return createRelease();
+  }
 
-    return () => {
-      if (released) return;
-      released = true;
-      activeCount = Math.max(0, activeCount - 1);
-    };
+  async function acquire({ signal } = {}) {
+    if (signal?.aborted) throw signal.reason || createAbortError();
+    const release = tryAcquire();
+    if (release || pending.size >= queueCapacity) return release;
+
+    return new Promise((resolve, reject) => {
+      const onAbort = () => {
+        pending.delete(entry);
+        signal.removeEventListener("abort", onAbort);
+        reject(signal.reason || createAbortError());
+      };
+      const entry = {
+        grant() {
+          signal?.removeEventListener("abort", onAbort);
+          resolve(createRelease());
+        },
+      };
+      pending.add(entry);
+      signal?.addEventListener("abort", onAbort, { once: true });
+    });
   }
 
   return Object.freeze({
+    acquire,
     tryAcquire,
     get activeCount() {
       return activeCount;
+    },
+    get queuedCount() {
+      return pending.size;
     },
     maxConcurrent: safeMaxConcurrent,
   });

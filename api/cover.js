@@ -51,6 +51,10 @@ const COVER_IMAGE_MAX_CONCURRENT_REQUESTS = readPositiveIntegerEnv(
   "COVER_IMAGE_MAX_CONCURRENT_REQUESTS",
   2,
 );
+const COVER_IMAGE_MAX_QUEUED_REQUESTS = readPositiveIntegerEnv(
+  "COVER_IMAGE_MAX_QUEUED_REQUESTS",
+  16,
+);
 const COVER_IMAGE_FORMATS = Object.freeze({
   avif: {
     contentType: "image/avif",
@@ -68,7 +72,9 @@ const COVER_IMAGE_FORMATS = Object.freeze({
 const coverImageRateLimiter = createFixedWindowRateLimiter({
   limit: COVER_IMAGE_RATE_LIMIT_PER_MINUTE,
 });
-const coverImageConcurrencyGate = createConcurrencyGate(COVER_IMAGE_MAX_CONCURRENT_REQUESTS);
+const coverImageConcurrencyGate = createConcurrencyGate(COVER_IMAGE_MAX_CONCURRENT_REQUESTS, {
+  maxQueued: COVER_IMAGE_MAX_QUEUED_REQUESTS,
+});
 
 function readCoverWidth(value) {
   if (value === undefined) return null;
@@ -192,19 +198,20 @@ async function handler(req, res) {
     );
   }
 
-  const releaseConcurrency = coverImageConcurrencyGate.tryAcquire();
-  if (!releaseConcurrency) {
-    return sendCoverError(res, 503, null, "Cover image service busy", 1);
-  }
-
   const outputFormat = COVER_IMAGE_FORMATS[selectedFormat.format];
   const lifecycle = createRequestLifecycle(req, res, {
     timeoutMs: IMAGE_PROXY_TIMEOUT_MS,
     timeoutMessage: "Cover image request timed out",
   });
+  let releaseConcurrency = null;
   let conversionTask = null;
 
   try {
+    releaseConcurrency = await coverImageConcurrencyGate.acquire({ signal: lifecycle.signal });
+    if (!releaseConcurrency) {
+      return sendCoverError(res, 503, null, "Cover image service busy", 1);
+    }
+    if (lifecycle.signal.aborted) throw lifecycle.signal.reason;
     const source = await normalizeSourceUrl(authorization.source, undefined, {
       signal: lifecycle.signal,
     });
@@ -270,12 +277,13 @@ async function handler(req, res) {
     // slot until completion (or Sharp's processing timeout). Releasing early
     // would let repeated disconnects bypass the concurrency limit.
     if (conversionTask) await conversionTask.catch(() => {});
-    releaseConcurrency();
+    releaseConcurrency?.();
   }
 }
 
 handler.__test = Object.freeze({
   COVER_IMAGE_MAX_CONCURRENT_REQUESTS,
+  COVER_IMAGE_MAX_QUEUED_REQUESTS,
   COVER_IMAGE_RATE_LIMIT_PER_MINUTE,
   applyCoverSuccessHeaders,
   optimizeCoverImage,
