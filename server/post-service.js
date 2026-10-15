@@ -43,7 +43,6 @@ const {
 const {
   createLruTtlCache,
   createKeyedSingleFlight,
-  createPendingRequestMap,
   createSingleFlight,
   createTtlSlot,
 } = require("./cache-store");
@@ -87,7 +86,10 @@ const publicPageSummarySingleFlight = createSingleFlight({
   errorCooldownMs: NOTION_SINGLE_FLIGHT_ERROR_COOLDOWN_MS,
 });
 const publicPostCache = createLruTtlCache({ maxEntries: PUBLIC_POST_CACHE_MAX_ENTRIES });
-const pendingPublicPostRequests = createPendingRequestMap();
+const publicPostSingleFlight = createKeyedSingleFlight({
+  maxEntries: PUBLIC_POST_CACHE_MAX_ENTRIES,
+  errorCooldownMs: NOTION_SINGLE_FLIGHT_ERROR_COOLDOWN_MS,
+});
 
 async function runWithNotionOperation(loader, { signal } = {}) {
   const operation = createNotionOperation();
@@ -536,14 +538,6 @@ function cachePublicPost(cacheKey, data, { operation } = {}) {
   publicPostCache.set(cacheKey, data, Date.now() + PUBLIC_POST_CACHE_TTL_MS);
 }
 
-function getPendingPublicPostRequest(cacheKey) {
-  return pendingPublicPostRequests.get(cacheKey);
-}
-
-function withPendingPublicPostRequest(cacheKey, loader) {
-  return pendingPublicPostRequests.run(cacheKey, loader);
-}
-
 async function fetchPublicPost(pageId, { signal } = {}) {
   if (signal?.aborted) {
     throw signal.reason || createAbortError("Post request aborted", "post_request_aborted");
@@ -552,7 +546,7 @@ async function fetchPublicPost(pageId, { signal } = {}) {
   const cached = getCachedPublicPost(cacheKey);
   if (cached) return cached;
 
-  return pendingPublicPostRequests.subscribe(cacheKey, ({ signal: sharedSignal }) => (
+  return publicPostSingleFlight.run(cacheKey, ({ signal: sharedSignal }) => (
     runWithNotionOperation(async (operation) => {
       const cachedDuringWait = getCachedPublicPost(cacheKey);
       if (cachedDuringWait) {
@@ -632,7 +626,6 @@ module.exports = {
   getCachedPublicPageSummaries,
   getCachedPublicPost,
   getDatabaseMetadata,
-  getPendingPublicPostRequest,
   getPublicPageSummaries,
   getPublicPostCacheKey,
   hasPostQueryFilters,
@@ -647,5 +640,4 @@ module.exports = {
   sortPostsByDateDesc,
   sweepExpiredCacheEntries,
   throwIfOperationAborted,
-  withPendingPublicPostRequest,
 };

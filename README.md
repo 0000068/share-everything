@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-8.11.0-00e5ff?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/version-8.12.0-00e5ff?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/node-22.13--22.x%20%7C%2024.x-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/deploy-Vercel-000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel" />
   <img src="https://img.shields.io/badge/CMS-Notion-000?style=flat-square&logo=notion&logoColor=white" alt="Notion" />
@@ -146,7 +146,7 @@ Notion Database
 │   ├── public-policy.js    公开访问策略
 │   ├── post-service.js     列表、单篇、分页、搜索
 │   ├── block-service.js    递归 block 获取
-│   ├── cache-store.js      TTL / LRU / pending request
+│   ├── cache-store.js      TTL / LRU / 有界请求合并
 │   ├── render-service.js   SSR HTML 与结构化数据
 │   ├── notion-config.js    环境变量、站点 URL、并发工具
 │   ├── category-navigation.js  Notion 分类导航与展示映射
@@ -421,7 +421,7 @@ NOTION_READ_TIME_PROPERTY_NAMES=ReadTime,Read Time,Reading Time,阅读时间
 | `DATABASE_METADATA_TTL_MS` | ❌ | `300000` | 数据库元数据缓存时间 (ms) |
 | `PUBLIC_PAGE_SUMMARY_CACHE_TTL_MS` | ❌ | `120000` | 页面摘要缓存时间 (ms) |
 | `PUBLIC_POST_CACHE_TTL_MS` | ❌ | `60000` | 单篇文章缓存时间 (ms) |
-| `NOTION_SINGLE_FLIGHT_ERROR_COOLDOWN_MS` | ❌ | `2000` | 元数据/列表 single-flight 失败后的短冷却窗口 (ms) |
+| `NOTION_SINGLE_FLIGHT_ERROR_COOLDOWN_MS` | ❌ | `2000` | 元数据、列表和文章请求合并后的失败冷却窗口 (ms) |
 | `NOTION_REQUEST_TIMEOUT_MS` | ❌ | `12000` | Notion API 超时 (ms) |
 | `NOTION_OPERATION_TIMEOUT_MS` | ❌ | `30000` | 一次公开列表或文章操作跨分页/递归的总超时预算，最大 `30000`，确保低于浏览器 `35000ms` 预算 |
 | `NOTION_BLOCK_CHILD_CONCURRENCY` | ❌ | `4` | 块子元素并发获取数 |

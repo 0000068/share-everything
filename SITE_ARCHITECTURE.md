@@ -1,7 +1,7 @@
 # Share Everything Site Architecture
 
-> Version: v8.11
-> Updated: 2026-09-12
+> Version: v8.12
+> Updated: 2026-10-15
 
 ## 1. Overview
 
@@ -15,7 +15,7 @@ The v8.8 static build publishes an explicit allowlist into `dist`; repository so
 
 Startup recovery is owned by the independent classic `js/boot-guard.js`, loaded before the module entry. It observes module-graph errors and slow startup and provides a document reload without relying on failed foundations. Runtime completion removes the guard's timer, error observer and notice. SPA navigation rejects abandoned HTML entries; fragment positioning is repeated after asynchronous article rendering and finite entry motion, with stale navigation/user scroll checks.
 
-Category base queries use a bounded keyed single-flight with subscriber-aware cancellation and per-key error cooldown. Bookmark re-adds can restore a complete recently removed record; partial DOM/session summaries remain eligible for authoritative hydration. `updatedAt` preserves Notion `last_edited_time` independently of the publication date through summaries, SSR/client Article metadata and sitemap.
+Category base queries and article loads share the bounded keyed single-flight implementation, with subscriber-aware cancellation and per-key error cooldown. Category queries retain at most 24 keys and articles at most 20; active entries cannot be evicted to bypass those limits. Same-key readers share work even at capacity. Bookmark re-adds can restore a complete recently removed record; partial DOM/session summaries remain eligible for authoritative hydration. `updatedAt` preserves Notion `last_edited_time` independently of the publication date through summaries, SSR/client Article metadata and sitemap.
 
 Cover requests use two active slots and a bounded FIFO queue (16 waiting requests by default). Waiting shares the request deadline, and disconnected readers leave the queue immediately. Queue overflow returns 503 with `Retry-After`. Slots transfer directly to waiting readers so newcomers cannot overtake them. Cover cancellation stops the response wait without calling `Sharp.destroy(error)`: that stream operation cannot cancel native `toBuffer()` work. The handler retains its concurrency slot and invocation until native settlement; [Sharp processing timeout](https://sharp.pixelplumbing.com/api-output/#timeout) bounds processing, while the request lifecycle independently ends timed-out responses. Sharp's processing clock excludes time queued for a libuv thread. Real native WebP/AVIF cancellation and timeout checks run in an isolated process without an uncaught-exception suppressor.
 
@@ -45,6 +45,10 @@ Notion Database
 ```
 
 ## 2. Release Highlights
+
+### Version v8.12 Highlights
+
+请求合并精简与资源上限. See `CHANGELOG.md` and `RELEASE_CHANGESET.md` for changes and verification.
 
 ### Version v8.11 Highlights
 
@@ -784,7 +788,7 @@ actual behavior:
 - `server/public-policy.js` owns the database-wide public access policy and page-public assertions.
 - `server/post-service.js` owns public post listing, filtering, pagination, search, metadata loading, detail loading, and post payload construction.
 - `server/block-service.js` owns recursive block fetching with pagination, child-fetch concurrency limits, and a per-post total block budget.
-- `server/cache-store.js` owns reusable TTL slots, LRU TTL caches, single-flight loading with optional error cooldowns, and pending request maps.
+- `server/cache-store.js` owns reusable TTL slots, LRU TTL caches, and bounded single-flight loading with subscriber cancellation and optional error cooldowns. Article and category requests use the same implementation.
 - `server/render-service.js` owns SSR post HTML rendering, canonical post URLs, and article structured data preparation.
 - `server/image-source-policy.js` owns image-source canonicalization and HMAC authorization, including signature decoration of public summaries and mapped image blocks.
 - `server/image-proxy.js` owns outbound HTTPS/DNS/redirect policy and bounded response reads; it contains no API response semantics.
@@ -811,7 +815,7 @@ Main server-side caches:
 | Filtered results | Memory Map | Follows summary cache |
 | Single post details | Memory LRU | 60 seconds / 20 entries |
 | In-flight post requests | Promise Map | Request lifetime |
-| Database/list single-flight failures | Memory | 2 seconds |
+| Database/list/article single-flight failures | Memory | 2 seconds |
 
 `createSingleFlight()` tracks subscribers and protects cache causality: cancellation from one subscriber does not stop work still needed by another, the final cancellable subscriber aborts the loader, and any late result from that abandoned loader is ignored for active cache/cooldown state. `post-service.js` caches category-filtered base pages separately from local search terms, so searches within one category reuse the same Notion result set; a category absent from the database options returns an empty set without issuing a query.
 
@@ -869,7 +873,7 @@ Optional:
 | `DATABASE_METADATA_TTL_MS` | `300000` | Database metadata cache TTL |
 | `PUBLIC_PAGE_SUMMARY_CACHE_TTL_MS` | `120000` | Public list summary cache TTL |
 | `PUBLIC_POST_CACHE_TTL_MS` | `60000` | Single post cache TTL |
-| `NOTION_SINGLE_FLIGHT_ERROR_COOLDOWN_MS` | `2000` | Short error cooldown for database/list single-flight requests |
+| `NOTION_SINGLE_FLIGHT_ERROR_COOLDOWN_MS` | `2000` | Short error cooldown for database/list/article single-flight requests |
 | `NOTION_REQUEST_TIMEOUT_MS` | `12000` | Server-side Notion request timeout |
 | `NOTION_OPERATION_TIMEOUT_MS` | `30000` | Total deadline for one public list/detail operation across pagination and recursion; values above 30000 are clamped below the browser budget |
 | `NOTION_BLOCK_CHILD_CONCURRENCY` | `4` | Concurrent child block fetches |

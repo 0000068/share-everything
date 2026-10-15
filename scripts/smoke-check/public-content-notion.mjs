@@ -499,9 +499,9 @@ expectIncludes(serverPostServiceJs, 'require("../js/notion-content")', "post ser
 expectIncludes(serverRenderServiceJs, "buildSharedArticleStructuredData", "render service should delegate article structured data to the shared content helper");
 expectIncludes(serverNotionSchemaJs, "resolveNotionContentSchema", "schema service should resolve renamed content properties from database metadata");
 expectIncludes(serverRenderServiceJs, "renderPostContent", "render service should render SSR post HTML without duplicating it in API payloads");
-expectIncludes(serverCacheStoreJs, "createPendingRequestMap", "cache store should centralize pending request de-duplication");
+expectIncludes(serverCacheStoreJs, "createKeyedSingleFlight", "cache store should centralize bounded request de-duplication");
 const pendingRequestHelpers = loadCommonJsModule("server/cache-store.js");
-const pendingRequestMap = pendingRequestHelpers.createPendingRequestMap();
+const pendingRequestMap = pendingRequestHelpers.createKeyedSingleFlight();
 const firstSubscriberController = new AbortController();
 const secondSubscriberController = new AbortController();
 let sharedPendingSignal = null;
@@ -511,12 +511,12 @@ const loadSharedPendingValue = ({ signal }) => new Promise((_resolve, reject) =>
   sharedPendingSignal = signal;
   signal.addEventListener("abort", () => reject(signal.reason), { once: true });
 });
-const firstPendingSubscriber = pendingRequestMap.subscribe(
+const firstPendingSubscriber = pendingRequestMap.run(
   "shared-post",
   loadSharedPendingValue,
   { signal: firstSubscriberController.signal },
 );
-const secondPendingSubscriber = pendingRequestMap.subscribe(
+const secondPendingSubscriber = pendingRequestMap.run(
   "shared-post",
   loadSharedPendingValue,
   { signal: secondSubscriberController.signal },
@@ -529,7 +529,7 @@ assert.equal(
   "one disconnected caller must not cancel shared Notion work needed by another subscriber",
 );
 secondSubscriberController.abort(new Error("last subscriber left"));
-const replacementPendingSubscriber = pendingRequestMap.subscribe(
+const replacementPendingSubscriber = pendingRequestMap.run(
   "shared-post",
   () => {
     sharedPendingLoaderCount += 1;
@@ -1156,12 +1156,18 @@ const retryFetchCounts = {
   blocks: 0,
 };
 let shouldFailNextRetryPageRequest = true;
+let retryNow = Date.now();
+class RetryDate extends Date {
+  static now() { return retryNow; }
+}
 const retryServerNotion = loadCommonJsModule("server/notion-server.js", [], {
+  Date: RetryDate,
   process: {
     env: {
       ...process.env,
       NOTION_TOKEN: "test-token",
       NOTION_DATABASE_ID: "retry-database",
+      NOTION_SINGLE_FLIGHT_ERROR_COOLDOWN_MS: "2000",
       SITE_URL: "https://example.com",
     },
   },
@@ -1230,11 +1236,14 @@ await assert.rejects(
   },
   "server notion layer should surface the original upstream failure for the first failed post-detail request",
 );
+await assert.rejects(() => retryServerNotion.fetchPublicPost("retry-post"), (error) => error.status === 500);
+assert.equal(retryFetchCounts.page, 1, "repeated failures must not refetch during the cooldown");
+retryNow += 2001;
 const recoveredRetryPost = await retryServerNotion.fetchPublicPost("retry-post");
 assert.equal(
   retryFetchCounts.page,
   2,
-  "server notion layer should clear failed in-flight post-detail requests so the next retry can re-fetch the page",
+  "server notion layer should retry failed post-detail requests once the cooldown expires",
 );
 assert.equal(
   retryFetchCounts.blocks,

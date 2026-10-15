@@ -21,7 +21,7 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-function queryHarness(onQuery) {
+function queryHarness(onQuery, onPage) {
   let queries = 0;
   const service = withEnvOverrides({
     NOTION_TOKEN: "test-token", NOTION_DATABASE_ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -29,7 +29,12 @@ function queryHarness(onQuery) {
   }, () => loadCommonJsModule("server/post-service.js", [], {
     process: { ...process, env: { ...process.env } },
     fetch: async (url, options) => {
-      if (new URL(url).pathname.endsWith("/query")) {
+      const pathname = new URL(url).pathname;
+      if (pathname.includes("/pages/") && onPage) {
+        return onPage(pathname.split("/").pop(), options);
+      }
+      if (pathname.endsWith("/children")) return createJsonResponse({ results: [], has_more: false });
+      if (pathname.endsWith("/query")) {
         queries += 1;
         return onQuery(queries, options);
       }
@@ -121,6 +126,75 @@ async function checkConcurrentQueries() {
   blocked.resolve("complete");
   await active;
   assert.equal(await flights.run("overflow", () => "recovered"), "recovered");
+}
+
+async function checkArticleRequestSharing() {
+  const response = (id) => createJsonResponse({
+    id, parent: { type: "database_id", database_id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    properties: { Name: { type: "title", title: [{ plain_text: "Shared article" }] } },
+  });
+  const id = "0123456789abcdef0123456789abcdef";
+  const barrier = deferred();
+  const started = deferred();
+  let loads = 0;
+  let upstreamSignal;
+  const shared = queryHarness(null, async (pageId, { signal }) => {
+    loads += 1;
+    upstreamSignal = signal;
+    started.resolve();
+    await barrier.promise;
+    return response(pageId);
+  });
+  const departing = new AbortController();
+  const cancelled = shared.service.fetchPublicPost(id, { signal: departing.signal });
+  const cancellation = assert.rejects(cancelled, { name: "AbortError" });
+  const readers = Array.from({ length: 7 }, () => shared.service.fetchPublicPost(id.toUpperCase()));
+  await started.promise;
+  departing.abort();
+  await cancellation;
+  assert.equal(upstreamSignal.aborted, false, "remaining article readers must retain the shared load");
+  barrier.resolve();
+  await Promise.all(readers);
+  await shared.service.fetchPublicPost(id);
+  assert.equal(loads, 1, "canonical article aliases must share a load and retain the successful cache");
+
+  let abandonedLoads = 0;
+  const abandonedStarted = deferred();
+  const abandoned = queryHarness(null, async (pageId, { signal }) => {
+    abandonedLoads += 1;
+    if (abandonedLoads === 1) {
+      abandonedStarted.resolve();
+      await new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
+    }
+    return response(pageId);
+  });
+  const lastReader = new AbortController();
+  const first = abandoned.service.fetchPublicPost(id, { signal: lastReader.signal });
+  const rejected = assert.rejects(first, { name: "AbortError" });
+  await abandonedStarted.promise;
+  lastReader.abort();
+  const replacement = abandoned.service.fetchPublicPost(id);
+  await rejected;
+  await replacement;
+  assert.equal(abandonedLoads, 2, "a replacement reader must not join abandoned article work");
+
+  const capacityBarrier = deferred();
+  let capacityLoads = 0;
+  const bounded = queryHarness(null, async (pageId) => {
+    capacityLoads += 1;
+    await capacityBarrier.promise;
+    return response(pageId);
+  });
+  const capacity = bounded.service.PUBLIC_POST_CACHE_MAX_ENTRIES;
+  const active = Array.from({ length: capacity }, (_, index) => bounded.service.fetchPublicPost(String(index).padStart(32, "0")));
+  const sameKey = bounded.service.fetchPublicPost("0".repeat(32));
+  await assert.rejects(bounded.service.fetchPublicPost(id), (error) => error.status === 503 && error.retryAfter === "1");
+  capacityBarrier.resolve();
+  await Promise.all([...active, sameKey]);
+  assert.equal(capacityLoads, capacity, "capacity limits must not reject or duplicate readers of the same article");
+  await bounded.service.fetchPublicPost(id);
+  assert.equal(capacityLoads, capacity + 1, "settled work must release capacity for other articles");
+
 }
 
 async function checkNavigationCancellation() {
@@ -266,6 +340,7 @@ export async function runReliabilityRegressionChecks() {
   });
   assert.equal(JSON.parse(native).length, 4, "real Sharp lifecycle checks must finish without process-level errors");
   await checkConcurrentQueries();
+  await checkArticleRequestSharing();
   await checkNavigationCancellation();
   checkContentSemantics();
   checkIndependentBootRecovery();
