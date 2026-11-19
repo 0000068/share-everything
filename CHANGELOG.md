@@ -2,6 +2,15 @@
 
 All notable changes to this project are tracked here.
 
+## 8.13.0 - 2026-11-19
+
+过载状态码契约、依赖清零与边界加固
+
+- 服务端 `getPublicContentErrorStatus` 保留本地并发过载错误 `single_flight_busy` 的 HTTP `503` 状态码，同时继续将上游 Notion `503` 映射为 `502`；补充 `/api/posts-data`、`/api/post-data`、`/api/post`、`/api/sitemap` 的 HTTP 契约回归。
+- 升级 `eslint` 至 `10.15.0`，清除 `minimatch` 传递依赖的 3 个中危 ReDoS 漏洞，`npm audit` 归零。
+- 客户端列表页与早期 bootstrap 统一对齐服务端最大页码上限（`10000`），超界页码自动归一回第 1 页并清理 URL；缺少视频 ID 的 YouTube 链接降级为外链卡片；LaTeX 渲染器支持匹配同类嵌套环境并在命令与环境递归间透传深度上限。
+- 本地开发服务器补充 `res.headersSent` 流式错误保护并拦截 `tmp`、`output`、`dist` 静态根目录；`.gitignore` 与 `eslint.config.mjs` 统一忽略 `tmp/` 和 `output/`。
+
 ## 8.12.0 - 2026-10-15
 
 请求合并精简与资源上限

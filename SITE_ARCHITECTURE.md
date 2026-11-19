@@ -1,7 +1,7 @@
 # Share Everything Site Architecture
 
-> Version: v8.12
-> Updated: 2026-10-15
+> Version: v8.13
+> Updated: 2026-11-19
 
 ## 1. Overview
 
@@ -45,6 +45,10 @@ Notion Database
 ```
 
 ## 2. Release Highlights
+
+### Version v8.13 Highlights
+
+过载状态码契约、依赖清零与边界加固. See `CHANGELOG.md` and `RELEASE_CHANGESET.md` for changes and verification.
 
 ### Version v8.12 Highlights
 
