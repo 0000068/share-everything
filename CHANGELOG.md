@@ -2,6 +2,14 @@
 
 All notable changes to this project are tracked here.
 
+## 8.14.0 - 2026-11-19
+
+首屏封面加载体验与冷转码优化
+
+- 博客卡片封面加载态移除不透明深黑内联底色，改为通透玻璃态背景与低饱和流光骨架（遵守 `prefers-reduced-motion`），图片就绪后平滑淡入，失败时恢复分类渐变底色。
+- 首行前 3 张封面均使用 `loading="eager"` 并行拉取（仅第 1 张 LCP 封面保留 `fetchpriority="high"`），`js/blog-bootstrap.js` 在列表 JSON 返回瞬间即预热前 3 张签名封面（省流量模式限制为 1 张），`js/blog-page.js` 复用已插入的预加载链接避免重复请求。
+- `/api/cover` 默认并发槽位由 2 提升至 3（匹配桌面首行三图），WebP / AVIF 编码 `effort` 由 4 调整为 2，显著降低冷缓存转码延迟，同时保留 `sharp.strategy.attention` 智能构图与严格 256 KiB `blog.html` 关键资源体积红线。
+
 ## 8.13.0 - 2026-11-19
 
 过载状态码契约、依赖清零与边界加固

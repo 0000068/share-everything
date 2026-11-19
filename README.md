@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-8.13.0-00e5ff?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/version-8.14.0-00e5ff?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/node-22.13--22.x%20%7C%2024.x-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
   <img src="https://img.shields.io/badge/deploy-Vercel-000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel" />
   <img src="https://img.shields.io/badge/CMS-Notion-000?style=flat-square&logo=notion&logoColor=white" alt="Notion" />
@@ -263,7 +263,7 @@ IMAGE_PROXY_RATE_LIMIT_PER_MINUTE=180
 IMAGE_PROXY_RATE_LIMIT_MAX_CLIENTS=2048
 IMAGE_PROXY_MAX_CONCURRENT_REQUESTS=8
 COVER_IMAGE_RATE_LIMIT_PER_MINUTE=90
-COVER_IMAGE_MAX_CONCURRENT_REQUESTS=2
+COVER_IMAGE_MAX_CONCURRENT_REQUESTS=3
 COVER_IMAGE_MAX_QUEUED_REQUESTS=16
 # 推荐设置至少 32 UTF-8 字节的独立随机值；未设置时使用 NOTION_TOKEN 派生签名密钥
 IMAGE_PROXY_SIGNING_SECRET=replace_with_at_least_32_random_characters
@@ -435,7 +435,7 @@ NOTION_READ_TIME_PROPERTY_NAMES=ReadTime,Read Time,Reading Time,阅读时间
 | `IMAGE_PROXY_RATE_LIMIT_MAX_CLIENTS` | ❌ | `2048` | 单实例限流状态最多保留的客户端数 |
 | `IMAGE_PROXY_MAX_CONCURRENT_REQUESTS` | ❌ | `8` | 单实例原图代理最大并发数 |
 | `COVER_IMAGE_RATE_LIMIT_PER_MINUTE` | ❌ | `90` | 每个客户端、每个热实例每分钟允许的封面转码未缓存请求数 |
-| `COVER_IMAGE_MAX_CONCURRENT_REQUESTS` | ❌ | `2` | 单实例 Sharp 封面转码最大并发数 |
+| `COVER_IMAGE_MAX_CONCURRENT_REQUESTS` | ❌ | `3` | 单实例 Sharp 封面转码最大并发数 |
 | `COVER_IMAGE_MAX_QUEUED_REQUESTS` | ❌ | `16` | 单实例封面等待队列上限；排队计入图片请求总超时，断开连接立即移出队列 |
 | `EXPOSE_PUBLIC_ERROR_DETAILS` | ❌ | `false` | 是否在 API 响应中暴露详细错误 |
 

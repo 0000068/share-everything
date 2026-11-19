@@ -1,31 +1,14 @@
-# v8.13 过载状态码契约、依赖清零与边界加固
+# v8.14 首屏封面加载体验与冷转码优化
 
 Updated: 2026-11-19
-Target: v8.13.0
+Target: v8.14.0
 
-- 服务端 `getPublicContentErrorStatus` 保留本地并发过载错误 `single_flight_busy` 的 HTTP `503` 状态码，同时保持上游 Notion `503` 映射为 `502`；补充 `/api/posts-data`、`/api/post-data`、`/api/post`、`/api/sitemap` 的 HTTP 契约回归。
-- 升级 `eslint` 至 `10.15.0`，清零 `minimatch` 传递依赖的 3 个中危 ReDoS 漏洞，`npm audit` 报告 0 个已知漏洞；生产依赖保持零新增、零变动。
-- 客户端列表页与早期 `blog-bootstrap.js` 同步服务端最大页码上限（`10000`），超界页码自动归一回第 1 页并清理 URL；无视频 ID 的 YouTube 链接降级为外链卡片；LaTeX 渲染器支持匹配同类嵌套环境并在命令与环境递归间透传深度上限。
-- 本地开发服务器补充 `res.headersSent` 流式错误保护并阻止静态访问 `tmp`、`output`、`dist`；`.gitignore` 与 `eslint.config.mjs` 忽略本地 `tmp/` 与 `output/` 目录。
+- 博客卡片封面加载态移除不透明深黑内联底色，改为通透玻璃态底色与柔和流光骨架（遵守 `prefers-reduced-motion`），图片就绪后平滑淡入，失败时恢复分类渐变底色。
+- 首行前 3 张封面均设为 `loading="eager"` 并行拉取（仅第 1 张 LCP 保留 `fetchpriority="high"`），`js/blog-bootstrap.js` 在列表 JSON 返回瞬间即预热前 3 张签名封面（`saveData` 下限制为 1 张），`js/blog-page.js` 原地复用已有预加载链接避免重复请求。
+- `/api/cover` 默认并发槽由 2 提升至 3（匹配桌面首行三图），WebP / AVIF 编码 `effort` 调整为 2，加速冷缓存转码，同时保留 `sharp.strategy.attention` 智能构图；重构精简 `blog-page.js` / `notion-api.js` 冗余包装，使 `blog.html` 关键资源继续严格保持在 256 KiB 性能红线内。
 
 ## 验证
 
-- `npm ci` 从 lockfile 干净安装成功（97 packages，0 vulnerabilities）。
-- `npm audit` 与 `npm run audit:dependencies` 均报告 0 个已知漏洞。
-- Node 24.14.0 的 `npm run verify:release` 通过：ESLint（`10.15.0`，0 warnings）、46 个生产模块架构边界检查、完整 smoke/集成/可靠性回归、31 个公开文件的正式静态构建、依赖审计与 7 个严格视觉场景（`VISUAL_STRICT=1`，未放宽或重录基线）。
-- 新增回归覆盖：`single_flight_busy` 全端点 HTTP `503 + Retry-After: 1 + no-store`、超大页码归一化（`page=10001`）、无视频 ID YouTube 嵌入降级、递归无花括号 LaTeX 命令与深层嵌套环境深度封顶、本地开发服务私密目录 `403` 与流式发头后断流容错。
-- 当前资源版本：`20261119-v813-925157ac06f5`。
-
-## 阶段提交（可逐阶段精准回退，基线标签 `backup/pre-v8.13`）
-
-| 阶段 | 范围 |
-|---|---|
-| Phase 0 | `.gitignore` 与 `eslint.config.mjs` 隔离本地 `tmp/` 与 `output/` 目录 |
-| Phase 1 | `server/public-content.js` 保留 `single_flight_busy` HTTP `503` 及全端点契约测试 |
-| Phase 2 | 升级 `eslint@10.15.0` 清零 `npm audit` 漏洞 |
-| Phase 3 | 超大页码归一化、YouTube 嵌入降级、LaTeX 嵌套深度保护、本地开发服务加固及资源指纹同步 |
-| Phase 4 | `v8.13.0` 版本元数据、发布文档归档与全量 `verify:release` 验证 |
-
-## 环境边界
-
-本地 Windows、Node 24.14.0、npm 11.9.0。`npm run notion:live-check` 因缺少本地 `.env` 中的 `NOTION_TOKEN` 和 `NOTION_DATABASE_ID` 未执行；推送后将由 GitHub Actions 矩阵补充验证 Node 22.13.0 下界与 Linux Chrome 契约，线上验收仍需配置真实 Notion 凭据联调。
+- `npm ci` 干净安装成功，`npm audit` / `npm run audit:dependencies` 均报告 0 个已知漏洞。
+- Node 24.14.0 的 `npm run verify:release` 通过：ESLint（0 warnings）、46 模块架构边界检查、256 KiB 关键资源性能契约、完整 smoke/集成/并发回归、31 文件白名单静态构建与 7 场景严格视觉回归（`VISUAL_STRICT=1`，基线零漂移、未放宽）。
+- 当前资源版本：`20261119-v814-f0a64aa6e4d7`。

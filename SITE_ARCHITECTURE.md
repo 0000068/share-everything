@@ -1,6 +1,6 @@
 # Share Everything Site Architecture
 
-> Version: v8.13
+> Version: v8.14
 > Updated: 2026-11-19
 
 ## 1. Overview
@@ -17,7 +17,7 @@ Startup recovery is owned by the independent classic `js/boot-guard.js`, loaded 
 
 Category base queries and article loads share the bounded keyed single-flight implementation, with subscriber-aware cancellation and per-key error cooldown. Category queries retain at most 24 keys and articles at most 20; active entries cannot be evicted to bypass those limits. Same-key readers share work even at capacity. Bookmark re-adds can restore a complete recently removed record; partial DOM/session summaries remain eligible for authoritative hydration. `updatedAt` preserves Notion `last_edited_time` independently of the publication date through summaries, SSR/client Article metadata and sitemap.
 
-Cover requests use two active slots and a bounded FIFO queue (16 waiting requests by default). Waiting shares the request deadline, and disconnected readers leave the queue immediately. Queue overflow returns 503 with `Retry-After`. Slots transfer directly to waiting readers so newcomers cannot overtake them. Cover cancellation stops the response wait without calling `Sharp.destroy(error)`: that stream operation cannot cancel native `toBuffer()` work. The handler retains its concurrency slot and invocation until native settlement; [Sharp processing timeout](https://sharp.pixelplumbing.com/api-output/#timeout) bounds processing, while the request lifecycle independently ends timed-out responses. Sharp's processing clock excludes time queued for a libuv thread. Real native WebP/AVIF cancellation and timeout checks run in an isolated process without an uncaught-exception suppressor.
+Cover requests use three active slots and a bounded FIFO queue (16 waiting requests by default). Waiting shares the request deadline, and disconnected readers leave the queue immediately. Queue overflow returns 503 with `Retry-After`. Slots transfer directly to waiting readers so newcomers cannot overtake them. Cover cancellation stops the response wait without calling `Sharp.destroy(error)`: that stream operation cannot cancel native `toBuffer()` work. The handler retains its concurrency slot and invocation until native settlement; [Sharp processing timeout](https://sharp.pixelplumbing.com/api-output/#timeout) bounds processing, while the request lifecycle independently ends timed-out responses. Sharp's processing clock excludes time queued for a libuv thread. Real native WebP/AVIF cancellation and timeout checks run in an isolated process without an uncaught-exception suppressor.
 
 | Layer | Technology | Responsibility |
 |---|---|---|
@@ -45,6 +45,10 @@ Notion Database
 ```
 
 ## 2. Release Highlights
+
+### Version v8.14 Highlights
+
+首屏封面加载体验与冷转码优化. See `CHANGELOG.md` and `RELEASE_CHANGESET.md` for changes and verification.
 
 ### Version v8.13 Highlights
 
@@ -891,7 +895,7 @@ Optional:
 | `IMAGE_PROXY_RATE_LIMIT_MAX_CLIENTS` | `2048` | Maximum bounded client entries retained by one hot instance |
 | `IMAGE_PROXY_MAX_CONCURRENT_REQUESTS` | `8` | Maximum concurrent raw image origin requests per instance |
 | `COVER_IMAGE_RATE_LIMIT_PER_MINUTE` | `90` | Per-client cover conversion origin requests per hot instance and minute |
-| `COVER_IMAGE_MAX_CONCURRENT_REQUESTS` | `2` | Maximum concurrent Sharp cover conversions per instance |
+| `COVER_IMAGE_MAX_CONCURRENT_REQUESTS` | `3` | Maximum concurrent Sharp cover conversions per instance |
 | `COVER_IMAGE_MAX_QUEUED_REQUESTS` | `16` | Maximum waiting cover requests; waiting shares the request deadline and supports cancellation |
 | `EXPOSE_PUBLIC_ERROR_DETAILS` | `false` | Expose upstream error detail for local debugging only |
 
