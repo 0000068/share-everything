@@ -23,6 +23,8 @@ export default [
       "dist/**",
       "node_modules/**",
       ".output/**",
+      "output/**",
+      "tmp/**",
     ],
   },
   js.configs.recommended,

@@ -31,8 +31,9 @@ npm-debug.log*
 dist/
 .output/
 .playwright-cli/
-output/playwright/
+output/
 
 # Temporary files
+tmp/
 *.tmp
 *.bak
