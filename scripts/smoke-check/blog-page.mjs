@@ -318,6 +318,106 @@ assert.ok(
   "blog page should remove invalid page params when normalizing the listing URL",
 );
 dirtyQueryCleanup?.();
+
+const oversizedPageRegisteredPages = new Map();
+const oversizedPageFiltersEl = new FakeElement();
+const oversizedPageSearchEl = new FakeElement();
+const oversizedPageGridEl = new FakeElement();
+const oversizedPageEmptyEl = new FakeElement();
+const oversizedPagePaginationEl = new FakeElement();
+const oversizedPageStatusEl = new FakeElement();
+const oversizedPageTitleEl = new FakeElement();
+const oversizedPageLocation = new URL("https://example.com/blog.html?page=10001");
+const oversizedPageHistory = {
+  pushCalls: [],
+  replaceCalls: [],
+  pushState(state, title, nextUrl) {
+    this.pushCalls.push(String(nextUrl));
+    oversizedPageLocation.href = new URL(String(nextUrl), oversizedPageLocation.href).href;
+  },
+  replaceState(state, title, nextUrl) {
+    this.replaceCalls.push(String(nextUrl));
+    oversizedPageLocation.href = new URL(String(nextUrl), oversizedPageLocation.href).href;
+  },
+};
+const oversizedPageCalls = [];
+loadBrowserScript("js/blog-page.js", {
+  window: {
+    location: oversizedPageLocation,
+    history: oversizedPageHistory,
+    scrollTo: () => {},
+    ...listingContentGlobals,
+    NotionAPI: {
+      escapeHtml: (value) => String(value ?? ""),
+      getCategoryColor: () => ({ bg: "#000", color: "#fff", border: "#222" }),
+      getCategories: () => [{ name: allCategory, emoji: "📚" }],
+      getPageSize: () => 9,
+      queryPosts: async (query) => {
+        oversizedPageCalls.push(query);
+        return {
+          results: [],
+          categories: [{ name: allCategory, label: allCategory, emoji: "📚" }],
+          total: 0,
+          totalPages: 1,
+          currentPage: 1,
+        };
+      },
+    },
+    PageRuntime: {
+      register(pageId, pageModule) {
+        oversizedPageRegisteredPages.set(pageId, pageModule);
+      },
+    },
+    SiteUtils: {
+      rememberBlogReturnUrl: () => {},
+      sanitizeCoverBackground: (value, fallback) => value || fallback,
+      resolveDisplayImageUrl: (value) => value,
+      sanitizeImageUrl: (value) => value,
+      buildPostPath: (postId) => `/posts/${postId}`,
+      buildBookmarkListingUrl: buildBookmarkListingUrlMock,
+      parseBookmarkListingHash: parseBookmarkListingHashMock,
+    },
+    updateSeoMeta: () => {},
+    UIEffects: { initBlogCardReveal: () => null },
+    requestAnimationFrame: () => 1,
+    cancelAnimationFrame: () => {},
+  },
+  document: {
+    getElementById(id) {
+      return {
+        blogFilters: oversizedPageFiltersEl,
+        blogSearch: oversizedPageSearchEl,
+        blogGrid: oversizedPageGridEl,
+        emptyState: oversizedPageEmptyEl,
+        pagination: oversizedPagePaginationEl,
+        blogStatus: oversizedPageStatusEl,
+      }[id] || null;
+    },
+    querySelector(selector) {
+      return selector === ".page-title" ? oversizedPageTitleEl : null;
+    },
+    querySelectorAll() {
+      return [];
+    },
+    createElement() {
+      return new FakeElement();
+    },
+  },
+});
+const oversizedPageCleanup = oversizedPageRegisteredPages.get("blog")?.init?.();
+await Promise.resolve();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(
+  oversizedPageCalls[0]?.page,
+  1,
+  "blog page should normalize initial page numbers exceeding the API max page cap back to page 1",
+);
+assert.equal(
+  oversizedPageHistory.replaceCalls.at(0),
+  "/blog.html",
+  "blog page should strip out-of-cap page params from the listing URL before loading",
+);
+oversizedPageCleanup?.();
 const defaultQueryRegisteredPages = new Map();
 const defaultQueryFiltersEl = new FakeElement();
 const defaultQuerySearchEl = new FakeElement();

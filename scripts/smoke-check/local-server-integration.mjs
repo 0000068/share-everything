@@ -24,6 +24,13 @@ function request(origin, pathname, { method = "GET", timeoutMs = 3_000 } = {}) {
     const req = http.request(origin, { path: pathname, method }, (res) => {
       const chunks = [];
       res.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+      res.once("error", reject);
+      res.once("aborted", () => reject(new Error(`Response aborted for ${pathname}`)));
+      res.once("close", () => {
+        if (!res.complete) {
+          reject(new Error(`Response closed before completion for ${pathname}`));
+        }
+      });
       res.once("end", () => resolve({
         body: Buffer.concat(chunks),
         headers: res.headers,
@@ -181,8 +188,30 @@ export async function runLocalServerIntegrationChecks({ assert }) {
       "read-only API method guards should respond before an oversized request body completes",
     );
 
-    const deniedResponse = await request(origin, "/server/notion-client.js");
-    assert.equal(deniedResponse.statusCode, 403, "local server should deny private source roots");
+    for (const deniedPath of [
+      "/server/notion-client.js",
+      "/tmp/probe.txt",
+      "/output/probe.txt",
+      "/dist/index.html",
+    ]) {
+      const deniedResponse = await request(origin, deniedPath);
+      assert.equal(deniedResponse.statusCode, 403, `local server should deny private root path ${deniedPath}`);
+    }
+
+    await assert.rejects(
+      request(origin, "/api/__lifecycle-probe?streamError=1"),
+      "post-header API errors should destroy the in-flight stream cleanly",
+    );
+    assert.equal(
+      output.includes("ERR_HTTP_HEADERS_SENT"),
+      false,
+      "post-header API errors must not trigger secondary ERR_HTTP_HEADERS_SENT failures",
+    );
+    assert.equal(
+      (await request(origin, "/")).statusCode,
+      200,
+      "post-header API errors must keep the local server healthy",
+    );
 
     const canonicalPostId = "123456781234123412341234567890ab";
     const noisyPostResponse = await request(origin, `/posts/${canonicalPostId}?tracking=1`);

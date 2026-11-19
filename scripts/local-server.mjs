@@ -52,7 +52,7 @@ if (process.env.LOCAL_SERVER_LIFECYCLE_PROBE === "1") {
     "./fixtures/local-server-lifecycle-probe.cjs",
   );
 }
-const deniedStaticRootSegments = new Set(["api", "node_modules", "server", "scripts"]);
+const deniedStaticRootSegments = new Set(["api", "dist", "node_modules", "output", "scripts", "server", "tmp"]);
 
 function createHttpError(statusCode, message) {
   const error = new Error(message);
@@ -342,6 +342,11 @@ const server = createServer(async (req, res) => {
     const statusCode = getErrorStatusCode(error);
     if (statusCode >= 500) {
       console.error("Local server request failed:", error);
+    }
+
+    if (res.headersSent) {
+      res.destroy();
+      return;
     }
 
     res.writeHead(statusCode, { "Content-Type": "text/plain; charset=utf-8" });

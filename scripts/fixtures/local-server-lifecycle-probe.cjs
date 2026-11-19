@@ -8,6 +8,10 @@ module.exports = function localServerLifecycleProbe(req, res) {
   if (req.query?.read === "1") {
     return res.status(200).json(latestResult);
   }
+  if (req.query?.streamError === "1") {
+    res.write("partial-body");
+    throw new Error("Injected post-header streaming failure");
+  }
 
   const completionLifecycle = createRequestLifecycle(req, res);
   const disposableLifecycle = createRequestLifecycle(req, res);

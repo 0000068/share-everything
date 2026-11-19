@@ -1009,7 +1009,7 @@ expectIncludes(localServerJs, "removeListener(eventName, listener)", "local serv
 expectIncludes(localServerJs, "function getApiHandler", "local server should lazy-load API handlers by route");
 expectNotIncludes(localServerJs, '["/api/post", require("../api/post.js")]', "local server should not eager-load every API handler at startup");
 expectIncludes(localServerJs, "function isDeniedStaticPath", "local server should centralize static denylist checks");
-expectIncludes(localServerJs, 'new Set(["api", "node_modules", "server", "scripts"])', "local server should deny source directories from static serving");
+expectIncludes(localServerJs, 'new Set(["api", "dist", "node_modules", "output", "scripts", "server", "tmp"])', "local server should deny source, build, and temporary directories from static serving");
 expectIncludes(localServerJs, 'segment.startsWith(".")', "local server should deny dotfiles including .env and .git paths");
 expectIncludes(localServerJs, 'url.pathname === "/robots.txt"', "local server should map robots.txt to the dynamic handler");
 expectIncludes(localServerJs, "VISUAL_REGRESSION_STATIC_TEMPLATES", "local server should expose static templates only for visual regression");

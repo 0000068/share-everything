@@ -222,6 +222,32 @@ export function runContentModuleChecks(context) {
     "https://player.vimeo.com/video/123456789?h=abcdef123",
     "notion-content-url.js should preserve Vimeo unlisted hash tokens on embed URLs",
   );
+  for (const incompleteYoutubeUrl of [
+    "https://youtu.be/",
+    "https://www.youtube.com/watch",
+    "https://www.youtube.com/watch?v=%20%20",
+  ]) {
+    assert.equal(
+      notionContentUrlHelpers.resolveEmbeddableUrl(incompleteYoutubeUrl, "https://example.com"),
+      null,
+      `notion-content-url.js should decline embedding incomplete YouTube URL: ${incompleteYoutubeUrl}`,
+    );
+  }
+  const incompleteYoutubeEmbedHtml = notionContentHelpers.renderBlocks([{
+    type: "resource",
+    resourceType: "embed",
+    url: "https://youtu.be/",
+  }], { baseOrigin: "https://example.com" });
+  expectIncludes(
+    incompleteYoutubeEmbedHtml,
+    "post-embed-link-only",
+    "notion-content.js should degrade incomplete YouTube embed links to link cards",
+  );
+  expectNotIncludes(
+    incompleteYoutubeEmbedHtml,
+    "<iframe",
+    "notion-content.js should not render an unframeable iframe for incomplete YouTube URLs",
+  );
   const malformedParagraphBlock = notionContentHelpers.mapNotionBlock({ type: "paragraph", paragraph: {} });
   assert.equal(malformedParagraphBlock.type, "paragraph", "notion-content.js should preserve malformed paragraph block type");
   assert.equal(malformedParagraphBlock.text, "", "notion-content.js should tolerate malformed paragraph blocks without throwing");
@@ -259,6 +285,24 @@ export function runContentModuleChecks(context) {
   const deepLatexHtml = notionContentHelpers.renderMathExpression(deepLatex);
   expectIncludes(deepLatexHtml, "post-math-fallback", "notion-content.js should degrade overly deep LaTeX instead of recursing indefinitely");
   expectIncludes(deepLatexHtml, deepLatex, "notion-content.js should preserve the original LaTeX when it degrades rendering");
+  const deepUnbracedCommandLatex = `${"\\left".repeat(40)}(`;
+  const deepUnbracedCommandHtml = notionContentHelpers.renderMathExpression(deepUnbracedCommandLatex);
+  expectIncludes(
+    deepUnbracedCommandHtml,
+    "post-math-fallback",
+    "notion-content.js should enforce nesting depth on recursive unbraced LaTeX commands",
+  );
+  let deepEnvironmentLatex = "x";
+  for (let level = 0; level < 36; level += 1) {
+    const envName = level % 2 === 0 ? "matrix" : "pmatrix";
+    deepEnvironmentLatex = `\\begin{${envName}}${deepEnvironmentLatex}\\end{${envName}}`;
+  }
+  const deepEnvironmentHtml = notionContentHelpers.renderMathExpression(deepEnvironmentLatex);
+  expectIncludes(
+    deepEnvironmentHtml,
+    "post-math-fallback",
+    "notion-content.js should carry nesting depth across nested LaTeX environments",
+  );
   const articleHtml = notionArticleRendererHelpers.createPostArticleRenderer({
     DEFAULT_CATEGORY_COLOR: notionContentSharedHelpers.DEFAULT_CATEGORY_COLOR,
     escapeHtml: notionContentUtilsHelpers.escapeHtml,

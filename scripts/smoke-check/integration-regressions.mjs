@@ -432,6 +432,21 @@ async function checkBootstrapDiagnostics() {
       return true;
     });
   }
+
+  const pageCapBootstrap = loadBrowserScript("js/blog-bootstrap.js", {
+    window: { location: new URL("https://example.com/blog.html") },
+    document: { body: { dataset: { page: "" } } },
+  });
+  assert.equal(
+    pageCapBootstrap.window.BlogBootstrap.buildRequestUrl("https://example.com/blog.html?page=10000"),
+    "/api/posts-data?page=10000",
+    "blog bootstrap should retain page numbers up to the server max page cap",
+  );
+  assert.equal(
+    pageCapBootstrap.window.BlogBootstrap.buildRequestUrl("https://example.com/blog.html?page=10001"),
+    "/api/posts-data",
+    "blog bootstrap should normalize page numbers above the server max page cap to page 1",
+  );
 }
 
 export async function runIntegrationRegressionChecks() {

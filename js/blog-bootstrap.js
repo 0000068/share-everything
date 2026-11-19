@@ -7,6 +7,7 @@ const ALL_CATEGORY = "全部";
 const BOOKMARK_HASH_PREFIX = "#bookmarks";
 const CATEGORY_MAX_LENGTH = 128;
 const SEARCH_MAX_LENGTH = 256;
+const MAX_PAGE = 10_000;
 // Keep this synchronized with notion-api.js and above the server's complete
 // NOTION_OPERATION_TIMEOUT_MS default, because bootstrap owns the initial fetch.
 const PUBLIC_CONTENT_REQUEST_TIMEOUT_MS = 35000;
@@ -19,7 +20,7 @@ function normalizePage(value) {
   const rawValue = String(value ?? "").trim();
   if (!/^\d+$/.test(rawValue)) return 1;
   const parsed = Number(rawValue);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 1;
+  return Number.isSafeInteger(parsed) && parsed > 0 && parsed <= MAX_PAGE ? parsed : 1;
 }
 
 function buildRequestUrl(rawUrl) {

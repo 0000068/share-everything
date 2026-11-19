@@ -67,6 +67,7 @@
   const COVER_IMAGE_SIZES = "(max-width: 768px) 50vw, (max-width: 900px) 100vw, (max-width: 1200px) 50vw, 400px";
   const PUBLIC_CATEGORY_QUERY_MAX_LENGTH = 128;
   const PUBLIC_SEARCH_QUERY_MAX_LENGTH = 256;
+  const PUBLIC_POSTS_MAX_PAGE = 10_000;
   const BOOKMARK_METADATA_RETRY_BASE_MS = 5_000;
   const BOOKMARK_METADATA_RETRY_MAX_MS = 60_000;
   const BOOKMARK_METADATA_RETRY_MAX_EXPONENT = Math.ceil(
@@ -91,7 +92,7 @@
 
   function normalizeListingPage(value, fallback = 1) {
     const normalizedFallback = Number.isSafeInteger(Number(fallback)) && Number(fallback) > 0
-      ? Number(fallback)
+      ? Math.min(Number(fallback), PUBLIC_POSTS_MAX_PAGE)
       : 1;
     const rawValue = String(value ?? "").trim();
     if (!/^\d+$/.test(rawValue)) {
@@ -99,7 +100,9 @@
     }
 
     const parsed = Number(rawValue);
-    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : normalizedFallback;
+    return Number.isSafeInteger(parsed) && parsed > 0 && parsed <= PUBLIC_POSTS_MAX_PAGE
+      ? parsed
+      : normalizedFallback;
   }
 
   function buildBookmarkSearchText(post) {

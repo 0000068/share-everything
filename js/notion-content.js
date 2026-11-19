@@ -472,11 +472,11 @@
     return `<span class="${className}" aria-label="${label}">${label}</span>`;
   }
 
-  function parseLatexFragment(source) {
+  function parseLatexFragment(source, depth = 0) {
     const state = {
       source: normalizeLatexExpression(source),
       index: 0,
-      depth: 0,
+      depth,
     };
     return parseLatexSequence(state);
   }
@@ -514,18 +514,42 @@
     return wrapMathRow(html);
   }
 
+  function findMatchingEnvironmentEnd(source, startIndex, environmentName) {
+    const beginToken = `\\begin{${environmentName}}`;
+    const endToken = `\\end{${environmentName}}`;
+    let depth = 1;
+    let cursor = startIndex;
+
+    while (cursor < source.length) {
+      const nextBegin = source.indexOf(beginToken, cursor);
+      const nextEnd = source.indexOf(endToken, cursor);
+      if (nextEnd === -1) return -1;
+
+      if (nextBegin !== -1 && nextBegin < nextEnd) {
+        depth += 1;
+        cursor = nextBegin + beginToken.length;
+      } else {
+        depth -= 1;
+        if (depth === 0) return nextEnd;
+        cursor = nextEnd + endToken.length;
+      }
+    }
+
+    return -1;
+  }
+
   function parseLatexEnvironment(command, state) {
     const environmentName = readRawLatexGroup(state);
     if (!environmentName) return createMathIdentifier(command);
 
     const endToken = `\\end{${environmentName}}`;
-    const endIndex = state.source.indexOf(endToken, state.index);
+    const endIndex = findMatchingEnvironmentEnd(state.source, state.index, environmentName);
     if (endIndex === -1) return createMathIdentifier(environmentName);
 
     const body = state.source.slice(state.index, endIndex);
     state.index = endIndex + endToken.length;
     const rows = splitLatexRows(body);
-    const tableHtml = `<mtable>${rows.map((row) => `<mtr>${splitLatexCells(row).map((cell) => `<mtd>${wrapMathRow(parseLatexFragment(cell))}</mtd>`).join("")}</mtr>`).join("")}</mtable>`;
+    const tableHtml = `<mtable>${rows.map((row) => `<mtr>${splitLatexCells(row).map((cell) => `<mtd>${wrapMathRow(parseLatexFragment(cell, state.depth))}</mtd>`).join("")}</mtr>`).join("")}</mtable>`;
     const delimiters = MATH_ENVIRONMENT_DELIMITERS[environmentName];
     if (!delimiters) return tableHtml;
 
@@ -533,85 +557,90 @@
   }
 
   function parseLatexCommand(state) {
-    const command = readLatexCommand(state);
-    if (!command) return "";
+    enterLatexParseDepth(state);
+    try {
+      const command = readLatexCommand(state);
+      if (!command) return "";
 
-    if (LATEX_SPACING_COMMANDS.has(command)) {
-      return command === "!" ? "" : '<mspace width="0.22em"></mspace>';
-    }
-
-    if (command === "frac" || command === "dfrac" || command === "tfrac") {
-      return `<mfrac>${parseLatexRequiredArgument(state)}${parseLatexRequiredArgument(state)}</mfrac>`;
-    }
-
-    if (command === "sqrt") {
-      const indexHtml = parseLatexOptionalArgument(state);
-      const radicand = parseLatexRequiredArgument(state);
-      return indexHtml ? `<mroot>${radicand}${indexHtml}</mroot>` : `<msqrt>${radicand}</msqrt>`;
-    }
-
-    if (command === "text") {
-      return `<mtext>${escapeHtml(readRawLatexGroup(state))}</mtext>`;
-    }
-
-    if (command === "mathrm" || command === "operatorname") {
-      return createMathIdentifier(readRawLatexGroup(state), ' mathvariant="normal"');
-    }
-
-    if (LATEX_MATH_VARIANTS[command]) {
-      return createMathIdentifier(
-        readRawLatexGroup(state),
-        ` mathvariant="${LATEX_MATH_VARIANTS[command]}"`,
-      );
-    }
-
-    if (command === "overline") {
-      return `<mover accent="true">${parseLatexRequiredArgument(state)}<mo stretchy="true">‾</mo></mover>`;
-    }
-
-    if (command === "underline") {
-      return `<munder accentunder="true">${parseLatexRequiredArgument(state)}<mo stretchy="true">_</mo></munder>`;
-    }
-
-    if (command === "boxed") {
-      return `<menclose notation="box">${parseLatexRequiredArgument(state)}</menclose>`;
-    }
-
-    if (command === "begin") {
-      return parseLatexEnvironment(command, state);
-    }
-
-    if (command === "left" || command === "right" || command === "big" || command === "Big" || command === "bigg" || command === "Bigg") {
-      skipLatexSpaces(state);
-      if (state.source[state.index] === ".") {
-        state.index += 1;
-        return "";
+      if (LATEX_SPACING_COMMANDS.has(command)) {
+        return command === "!" ? "" : '<mspace width="0.22em"></mspace>';
       }
-      return parseLatexAtom(state);
-    }
 
-    if (LATEX_ACCENTS[command]) {
-      return `<mover>${parseLatexRequiredArgument(state)}${createMathOperator(LATEX_ACCENTS[command])}</mover>`;
-    }
+      if (command === "frac" || command === "dfrac" || command === "tfrac") {
+        return `<mfrac>${parseLatexRequiredArgument(state)}${parseLatexRequiredArgument(state)}</mfrac>`;
+      }
 
-    if (LATEX_DELIMITER_COMMANDS[command]) {
-      return createMathOperator(LATEX_DELIMITER_COMMANDS[command]);
-    }
+      if (command === "sqrt") {
+        const indexHtml = parseLatexOptionalArgument(state);
+        const radicand = parseLatexRequiredArgument(state);
+        return indexHtml ? `<mroot>${radicand}${indexHtml}</mroot>` : `<msqrt>${radicand}</msqrt>`;
+      }
 
-    if (LATEX_SYMBOLS[command]) {
-      const value = LATEX_SYMBOLS[command];
-      return LATEX_OPERATOR_SYMBOLS.has(command) ? createMathOperator(value) : createMathIdentifier(value);
-    }
+      if (command === "text") {
+        return `<mtext>${escapeHtml(readRawLatexGroup(state))}</mtext>`;
+      }
 
-    if (LATEX_OPERATOR_COMMANDS.has(command)) {
-      return createMathIdentifier(command, ' mathvariant="normal"');
-    }
+      if (command === "mathrm" || command === "operatorname") {
+        return createMathIdentifier(readRawLatexGroup(state), ' mathvariant="normal"');
+      }
 
-    if (command === "\\") {
-      return '<mspace linebreak="newline"></mspace>';
-    }
+      if (LATEX_MATH_VARIANTS[command]) {
+        return createMathIdentifier(
+          readRawLatexGroup(state),
+          ` mathvariant="${LATEX_MATH_VARIANTS[command]}"`,
+        );
+      }
 
-    return createMathIdentifier(command);
+      if (command === "overline") {
+        return `<mover accent="true">${parseLatexRequiredArgument(state)}<mo stretchy="true">‾</mo></mover>`;
+      }
+
+      if (command === "underline") {
+        return `<munder accentunder="true">${parseLatexRequiredArgument(state)}<mo stretchy="true">_</mo></munder>`;
+      }
+
+      if (command === "boxed") {
+        return `<menclose notation="box">${parseLatexRequiredArgument(state)}</menclose>`;
+      }
+
+      if (command === "begin") {
+        return parseLatexEnvironment(command, state);
+      }
+
+      if (command === "left" || command === "right" || command === "big" || command === "Big" || command === "bigg" || command === "Bigg") {
+        skipLatexSpaces(state);
+        if (state.source[state.index] === ".") {
+          state.index += 1;
+          return "";
+        }
+        return parseLatexAtom(state);
+      }
+
+      if (LATEX_ACCENTS[command]) {
+        return `<mover>${parseLatexRequiredArgument(state)}${createMathOperator(LATEX_ACCENTS[command])}</mover>`;
+      }
+
+      if (LATEX_DELIMITER_COMMANDS[command]) {
+        return createMathOperator(LATEX_DELIMITER_COMMANDS[command]);
+      }
+
+      if (LATEX_SYMBOLS[command]) {
+        const value = LATEX_SYMBOLS[command];
+        return LATEX_OPERATOR_SYMBOLS.has(command) ? createMathOperator(value) : createMathIdentifier(value);
+      }
+
+      if (LATEX_OPERATOR_COMMANDS.has(command)) {
+        return createMathIdentifier(command, ' mathvariant="normal"');
+      }
+
+      if (command === "\\") {
+        return '<mspace linebreak="newline"></mspace>';
+      }
+
+      return createMathIdentifier(command);
+    } finally {
+      exitLatexParseDepth(state);
+    }
   }
 
   function parseLatexAtom(state, { singleToken = false } = {}) {

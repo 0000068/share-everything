@@ -198,14 +198,14 @@
       const pathname = parsed.pathname || "/";
 
       if (hostname === "youtu.be") {
-        const videoId = pathname.split("/").filter(Boolean)[0];
-        return videoId ? `https://www.youtube.com/embed/${encodeURIComponent(videoId)}` : safeUrl;
+        const videoId = pathname.split("/").filter(Boolean)[0]?.trim() || "";
+        return videoId ? `https://www.youtube.com/embed/${encodeURIComponent(videoId)}` : null;
       }
 
       if (hostname === "youtube.com") {
         if (pathname === "/watch") {
-          const videoId = parsed.searchParams.get("v");
-          return videoId ? `https://www.youtube.com/embed/${encodeURIComponent(videoId)}` : safeUrl;
+          const videoId = (parsed.searchParams.get("v") || "").trim();
+          return videoId ? `https://www.youtube.com/embed/${encodeURIComponent(videoId)}` : null;
         }
 
         const shortMatch = pathname.match(/^\/(?:shorts|embed)\/([^/?#]+)/);
