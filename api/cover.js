@@ -49,7 +49,7 @@ const COVER_IMAGE_RATE_LIMIT_PER_MINUTE = readPositiveIntegerEnv(
 );
 const COVER_IMAGE_MAX_CONCURRENT_REQUESTS = readPositiveIntegerEnv(
   "COVER_IMAGE_MAX_CONCURRENT_REQUESTS",
-  2,
+  3,
 );
 const COVER_IMAGE_MAX_QUEUED_REQUESTS = readPositiveIntegerEnv(
   "COVER_IMAGE_MAX_QUEUED_REQUESTS",
@@ -58,11 +58,11 @@ const COVER_IMAGE_MAX_QUEUED_REQUESTS = readPositiveIntegerEnv(
 const COVER_IMAGE_FORMATS = Object.freeze({
   avif: {
     contentType: "image/avif",
-    transform: (pipeline) => pipeline.avif({ quality: Math.min(COVER_IMAGE_QUALITY, 58), effort: 4 }),
+    transform: (pipeline) => pipeline.avif({ quality: Math.min(COVER_IMAGE_QUALITY, 58), effort: 2 }),
   },
   webp: {
     contentType: "image/webp",
-    transform: (pipeline) => pipeline.webp({ quality: COVER_IMAGE_QUALITY, effort: 4 }),
+    transform: (pipeline) => pipeline.webp({ quality: COVER_IMAGE_QUALITY, effort: 2 }),
   },
   jpeg: {
     contentType: "image/jpeg",

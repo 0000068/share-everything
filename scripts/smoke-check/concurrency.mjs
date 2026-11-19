@@ -89,7 +89,7 @@ async function checkCoverBurst() {
           active += 1;
           loads += 1;
           peak = Math.max(peak, active);
-          if (loads === 2) ready();
+          if (loads === 3) ready();
           await barrier;
           active -= 1;
           return new Response(body, { headers: { "content-type": "image/png" } });
@@ -114,10 +114,10 @@ async function checkCoverBurst() {
   });
   await started;
   await tick();
-  assert.equal(loads, 2, "queued covers must not allocate upstream work before admission");
+  assert.equal(loads, 3, "queued covers must not allocate upstream work before admission");
   release();
   await Promise.all(requests.map(({ pending }) => pending));
-  assert.equal(peak, 2, "handling a whole page must retain the two-request resource limit");
+  assert.equal(peak, 3, "handling a whole page must retain the three-request resource limit");
   assert.equal(loads, 9);
   for (const { req, res } of requests) {
     assert.equal(res.statusCode, 200, "all nine first-page covers must succeed under the default limits");

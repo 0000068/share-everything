@@ -761,6 +761,14 @@ loadBrowserScript("js/blog-page.js", {
               coverGradient: "linear-gradient(135deg, #111111, #222222)",
               tags: [],
             },
+            {
+              id: "pagination-window-post-quaternary",
+              title: "Pagination quaternary cover",
+              coverImage: `https://cdn.example.com/cover-${page}-quaternary.jpg`,
+              coverEmoji: "📝",
+              coverGradient: "linear-gradient(135deg, #111111, #222222)",
+              tags: [],
+            },
           ],
           categories: [
             { name: "All", label: "All", emoji: "📚" },
@@ -822,23 +830,66 @@ const paginationButtonCount = (paginationHtml.match(/<button\b/g) || []).length;
 const numberedPageButtonCount = (paginationHtml.match(/aria-label="第 \d+ 页"/g) || []).length;
 assert.equal(
   (paginationGridEl.innerHTML.match(/loading="eager"/g) || []).length,
-  1,
-  "blog page should eager-load only the first LCP cover candidate",
+  3,
+  "blog page should eager-load the first visible row of three cover candidates",
 );
 assert.equal(
   (paginationGridEl.innerHTML.match(/fetchpriority="high"/g) || []).length,
   1,
-  "blog page should assign high fetch priority to only the first cover",
+  "blog page should assign high fetch priority to only the first LCP cover",
 );
 assert.equal(
   (paginationGridEl.innerHTML.match(/loading="lazy"/g) || []).length,
-  2,
-  "blog page should lazy-load covers after the first card",
+  1,
+  "blog page should keep covers below the first visible row lazy-loaded",
 );
 assert.equal(
   (paginationGridEl.innerHTML.match(/fetchpriority="auto"/g) || []).length,
-  2,
+  3,
   "blog page should leave non-LCP cover fetch priority at auto",
+);
+assert.equal(
+  (paginationGridEl.innerHTML.match(/blog-card-cover-img is-loading/g) || []).length,
+  4,
+  "blog page should render remote cover containers in the translucent loading state until painted",
+);
+assert.equal(
+  paginationGridEl.innerHTML.includes("linear-gradient(135deg, #1a1a2e, #16213e)"),
+  false,
+  "blog page should not paint an opaque dark fallback background on loading image covers",
+);
+const loadedCoverPlaceholder = new FakeElement("div");
+loadedCoverPlaceholder.classList.add("blog-card-cover-placeholder", "blog-card-cover-img", "is-loading");
+loadedCoverPlaceholder.dataset.coverGradient = "linear-gradient(135deg, #0d1b4b, #1a3a6b)";
+paginationGridEl.appendChild(loadedCoverPlaceholder);
+const loadedCoverImg = new FakeElement("img");
+loadedCoverImg.closest = (selector) => (
+  selector === ".blog-card-cover-placeholder.blog-card-cover-img" ? loadedCoverPlaceholder : null
+);
+paginationGridEl.dispatch("load", { target: loadedCoverImg });
+assert.equal(
+  loadedCoverPlaceholder.classList.contains("is-loading"),
+  false,
+  "blog page should clear the cover loading state as soon as the image loads",
+);
+const failedCoverPlaceholder = new FakeElement("div");
+failedCoverPlaceholder.classList.add("blog-card-cover-placeholder", "blog-card-cover-img", "is-loading");
+failedCoverPlaceholder.dataset.coverGradient = "linear-gradient(135deg, #0d1b4b, #1a3a6b)";
+paginationGridEl.appendChild(failedCoverPlaceholder);
+const failedCoverImg = new FakeElement("img");
+failedCoverImg.closest = (selector) => (
+  selector === ".blog-card-cover-placeholder.blog-card-cover-img" ? failedCoverPlaceholder : null
+);
+paginationGridEl.dispatch("error", { target: failedCoverImg });
+assert.equal(
+  failedCoverPlaceholder.classList.contains("is-loading"),
+  false,
+  "blog page should clear loading state when a cover image fails",
+);
+assert.equal(
+  failedCoverPlaceholder.style.background,
+  "linear-gradient(135deg, #0d1b4b, #1a3a6b)",
+  "blog page should restore the card's sanitized category gradient when a cover image fails",
 );
 assert.equal(
   paginationQueryPages.at(0),
@@ -873,8 +924,18 @@ assert.ok(
 );
 assert.equal(
   paginationPreloadNodes.length,
-  1,
-  "blog page should keep only the current render's cover preload links in the document head",
+  3,
+  "blog page should preload up to three first-row cover links in the document head",
+);
+assert.equal(
+  paginationPreloadNodes[0]?.fetchPriority,
+  "high",
+  "blog page should keep high fetch priority on the first preloaded cover only",
+);
+assert.equal(
+  paginationPreloadNodes[1]?.fetchPriority,
+  "auto",
+  "blog page should keep auto fetch priority on secondary preloaded covers",
 );
 assert.equal(
   paginationPreloadNodes[0]?.dataset?.blogCoverPreload,
@@ -903,13 +964,13 @@ assert.equal(
 );
 assert.equal(
   paginationPreloadNodes.length,
-  1,
+  3,
   "blog page should replace stale cover preload links instead of growing the document head",
 );
 assert.equal(
   paginationPreloadNodes[0]?.href,
   "https://cdn.example.com/cover-26.jpg",
-  "blog page should keep the newest cover preload link after pagination changes",
+  "blog page should keep the newest cover preload links after pagination changes",
 );
 paginationCleanup?.();
 assert.equal(

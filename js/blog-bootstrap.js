@@ -8,6 +8,10 @@ const BOOKMARK_HASH_PREFIX = "#bookmarks";
 const CATEGORY_MAX_LENGTH = 128;
 const SEARCH_MAX_LENGTH = 256;
 const MAX_PAGE = 10_000;
+const COVER_SIZES = "(max-width: 768px) 50vw, (max-width: 900px) 100vw, (max-width: 1200px) 50vw, 400px";
+const COVER_SIG_RE = /^[A-Za-z0-9_-]{43}$/;
+const COVER_WIDTHS = [320, 640, 960];
+const EAGER_COVER_PRELOAD_COUNT = 3;
 // Keep this synchronized with notion-api.js and above the server's complete
 // NOTION_OPERATION_TIMEOUT_MS default, because bootstrap owns the initial fetch.
 const PUBLIC_CONTENT_REQUEST_TIMEOUT_MS = 35000;
@@ -108,6 +112,68 @@ function requestInitialData(requestUrl, controller) {
   });
 }
 
+function coverUrlFor(src, sig, width) {
+  const url = new URL("/api/cover", window.location.origin);
+  url.searchParams.set("format", "webp");
+  url.searchParams.set("src", src);
+  url.searchParams.set("sig", sig);
+  url.searchParams.set("w", String(width));
+  return url.href;
+}
+
+function resolveCoverPreload(post) {
+  const raw = typeof post?.coverImage === "string" ? post.coverImage.trim() : "";
+  if (!raw) return null;
+  try {
+    const parsed = new URL(raw, window.location.origin);
+    if (parsed.username || parsed.password) return null;
+    if (parsed.origin === window.location.origin) return { href: parsed.href, srcSet: "" };
+    if (parsed.protocol !== "https:") return null;
+    parsed.hash = "";
+    const sig = typeof post.coverImageSignature === "string" ? post.coverImageSignature.trim() : "";
+    if (!COVER_SIG_RE.test(sig)) return { href: parsed.href, srcSet: "" };
+    return {
+      href: coverUrlFor(parsed.href, sig, 640),
+      srcSet: COVER_WIDTHS.map((w) => `${coverUrlFor(parsed.href, sig, w)} ${w}w`).join(", "),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function prewarmCoverImages(payload) {
+  if (!Array.isArray(payload?.results) || !document?.head?.appendChild || typeof document?.createElement !== "function") return;
+  const limit = window.navigator?.connection?.saveData ? 1 : EAGER_COVER_PRELOAD_COUNT;
+  const seen = new Set(
+    Array.from(document.head.querySelectorAll?.('link[data-blog-cover-preload="true"]') || [])
+      .map((node) => node?.href || node?.getAttribute?.("href") || "")
+      .filter(Boolean),
+  );
+  let count = 0;
+  for (const post of payload.results) {
+    if (count >= limit) break;
+    const spec = resolveCoverPreload(post);
+    if (!spec || seen.has(spec.href)) continue;
+    seen.add(spec.href);
+    const priority = count++ === 0 ? "high" : "auto";
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "image";
+    link.href = spec.href;
+    if (spec.srcSet) {
+      link.imageSrcset = spec.srcSet;
+      link.imageSizes = COVER_SIZES;
+      link.setAttribute?.("imagesrcset", spec.srcSet);
+      link.setAttribute?.("imagesizes", COVER_SIZES);
+    }
+    link.fetchPriority = priority;
+    link.setAttribute?.("fetchpriority", priority);
+    if (link.dataset) link.dataset.blogCoverPreload = "true";
+    link.setAttribute?.("data-blog-cover-preload", "true");
+    document.head.appendChild(link);
+  }
+}
+
 const bootstrapState = window.PageBootstrap || (window.PageBootstrap = {});
 
 function ensure(rawUrl = window.location.href, { signal } = {}) {
@@ -142,9 +208,16 @@ function ensure(rawUrl = window.location.href, { signal } = {}) {
 
   entry.promise = requestInitialData(requestUrl, abortBridge.controller);
 
-  entry.promise.then(() => {
+  entry.promise.then((payload) => {
     entry.settled = true;
     abortBridge.cleanup();
+    if (!abortBridge.controller.signal.aborted) {
+      try {
+        prewarmCoverImages(payload);
+      } catch {
+        // Cover prewarming is a best-effort optimization and must not affect data delivery.
+      }
+    }
   }, () => {
     entry.settled = true;
     entry.failed = true;

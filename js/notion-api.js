@@ -36,44 +36,25 @@
     const FLEXIBLE_NOTION_POST_ID_PATTERN = /^(?:[a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i;
 
     function createListingContentFacade() {
-      const contentShared = window.NotionContentShared;
-      const contentUtils = window.NotionContentUtils;
-      const contentUrl = window.NotionContentUrl;
-      const facade = {
-        ALL_CATEGORY: contentShared?.ALL_CATEGORY,
-        DEFAULT_CATEGORY_COLOR: contentShared?.DEFAULT_CATEGORY_COLOR,
-        escapeHtml: contentUtils?.escapeHtml,
-        getCategoryColor: contentShared?.getCategoryColor,
-        getRemoteBlogCategories: contentShared?.getRemoteBlogCategories,
-        gradientForCategory: contentShared?.gradientForCategory,
-        isLikelyEphemeralAssetUrl: contentUrl?.isLikelyEphemeralAssetUrl,
-        normalizeImageProxySignature: contentUrl?.normalizeImageProxySignature,
-        normalizeSearchText: contentUtils?.normalizeSearchText,
-        resolveDisplayImageUrl: contentUrl?.resolveDisplayImageUrl,
-      };
-      const requiredTypes = {
-        ALL_CATEGORY: "string",
-        DEFAULT_CATEGORY_COLOR: "object",
-        escapeHtml: "function",
-        getCategoryColor: "function",
-        getRemoteBlogCategories: "function",
-        gradientForCategory: "function",
-        isLikelyEphemeralAssetUrl: "function",
-        normalizeImageProxySignature: "function",
-        normalizeSearchText: "function",
-        resolveDisplayImageUrl: "function",
-      };
-      const missingHelpers = Object.entries(requiredTypes)
-        .filter(([name, type]) => typeof facade[name] !== type)
-        .map(([name]) => name);
-
-      if (missingHelpers.length > 0) {
+      const s = window.NotionContentShared, u = window.NotionContentUtils, r = window.NotionContentUrl;
+      const specs = [
+        ["ALL_CATEGORY", s, "string"], ["DEFAULT_CATEGORY_COLOR", s, "object"], ["getCategoryColor", s, "function"],
+        ["getRemoteBlogCategories", s, "function"], ["gradientForCategory", s, "function"],
+        ["escapeHtml", u, "function"], ["normalizeSearchText", u, "function"],
+        ["isLikelyEphemeralAssetUrl", r, "function"], ["normalizeImageProxySignature", r, "function"], ["resolveDisplayImageUrl", r, "function"],
+      ];
+      const facade = {};
+      const missing = [];
+      for (const [name, source, type] of specs) {
+        facade[name] = source?.[name];
+        if (typeof facade[name] !== type) missing.push(name);
+      }
+      if (missing.length > 0) {
         throw new Error(
-          `notion-api.js listing dependencies missing or wrong type: ${missingHelpers.join(", ")}. `
+          `notion-api.js listing dependencies missing or wrong type: ${missing.join(", ")}. `
           + "Ensure notion-content-shared.js, notion-content-utils.js, and notion-content-url.js load first.",
         );
       }
-
       return Object.freeze(facade);
     }
 
@@ -127,18 +108,11 @@
     }
 
     function normalizeCategoryColor(value) {
-      if (!value || typeof value !== "object" || Array.isArray(value)) {
-        return null;
-      }
-
-      const bg = typeof value.bg === "string" && value.bg.trim() ? value.bg.trim() : "";
-      const color = typeof value.color === "string" && value.color.trim() ? value.color.trim() : "";
-      const border = typeof value.border === "string" && value.border.trim() ? value.border.trim() : "";
-
-      if (!bg && !color && !border) {
-        return null;
-      }
-
+      if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+      const bg = truncateText(value.bg, 128);
+      const color = truncateText(value.color, 128);
+      const border = truncateText(value.border, 128);
+      if (!bg && !color && !border) return null;
       return {
         bg: bg || fallbackCategoryColor.bg,
         color: color || fallbackCategoryColor.color,
@@ -150,7 +124,6 @@
       if (!category || typeof category !== "object") return null;
       const name = truncateText(category.name, PUBLIC_CATEGORY_QUERY_MAX_LENGTH);
       if (!name) return null;
-
       return {
         name,
         label: truncateText(category.label, POST_SUMMARY_SESSION_MAX_CATEGORY_LABEL_LENGTH, name),
@@ -162,32 +135,22 @@
     }
 
     function normalizeCategoryList(categories) {
-      if (!Array.isArray(categories)) {
-        return [];
-      }
-
+      if (!Array.isArray(categories)) return [];
       const seen = new Set();
-      return categories
-        .map(normalizeCategoryItem)
-        .filter((category) => {
-          if (!category) return false;
-          const key = normalizeSearchText(category.name);
-          if (!key || seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
+      return categories.map(normalizeCategoryItem).filter((category) => {
+        if (!category) return false;
+        const key = normalizeSearchText(category.name);
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
     }
 
     function rememberCategories(categories) {
-      const nextCategories = normalizeCategoryList(categories);
-      if (nextCategories.length === 0) {
-        return categoryNavigationCache;
-      }
-
-      categoryNavigationCache = nextCategories;
-      nextCategories.forEach((category) => {
-        categoryPresentationCache.set(normalizeSearchText(category.name), category);
-      });
+      const next = normalizeCategoryList(categories);
+      if (next.length === 0) return categoryNavigationCache;
+      categoryNavigationCache = next;
+      next.forEach((category) => categoryPresentationCache.set(normalizeSearchText(category.name), category));
       return categoryNavigationCache;
     }
 
@@ -195,22 +158,13 @@
       return getArticleRenderer("renderPostArticle")(post, { baseOrigin: window.location.origin });
     }
 
-    function createRequestError(message, { status, notionCode, code, detail, retryAfter } = {}) {
+    function createRequestError(message, { status, ...rest } = {}) {
       const error = new Error(message);
       if (Number.isFinite(Number(status))) {
         error.status = Number(status);
       }
-      if (typeof notionCode === "string" && notionCode) {
-        error.notionCode = notionCode;
-      }
-      if (typeof code === "string" && code) {
-        error.code = code;
-      }
-      if (typeof detail === "string" && detail) {
-        error.detail = detail;
-      }
-      if (typeof retryAfter === "string" && retryAfter) {
-        error.retryAfter = retryAfter;
+      for (const key of ["notionCode", "code", "detail", "retryAfter"]) {
+        if (typeof rest[key] === "string" && rest[key]) error[key] = rest[key];
       }
       return error;
     }
@@ -824,35 +778,24 @@
       return `${POSTS_REQUEST_KEY_PREFIX}${buildPostQueryString(options)}`;
     }
 
+    function cloneCategoryItem(category) {
+      return {
+        ...category,
+        categoryColor: category.categoryColor ? { ...category.categoryColor } : category.categoryColor,
+      };
+    }
+
     function normalizePostQueryResult(data) {
       const categories = rememberCategories(data?.categories);
-      const results = Array.isArray(data?.results)
-        ? data.results.map(normalizePostSummary).filter(Boolean)
-        : [];
+      const results = Array.isArray(data?.results) ? data.results.map(normalizePostSummary).filter(Boolean) : [];
       const total = Number.isFinite(Number(data?.total)) ? Number(data.total) : results.length;
-      const totalPages = Math.max(
-        1,
-        Number.isFinite(Number(data?.totalPages))
-          ? Number(data.totalPages)
-          : Math.ceil(total / CONFIG.pageSize) || 1,
-      );
-      const currentPage = Math.max(
-        1,
-        Number.isFinite(Number(data?.currentPage)) ? Number(data.currentPage) : 1,
-      );
-
-      return {
-        results,
-        total,
-        totalPages,
-        currentPage,
-        categories,
-      };
+      const totalPages = Math.max(1, Number.isFinite(Number(data?.totalPages)) ? Number(data.totalPages) : Math.ceil(total / CONFIG.pageSize) || 1);
+      const currentPage = Math.max(1, Number.isFinite(Number(data?.currentPage)) ? Number(data.currentPage) : 1);
+      return { results, total, totalPages, currentPage, categories };
     }
 
     function clonePostSummary(post) {
       if (!post || typeof post !== "object") return post;
-
       return {
         ...post,
         categoryColor: post.categoryColor ? { ...post.categoryColor } : post.categoryColor,
@@ -863,12 +806,7 @@
     function clonePostQueryResult(data) {
       return {
         results: Array.isArray(data?.results) ? data.results.map(clonePostSummary) : [],
-        categories: Array.isArray(data?.categories)
-          ? data.categories.map((category) => ({
-            ...category,
-            categoryColor: category.categoryColor ? { ...category.categoryColor } : category.categoryColor,
-          }))
-          : [],
+        categories: Array.isArray(data?.categories) ? data.categories.map(cloneCategoryItem) : [],
         total: Number.isFinite(Number(data?.total)) ? Number(data.total) : 0,
         totalPages: Math.max(1, Number.isFinite(Number(data?.totalPages)) ? Number(data.totalPages) : 1),
         currentPage: Math.max(1, Number.isFinite(Number(data?.currentPage)) ? Number(data.currentPage) : 1),
@@ -878,12 +816,10 @@
     function readCachedPostsResponse(key) {
       const cached = postsResponseCache.get(key);
       if (!cached) return null;
-
       if (Date.now() >= cached.expiresAt) {
         postsResponseCache.delete(key);
         return null;
       }
-
       postsResponseCache.delete(key);
       postsResponseCache.set(key, cached);
       return clonePostQueryResult(cached.data);
@@ -891,12 +827,10 @@
 
     function cachePostsResponse(key, data) {
       if (!key || !data) return;
-
       postsResponseCache.set(key, {
         data: clonePostQueryResult(data),
         expiresAt: Date.now() + POSTS_RESPONSE_CACHE_TTL,
       });
-
       while (postsResponseCache.size > POSTS_RESPONSE_CACHE_MAX_ENTRIES) {
         const oldestKey = postsResponseCache.keys().next().value;
         if (!oldestKey) break;
@@ -904,9 +838,10 @@
       }
     }
 
-    async function fetchPostsRemote(options, { signal } = {}) {
+    async function fetchPostsRemote({ category, search, page = 1 } = {}, { signal } = {}) {
       throwIfAborted(signal);
-      const requestKey = buildPostsRequestKey(options);
+      const query = { category, search, page };
+      const requestKey = buildPostsRequestKey(query);
       const cachedResponse = readCachedPostsResponse(requestKey);
       if (cachedResponse) {
         rememberCategories(cachedResponse.categories);
@@ -915,20 +850,15 @@
       }
 
       return withPendingRequest(requestKey, async (requestSignal) => {
-        const requestUrl = `${CONFIG.postsEndpoint}${buildPostQueryString(options)}`;
+        const requestUrl = `${CONFIG.postsEndpoint}${buildPostQueryString(query)}`;
         const initialData = takeBlogInitialData(requestUrl, requestSignal);
         const mappedData = normalizePostQueryResult(
           await (initialData || requestJsonWithTimeout(requestUrl, {}, { signal: requestSignal })),
         );
-
         primePostSummaries(mappedData.results);
         cachePostsResponse(requestKey, mappedData);
         return clonePostQueryResult(mappedData);
       }, { signal });
-    }
-
-    async function liveQueryDatabase({ category, search, page = 1 } = {}, requestOptions = {}) {
-      return fetchPostsRemote({ category, search, page }, requestOptions);
     }
 
     async function fetchPageRemote(pageId, { signal } = {}) {
@@ -940,27 +870,16 @@
           {},
           { signal: requestSignal },
         );
-        const mappedData = {
-          ...responseData,
-          id: normalizedPageId,
-        };
-
+        const mappedData = { ...responseData, id: normalizedPageId };
         storePostSummary(mappedData);
         return mappedData;
       }, { signal });
     }
 
-    async function liveGetPage(pageId, requestOptions = {}) {
-      return fetchPageRemote(pageId, requestOptions);
-    }
-
     return {
-      getCategories: () => categoryNavigationCache.map((category) => ({
-        ...category,
-        categoryColor: category.categoryColor ? { ...category.categoryColor } : category.categoryColor,
-      })),
-      queryPosts: (options = {}, requestOptions = {}) => liveQueryDatabase(options, requestOptions),
-      getPost: (pageId, requestOptions = {}) => liveGetPage(pageId, requestOptions),
+      getCategories: () => categoryNavigationCache.map(cloneCategoryItem),
+      queryPosts: fetchPostsRemote,
+      getPost: fetchPageRemote,
       getPostSummary,
       renderPostArticle,
       renderBlocks,

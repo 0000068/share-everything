@@ -447,6 +447,86 @@ async function checkBootstrapDiagnostics() {
     "/api/posts-data",
     "blog bootstrap should normalize page numbers above the server max page cap to page 1",
   );
+
+  const prewarmSig = "b".repeat(43);
+  const prewarmLinks = [];
+  const prewarmHead = {
+    appendChild(node) {
+      prewarmLinks.push(node);
+      return node;
+    },
+    querySelectorAll() {
+      return prewarmLinks;
+    },
+  };
+  const prewarmBootstrap = loadBrowserScript("js/blog-bootstrap.js", {
+    window: {
+      location: new URL("https://example.com/blog.html"),
+      navigator: { connection: { saveData: false } },
+    },
+    document: {
+      head: prewarmHead,
+      body: { dataset: { page: "" } },
+      createElement: () => new FakeElement("link"),
+    },
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => "" },
+      json: async () => ({
+        results: [1, 2, 3, 4].map((index) => ({
+          id: `${String(index).repeat(32)}`,
+          coverImage: `https://images.example.com/cover-${index}.png#frag`,
+          coverImageSignature: prewarmSig,
+        })),
+      }),
+    }),
+  });
+  await prewarmBootstrap.window.BlogBootstrap.ensure().promise;
+  await Promise.resolve();
+  assert.equal(prewarmLinks.length, 3, "blog bootstrap should prewarm the first row of three covers");
+  assert.equal(prewarmLinks[0].fetchPriority, "high", "first prewarmed cover should receive high fetchPriority");
+  assert.equal(prewarmLinks[1].fetchPriority, "auto", "secondary prewarmed covers should keep auto fetchPriority");
+  assert.equal(
+    prewarmLinks[0].href,
+    `https://example.com/api/cover?format=webp&src=${encodeURIComponent("https://images.example.com/cover-1.png")}&sig=${prewarmSig}&w=640`,
+    "bootstrap cover preload should emit the exact canonical /api/cover URL",
+  );
+  assert.ok(
+    prewarmLinks[0].imageSrcset.includes("w=320 320w") && prewarmLinks[0].imageSrcset.includes("w=960 960w"),
+    "bootstrap cover preload should include responsive srcset candidates matching blog-page.js",
+  );
+
+  const saveDataLinks = [];
+  const saveDataBootstrap = loadBrowserScript("js/blog-bootstrap.js", {
+    window: {
+      location: new URL("https://example.com/blog.html"),
+      navigator: { connection: { saveData: true } },
+    },
+    document: {
+      head: {
+        appendChild(node) { saveDataLinks.push(node); return node; },
+        querySelectorAll: () => saveDataLinks,
+      },
+      body: { dataset: { page: "" } },
+      createElement: () => new FakeElement("link"),
+    },
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => "" },
+      json: async () => ({
+        results: [1, 2, 3].map((index) => ({
+          id: `${String(index).repeat(32)}`,
+          coverImage: `https://images.example.com/save-data-${index}.png`,
+          coverImageSignature: prewarmSig,
+        })),
+      }),
+    }),
+  });
+  await saveDataBootstrap.window.BlogBootstrap.ensure().promise;
+  await Promise.resolve();
+  assert.equal(saveDataLinks.length, 1, "blog bootstrap should restrict cover prewarming to 1 image under saveData");
 }
 
 export async function runIntegrationRegressionChecks() {

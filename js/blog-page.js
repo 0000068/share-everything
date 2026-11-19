@@ -1,51 +1,25 @@
 (() => {
   function createListingContentFacade() {
-    const contentShared = window.NotionContentShared;
-    const contentUtils = window.NotionContentUtils;
-    const contentUrl = window.NotionContentUrl;
-    const facade = {
-      ALL_CATEGORY: contentShared?.ALL_CATEGORY,
-      BOOKMARK_CATEGORY: contentShared?.BOOKMARK_CATEGORY,
-      CALENDAR_ICON_SVG: contentShared?.CALENDAR_ICON_SVG,
-      CLOCK_ICON_SVG: contentShared?.CLOCK_ICON_SVG,
-      DEFAULT_CATEGORY_COLOR: contentShared?.DEFAULT_CATEGORY_COLOR,
-      DEFAULT_COVER_GRADIENT: contentShared?.DEFAULT_COVER_GRADIENT,
-      buildCoverImageSrcSet: contentUrl?.buildCoverImageSrcSet,
-      buildPostSearchText: contentUtils?.buildPostSearchText,
-      escapeHtml: contentUtils?.escapeHtml,
-      getBookmarkOnlyCategories: contentShared?.getBookmarkOnlyCategories,
-      getCategoryColor: contentShared?.getCategoryColor,
-      normalizeSearchText: contentUtils?.normalizeSearchText,
-      resolveCoverImageUrl: contentUrl?.resolveCoverImageUrl,
-      sanitizeCssColorValue: contentUtils?.sanitizeCssColorValue,
-    };
-    const requiredTypes = {
-      ALL_CATEGORY: "string",
-      BOOKMARK_CATEGORY: "string",
-      CALENDAR_ICON_SVG: "string",
-      CLOCK_ICON_SVG: "string",
-      DEFAULT_CATEGORY_COLOR: "object",
-      DEFAULT_COVER_GRADIENT: "string",
-      buildCoverImageSrcSet: "function",
-      buildPostSearchText: "function",
-      escapeHtml: "function",
-      getBookmarkOnlyCategories: "function",
-      getCategoryColor: "function",
-      normalizeSearchText: "function",
-      resolveCoverImageUrl: "function",
-      sanitizeCssColorValue: "function",
-    };
-    const missingHelpers = Object.entries(requiredTypes)
-      .filter(([name, type]) => typeof facade[name] !== type)
-      .map(([name]) => name);
-
-    if (missingHelpers.length > 0) {
+    const s = window.NotionContentShared, u = window.NotionContentUtils, r = window.NotionContentUrl;
+    const specs = [
+      ["ALL_CATEGORY", s, "string"], ["BOOKMARK_CATEGORY", s, "string"], ["CALENDAR_ICON_SVG", s, "string"],
+      ["CLOCK_ICON_SVG", s, "string"], ["DEFAULT_CATEGORY_COLOR", s, "object"], ["DEFAULT_COVER_GRADIENT", s, "string"],
+      ["getBookmarkOnlyCategories", s, "function"], ["getCategoryColor", s, "function"],
+      ["buildPostSearchText", u, "function"], ["escapeHtml", u, "function"], ["normalizeSearchText", u, "function"],
+      ["sanitizeCssColorValue", u, "function"], ["buildCoverImageSrcSet", r, "function"], ["resolveCoverImageUrl", r, "function"],
+    ];
+    const facade = {};
+    const missing = [];
+    for (const [name, source, type] of specs) {
+      facade[name] = source?.[name];
+      if (typeof facade[name] !== type) missing.push(name);
+    }
+    if (missing.length > 0) {
       throw new Error(
-        `blog-page.js listing dependencies missing or wrong type: ${missingHelpers.join(", ")}. `
+        `blog-page.js listing dependencies missing or wrong type: ${missing.join(", ")}. `
         + "Ensure notion-content-shared.js, notion-content-utils.js, and notion-content-url.js load first.",
       );
     }
-
     return Object.freeze(facade);
   }
 
@@ -54,6 +28,7 @@
   const BOOKMARK_CATEGORY = LISTING_CONTENT.BOOKMARK_CATEGORY;
   const DEFAULT_PAGE_SIZE = 9;
   const PRIORITY_COVER_IMAGE_COUNT = 1;
+  const EAGER_COVER_IMAGE_COUNT = 3;
   const PAGINATION_SIBLING_COUNT = 2;
   const PAGINATION_MAX_NUMBERED_BUTTONS = (PAGINATION_SIBLING_COUNT * 2) + 3;
   const BOOKMARK_ONLY_CATEGORIES = Object.freeze(LISTING_CONTENT.getBookmarkOnlyCategories());
@@ -75,65 +50,38 @@
   );
 
   function normalizeBoundedListingQuery(value, maxLength) {
-    const safeMaxLength = Number.isSafeInteger(Number(maxLength)) && Number(maxLength) > 0
-      ? Number(maxLength)
-      : 0;
-    const trimmed = typeof value === "string" ? value.trim() : "";
-    return safeMaxLength > 0 ? trimmed.slice(0, safeMaxLength) : "";
+    const safeMax = Number.isSafeInteger(Number(maxLength)) && Number(maxLength) > 0 ? Number(maxLength) : 0;
+    return safeMax > 0 && typeof value === "string" ? value.trim().slice(0, safeMax) : "";
   }
 
-  function normalizeListingCategory(value) {
-    return normalizeBoundedListingQuery(value, PUBLIC_CATEGORY_QUERY_MAX_LENGTH);
-  }
-
-  function normalizeListingSearch(value) {
-    return normalizeBoundedListingQuery(value, PUBLIC_SEARCH_QUERY_MAX_LENGTH);
-  }
+  const normalizeListingCategory = (value) => normalizeBoundedListingQuery(value, PUBLIC_CATEGORY_QUERY_MAX_LENGTH);
+  const normalizeListingSearch = (value) => normalizeBoundedListingQuery(value, PUBLIC_SEARCH_QUERY_MAX_LENGTH);
 
   function normalizeListingPage(value, fallback = 1) {
-    const normalizedFallback = Number.isSafeInteger(Number(fallback)) && Number(fallback) > 0
+    const safeFallback = Number.isSafeInteger(Number(fallback)) && Number(fallback) > 0
       ? Math.min(Number(fallback), PUBLIC_POSTS_MAX_PAGE)
       : 1;
     const rawValue = String(value ?? "").trim();
-    if (!/^\d+$/.test(rawValue)) {
-      return normalizedFallback;
-    }
-
+    if (!/^\d+$/.test(rawValue)) return safeFallback;
     const parsed = Number(rawValue);
-    return Number.isSafeInteger(parsed) && parsed > 0 && parsed <= PUBLIC_POSTS_MAX_PAGE
-      ? parsed
-      : normalizedFallback;
-  }
-
-  function buildBookmarkSearchText(post) {
-    return buildSharedPostSearchText(post);
+    return Number.isSafeInteger(parsed) && parsed > 0 && parsed <= PUBLIC_POSTS_MAX_PAGE ? parsed : safeFallback;
   }
 
   function buildBookmarkPageData({ bookmarkManager, search, page, pageSize, onBeforeRead } = {}) {
-    if (typeof onBeforeRead === "function") {
-      onBeforeRead();
-    }
-
+    onBeforeRead?.();
     const readEntries = typeof bookmarkManager.getDisplayEntries === "function"
       ? bookmarkManager.getDisplayEntries
       : bookmarkManager.getAll;
     let bookmarks = readEntries.call(bookmarkManager);
     if (search) {
       const query = normalizeBookmarkSearchQuery(search);
-      bookmarks = bookmarks.filter((post) => buildBookmarkSearchText(post).includes(query));
+      bookmarks = bookmarks.filter((post) => buildSharedPostSearchText(post).includes(query));
     }
-
     const total = bookmarks.length;
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     const currentPage = Math.max(1, Math.min(page, totalPages));
     const start = (currentPage - 1) * pageSize;
-
-    return {
-      results: bookmarks.slice(start, start + pageSize),
-      total,
-      totalPages,
-      currentPage,
-    };
+    return { results: bookmarks.slice(start, start + pageSize), total, totalPages, currentPage };
   }
 
   function initBlogPage() {
@@ -318,75 +266,43 @@
       const status = Number(error?.status);
       const code = typeof error?.code === "string" ? error.code : "";
       const notionCode = typeof error?.notionCode === "string" ? error.notionCode : "";
-      const detail = typeof error?.detail === "string"
-        ? error.detail.trim()
-        : typeof error?.message === "string"
-          ? error.message.trim()
-          : "";
+      const detail = typeof error?.detail === "string" ? error.detail.trim() : typeof error?.message === "string" ? error.message.trim() : "";
       const normalizedDetail = detail.toLowerCase();
-      const isDatabaseObjectNotFound =
-        notionCode === "object_not_found" && normalizedDetail.includes("database");
 
       if (code === "notion_config_error") {
-        if (detail.includes("NOTION_DATABASE_ID")) {
-          return "文章数据库 ID 未配置，请检查 Vercel 环境变量。";
-        }
-        if (detail.includes("NOTION_TOKEN")) {
-          return "Notion Token 未配置，请检查 Vercel 环境变量。";
-        }
+        if (detail.includes("NOTION_DATABASE_ID")) return "文章数据库 ID 未配置，请检查 Vercel 环境变量。";
+        if (detail.includes("NOTION_TOKEN")) return "Notion Token 未配置，请检查 Vercel 环境变量。";
         return "站点的 Notion 环境变量配置不完整。";
       }
-
       if (code === "notion_public_config_error") {
         return "当前部署仍在返回旧版公开字段错误，请确认线上已部署最新版本，并检查 Vercel 的 Notion 环境变量。";
       }
-
       if (status === 401 || status === 403 || notionCode === "unauthorized" || notionCode === "restricted_resource") {
         return "Notion integration 暂无数据库访问权限，请确认已把集成邀请到该数据库。";
       }
-
-      if (
-        (status === 404 || isDatabaseObjectNotFound) &&
-        (normalizedDetail.includes("database") || notionCode === "object_not_found")
-      ) {
+      if ((status === 404 || notionCode === "object_not_found") && (normalizedDetail.includes("database") || notionCode === "object_not_found")) {
         return "NOTION_DATABASE_ID 无效，或当前 integration 无权访问这个数据库。";
       }
-
       if (status === 429 || notionCode === "rate_limited") {
         const retryAfter = Number(error?.retryAfter);
         return Number.isFinite(retryAfter) && retryAfter > 0
           ? `Notion API 限流，约 ${retryAfter} 秒后重试。`
           : "Notion API 当前限流，请稍后重试。";
       }
-
-      if (status === 504 || code === "notion_timeout_error") {
-        return "Notion API 响应超时，请稍后重试。";
-      }
-
-      if (status >= 500) {
-        return "内容服务暂时不可用，请稍后重试。";
-      }
-
+      if (status === 504 || code === "notion_timeout_error") return "Notion API 响应超时，请稍后重试。";
+      if (status >= 500) return "内容服务暂时不可用，请稍后重试。";
       return "请检查网络后重试";
     }
 
-    function isPublicPageOutOfRangeError(error) {
-      return error?.code === "public_page_out_of_range";
-    }
-
-    function isBookmarkView() {
-      return currentCategory === BOOKMARK_CATEGORY;
-    }
+    const isPublicPageOutOfRangeError = (error) => error?.code === "public_page_out_of_range";
+    const isBookmarkView = () => currentCategory === BOOKMARK_CATEGORY;
 
     function isSameBlogListingPath(url) {
       try {
-        const targetUrl = new URL(url, window.location.href);
-        const currentUrl = new URL(window.location.href);
-        return (
-          targetUrl.origin === currentUrl.origin &&
-          targetUrl.pathname === currentUrl.pathname
-        );
-      } catch (error) {
+        const target = new URL(url, window.location.href);
+        const current = new URL(window.location.href);
+        return target.origin === current.origin && target.pathname === current.pathname;
+      } catch {
         return false;
       }
     }
@@ -394,19 +310,8 @@
     function readListingStateFromUrl(url) {
       const targetUrl = new URL(url, window.location.href);
       const bookmarkState = parseBookmarkListingHash(targetUrl.hash);
-
-      if (bookmarkState.active) {
-        return {
-          category: BOOKMARK_CATEGORY,
-          search: bookmarkState.search,
-          page: bookmarkState.page,
-        };
-      }
-
-      if (targetUrl.hash) {
-        return null;
-      }
-
+      if (bookmarkState.active) return { category: BOOKMARK_CATEGORY, search: bookmarkState.search, page: bookmarkState.page };
+      if (targetUrl.hash) return null;
       return {
         category: normalizeListingCategory(targetUrl.searchParams.get("category") || ALL_CATEGORY),
         search: normalizeListingSearch(targetUrl.searchParams.get("search") || ""),
@@ -419,41 +324,27 @@
       const nextCategory = hasRemoteSource || validCategories.has(rawCategory) ? rawCategory : defaultCategory;
       const nextSearch = normalizeListingSearch(search);
       const nextPage = normalizeListingPage(page, 1);
-      const didChange =
-        currentCategory !== nextCategory ||
-        currentSearch !== nextSearch ||
-        currentPage !== nextPage;
+      const didChange = currentCategory !== nextCategory || currentSearch !== nextSearch || currentPage !== nextPage;
 
       currentCategory = nextCategory;
       currentSearch = nextSearch;
       currentPage = nextPage;
       searchInput.value = currentSearch;
       syncListingUrl(historyMode);
-
-      if (!didChange) {
-        updatePageUI();
-        renderFilters();
-        return false;
-      }
-
       updatePageUI();
       renderFilters();
+      if (!didChange) return false;
       renderPosts();
       window.scrollTo({ top: 0, behavior: "auto" });
       return true;
     }
 
     function hasBookmarkMetadataNeedingHydration() {
-      const hasStaleMetadata = typeof bookmarkManager.hasStaleMetadata === "function"
+      const check = typeof bookmarkManager.hasStaleMetadata === "function"
         ? bookmarkManager.hasStaleMetadata
         : bookmarkManager.hasLegacyMetadata;
-      if (typeof hasStaleMetadata !== "function") return false;
-
-      try {
-        return Boolean(hasStaleMetadata.call(bookmarkManager));
-      } catch (error) {
-        return false;
-      }
+      if (typeof check !== "function") return false;
+      try { return Boolean(check.call(bookmarkManager)); } catch { return false; }
     }
 
     function clearBookmarkMetadataHydrationRetry() {
@@ -469,25 +360,14 @@
     }
 
     function scheduleBookmarkMetadataHydrationRetry() {
-      if (isDisposed || !isBookmarkView()) return;
-      if (metadataHydrationTask || metadataHydrationRetryTimer !== null) return;
-      if (!hasBookmarkMetadataNeedingHydration()) {
-        resetBookmarkMetadataHydrationRetry();
-        return;
-      }
-
-      const retryDelay = Math.min(
-        BOOKMARK_METADATA_RETRY_BASE_MS * (2 ** metadataHydrationRetryAttempt),
-        BOOKMARK_METADATA_RETRY_MAX_MS,
-      );
-      metadataHydrationRetryAttempt = Math.min(
-        metadataHydrationRetryAttempt + 1,
-        BOOKMARK_METADATA_RETRY_MAX_EXPONENT,
-      );
+      if (isDisposed || !isBookmarkView() || metadataHydrationTask || metadataHydrationRetryTimer !== null) return;
+      if (!hasBookmarkMetadataNeedingHydration()) { resetBookmarkMetadataHydrationRetry(); return; }
+      const delay = Math.min(BOOKMARK_METADATA_RETRY_BASE_MS * (2 ** metadataHydrationRetryAttempt), BOOKMARK_METADATA_RETRY_MAX_MS);
+      metadataHydrationRetryAttempt = Math.min(metadataHydrationRetryAttempt + 1, BOOKMARK_METADATA_RETRY_MAX_EXPONENT);
       metadataHydrationRetryTimer = window.setTimeout(() => {
         metadataHydrationRetryTimer = null;
         scheduleBookmarkMetadataHydration();
-      }, retryDelay);
+      }, delay);
     }
 
     function scheduleBookmarkMetadataHydration({ resetRetryDelay = false } = {}) {
@@ -495,41 +375,23 @@
       if (resetRetryDelay) {
         clearBookmarkMetadataHydrationRetry();
         metadataHydrationRetryAttempt = 0;
-      } else if (metadataHydrationRetryTimer !== null) {
-        return;
-      }
+      } else if (metadataHydrationRetryTimer !== null) return;
 
       if (metadataHydrationTask) {
-        if (resetRetryDelay) {
-          shouldRetryHydrationImmediately = true;
-        }
+        if (resetRetryDelay) shouldRetryHydrationImmediately = true;
         return;
       }
       if (typeof bookmarkManager.hydrateMissingMetadata !== "function") return;
-      if (!hasBookmarkMetadataNeedingHydration()) {
-        resetBookmarkMetadataHydrationRetry();
-        return;
-      }
+      if (!hasBookmarkMetadataNeedingHydration()) { resetBookmarkMetadataHydrationRetry(); return; }
 
       metadataHydrationTask = Promise.resolve()
         .then(() => bookmarkManager.hydrateMissingMetadata())
-        .then((didHydrate) => {
-          if (didHydrate && !isDisposed && isBookmarkView()) {
-            renderPosts();
-          }
-        })
+        .then((didHydrate) => { if (didHydrate && !isDisposed && isBookmarkView()) renderPosts(); })
         .catch(() => {})
         .finally(() => {
           metadataHydrationTask = null;
-          if (isDisposed || !isBookmarkView()) {
-            shouldRetryHydrationImmediately = false;
-            return;
-          }
-          if (!hasBookmarkMetadataNeedingHydration()) {
-            resetBookmarkMetadataHydrationRetry();
-            return;
-          }
-
+          if (isDisposed || !isBookmarkView()) { shouldRetryHydrationImmediately = false; return; }
+          if (!hasBookmarkMetadataNeedingHydration()) { resetBookmarkMetadataHydrationRetry(); return; }
           if (shouldRetryHydrationImmediately) {
             shouldRetryHydrationImmediately = false;
             scheduleBookmarkMetadataHydration();
@@ -585,67 +447,67 @@
 
     function resolveSafeCoverImage(post) {
       const candidate = post?.coverImage;
-      const resolvedCoverImage = LISTING_CONTENT.resolveCoverImageUrl(
-        candidate,
-        window.location.origin,
-        { signature: post?.coverImageSignature },
-      );
-      if (resolvedCoverImage) return resolvedCoverImage;
-      if (typeof siteUtils.resolveCoverImageUrl === "function") {
-        return siteUtils.resolveCoverImageUrl(candidate, {
-          signature: post?.coverImageSignature,
-        });
-      }
-      if (typeof siteUtils.resolveProxiedDisplayImageUrl === "function") {
-        return siteUtils.resolveProxiedDisplayImageUrl(candidate);
-      }
-      if (typeof siteUtils.sanitizeImageUrl === "function") {
-        return siteUtils.sanitizeImageUrl(candidate);
-      }
-      return null;
+      return LISTING_CONTENT.resolveCoverImageUrl(candidate, window.location.origin, {
+        signature: post?.coverImageSignature,
+      }) || siteUtils.resolveCoverImageUrl?.(candidate, {
+        signature: post?.coverImageSignature,
+      }) || siteUtils.sanitizeImageUrl?.(candidate) || null;
     }
 
     function resolveSafeCoverImageSrcSet(post) {
       const candidate = post?.coverImage;
-      const resolvedSrcSet = LISTING_CONTENT.buildCoverImageSrcSet(
-        candidate,
-        window.location.origin,
-        { signature: post?.coverImageSignature },
-      );
-      if (resolvedSrcSet) return resolvedSrcSet;
-      if (typeof siteUtils.buildCoverImageSrcSet === "function") {
-        return siteUtils.buildCoverImageSrcSet(candidate, {
-          signature: post?.coverImageSignature,
-        });
-      }
-      return "";
+      const opts = { signature: post?.coverImageSignature };
+      return LISTING_CONTENT.buildCoverImageSrcSet(candidate, window.location.origin, opts)
+        || siteUtils.buildCoverImageSrcSet?.(candidate, opts) || "";
+    }
+
+    function getEagerCoverCount() {
+      return window.navigator?.connection?.saveData ? PRIORITY_COVER_IMAGE_COUNT : EAGER_COVER_IMAGE_COUNT;
     }
 
     function preloadCoverImages(posts = []) {
-      cleanupPreloadedCoverLinks();
-      if (!Array.isArray(posts) || posts.length === 0) return;
+      const specs = [];
+      const seen = new Set();
+      const limit = getEagerCoverCount();
+      for (const post of Array.isArray(posts) ? posts : []) {
+        if (specs.length >= limit) break;
+        const href = resolveSafeCoverImage(post);
+        if (!href || seen.has(href)) continue;
+        seen.add(href);
+        specs.push({
+          href,
+          srcSet: resolveSafeCoverImageSrcSet(post),
+          priority: specs.length < PRIORITY_COVER_IMAGE_COUNT ? "high" : "auto",
+        });
+      }
 
-      let preloadedCount = 0;
-      for (const post of posts) {
-        if (preloadedCount >= PRIORITY_COVER_IMAGE_COUNT) break;
-        const coverImage = resolveSafeCoverImage(post);
-        if (!coverImage || preloadedCoverImages.has(coverImage)) continue;
-        const coverSrcSet = resolveSafeCoverImageSrcSet(post);
+      const existing = new Map();
+      const nodes = new Set(preloadedCoverLinks);
+      document.head?.querySelectorAll?.('link[data-blog-cover-preload="true"]').forEach((n) => nodes.add(n));
+      nodes.forEach((link) => {
+        const href = link?.href || link?.getAttribute?.("href") || "";
+        if (href && seen.has(href) && !existing.has(href)) existing.set(href, link);
+        else link.remove?.();
+      });
+      preloadedCoverLinks.clear();
+      preloadedCoverImages.clear();
 
-        preloadedCoverImages.add(coverImage);
-        preloadedCount += 1;
+      for (const spec of specs) {
+        preloadedCoverImages.add(spec.href);
+        const reused = existing.get(spec.href);
+        if (reused) { preloadedCoverLinks.add(reused); continue; }
         const link = document.createElement("link");
         link.rel = "preload";
         link.as = "image";
-        link.href = coverImage;
-        if (coverSrcSet) {
-          link.imageSrcset = coverSrcSet;
+        link.href = spec.href;
+        if (spec.srcSet) {
+          link.imageSrcset = spec.srcSet;
           link.imageSizes = COVER_IMAGE_SIZES;
-          link.setAttribute("imagesrcset", coverSrcSet);
+          link.setAttribute("imagesrcset", spec.srcSet);
           link.setAttribute("imagesizes", COVER_IMAGE_SIZES);
         }
-        link.fetchPriority = "high";
-        link.setAttribute("fetchpriority", "high");
+        link.fetchPriority = spec.priority;
+        link.setAttribute("fetchpriority", spec.priority);
         link.dataset.blogCoverPreload = "true";
         link.setAttribute("data-blog-cover-preload", "true");
         preloadedCoverLinks.add(link);
@@ -695,53 +557,37 @@
     }
 
     function updatePageUI() {
+      const displayCategory = currentCategory === ALL_CATEGORY ? "总览" : currentCategory;
       const titleEl = document.querySelector(".page-title");
-      if (titleEl) {
-        titleEl.textContent = currentCategory === ALL_CATEGORY ? "总览" : currentCategory;
-      }
+      if (titleEl) titleEl.textContent = displayCategory;
 
       const isLocalBookmarkView = isBookmarkView();
-      const title = `${currentCategory === ALL_CATEGORY ? "总览" : currentCategory} — ${siteName}`;
+      const title = `${displayCategory} — ${siteName}`;
       const description = isLocalBookmarkView
         ? "浏览当前浏览器中保存的本地收藏文章。"
         : currentSearch
-        ? `搜索“${currentSearch}”的相关文章`
-        : currentCategory === ALL_CATEGORY
-          ? "探索所有文章，按分类浏览，搜索你感兴趣的内容。"
-          : `浏览「${currentCategory}」分类下的文章`;
+          ? `搜索“${currentSearch}”的相关文章`
+          : currentCategory === ALL_CATEGORY
+            ? "探索所有文章，按分类浏览，搜索你感兴趣的内容。"
+            : `浏览「${currentCategory}」分类下的文章`;
       const seoUrl = isLocalBookmarkView ? "/blog.html" : window.location.href;
       const seoRobots = isLocalBookmarkView ? "noindex, nofollow" : null;
       if (typeof window.updateSeoMeta === "function") {
-        window.updateSeoMeta({
-          title,
-          description,
-          url: seoUrl,
-          canonicalUrl: seoUrl,
-          robots: seoRobots,
-        });
+        window.updateSeoMeta({ title, description, url: seoUrl, canonicalUrl: seoUrl, robots: seoRobots });
       } else {
         document.title = title;
         const metaDescription = document.querySelector('meta[name="description"]');
-        if (metaDescription) {
-          metaDescription.content = description;
-        }
+        if (metaDescription) metaDescription.content = description;
       }
 
-      const topActions = document.querySelectorAll(".top-actions .action-btn");
-      topActions.forEach((button) => button.classList.remove("active"));
-
-      topActions.forEach((button) => {
-        if (isBookmarkView() && button.dataset.nav === "bookmarks") {
-          button.classList.add("active");
-        } else if (!isBookmarkView() && button.dataset.nav === "overview") {
-          button.classList.add("active");
-        }
+      const activeNav = isLocalBookmarkView ? "bookmarks" : "overview";
+      document.querySelectorAll(".top-actions .action-btn").forEach((button) => {
+        button.classList.toggle("active", button.dataset.nav === activeNav);
       });
     }
 
     function normalizeCategoryNavItem(category) {
-      if (!category || typeof category !== "object") return null;
-      const name = typeof category.name === "string" ? category.name.trim() : "";
+      const name = typeof category?.name === "string" ? category.name.trim() : "";
       if (!name) return null;
       return {
         ...category,
@@ -752,53 +598,35 @@
     }
 
     function updateRemoteCategories(nextCategories) {
-      if (!hasRemoteSource || !Array.isArray(nextCategories) || nextCategories.length === 0) {
-        return false;
-      }
-
+      if (!hasRemoteSource || !Array.isArray(nextCategories) || nextCategories.length === 0) return false;
       const seen = new Set();
-      const normalizedCategories = nextCategories
-        .map(normalizeCategoryNavItem)
-        .filter((category) => {
-          if (!category) return false;
-          const key = category.name.toLowerCase();
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
+      const normalized = nextCategories.map(normalizeCategoryNavItem).filter((cat) => {
+        if (!cat) return false;
+        const key = cat.name.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      if (normalized.length === 0) return false;
+      if (
+        normalized.length === categories.length
+        && normalized.every((next, i) => categories[i]?.name === next.name && categories[i]?.label === next.label && categories[i]?.emoji === next.emoji)
+      ) return false;
 
-      if (normalizedCategories.length === 0) {
-        return false;
-      }
-
-      const categoriesEqual =
-        normalizedCategories.length === categories.length &&
-        normalizedCategories.every((next, index) => {
-          const previous = categories[index];
-          return (
-            previous?.name === next.name &&
-            previous?.label === next.label &&
-            previous?.emoji === next.emoji
-          );
-        });
-      if (categoriesEqual) {
-        return false;
-      }
-
-      categories = normalizedCategories;
+      categories = normalized;
       validCategories = new Set([...categories.map((cat) => cat.name), BOOKMARK_CATEGORY]);
       return true;
     }
 
     function renderFilters() {
       filtersEl.replaceChildren();
-
       categories.forEach((category) => {
+        const active = category.name === currentCategory;
         const button = document.createElement("button");
         button.type = "button";
-        button.className = `filter-btn${category.name === currentCategory ? " active" : ""}`;
+        button.className = `filter-btn${active ? " active" : ""}`;
         button.dataset.category = category.name;
-        button.setAttribute("aria-pressed", category.name === currentCategory ? "true" : "false");
+        button.setAttribute("aria-pressed", active ? "true" : "false");
         button.textContent = `${category.emoji ? `${category.emoji} ` : ""}${category.label || category.name}`;
         filtersEl.appendChild(button);
       });
@@ -806,45 +634,33 @@
 
     function buildListingUrl() {
       if (isBookmarkView()) {
-        return buildBookmarkListingUrl({
-          pathname: window.location.pathname,
-          search: currentSearch,
-          page: currentPage,
-        });
+        return buildBookmarkListingUrl({ pathname: window.location.pathname, search: currentSearch, page: currentPage });
       }
-
       const nextParams = new URLSearchParams();
       if (currentCategory !== ALL_CATEGORY) nextParams.set("category", currentCategory);
       if (currentSearch) nextParams.set("search", currentSearch);
       if (currentPage > 1) nextParams.set("page", String(currentPage));
-
       const qs = nextParams.toString();
       return qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
     }
 
     function syncListingUrl(historyMode = HISTORY_MODE_REPLACE) {
-      const resolvedHistoryMode = historyMode === HISTORY_MODE_PUSH
-        ? HISTORY_MODE_PUSH
-        : HISTORY_MODE_REPLACE;
       const nextUrl = buildListingUrl();
       const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-
       if (nextUrl !== currentUrl) {
-        if (resolvedHistoryMode === HISTORY_MODE_PUSH) {
-          history.pushState(null, "", nextUrl);
-        } else {
-          history.replaceState(null, "", nextUrl);
-        }
+        history[historyMode === HISTORY_MODE_PUSH ? "pushState" : "replaceState"](null, "", nextUrl);
       }
-
       window.SPARouter?.syncCurrentUrl?.(window.location.href);
-
-      if (typeof siteUtils.rememberBlogReturnUrl === "function") {
-        siteUtils.rememberBlogReturnUrl(window.location.href);
-      }
+      siteUtils.rememberBlogReturnUrl?.(window.location.href);
     }
 
-    function renderCard(post, shouldLoadCoverEagerly = false) {
+    function renderCard(post, options = {}) {
+      const shouldLoadCoverEagerly = typeof options === "boolean"
+        ? options
+        : Boolean(options?.eager);
+      const shouldPrioritizeCover = typeof options === "boolean"
+        ? options
+        : Boolean(options?.highPriority);
       const esc = escapeText;
       // Defense-in-depth: category colors may come from site config via the API.
       const catColor = post.categoryColor || getCategoryColor(post.category);
@@ -868,7 +684,7 @@
           ? siteUtils.buildPostPath(post.id)
           : `/posts/${encodeURIComponent(post.id)}`;
       const coverLoading = shouldLoadCoverEagerly ? "eager" : "lazy";
-      const coverFetchPriority = shouldLoadCoverEagerly ? "high" : "auto";
+      const coverFetchPriority = shouldPrioritizeCover ? "high" : "auto";
       const serializedTags = esc(JSON.stringify(Array.isArray(post.tags) ? post.tags : []));
       const bookmarkTitle = bookmarked ? "取消收藏" : "收藏";
       const bookmarkAriaLabel = `${bookmarkTitle}文章：${post.title || "Untitled"}`;
@@ -885,7 +701,7 @@
         metaItems.push(`<span>${LISTING_CONTENT.CLOCK_ICON_SVG}${esc(post.readTime)}</span>`);
       }
       const coverHtml = safeCoverImage
-        ? `<div class="blog-card-cover-placeholder blog-card-cover-img" data-cover-gradient="${esc(safeCoverGradient)}" data-cover-emoji="${safeCoverEmoji}" style="background: ${DEFAULT_COVER_GRADIENT}">
+        ? `<div class="blog-card-cover-placeholder blog-card-cover-img is-loading" data-cover-gradient="${esc(safeCoverGradient)}" data-cover-emoji="${safeCoverEmoji}">
              <span class="blog-card-cover-fallback" aria-hidden="true"></span>
              <img src="${esc(safeCoverImage)}"${coverSrcSetAttributes} alt="${safeTitle}" width="640" height="360" loading="${coverLoading}" decoding="async" fetchpriority="${coverFetchPriority}">
            </div>`
@@ -915,16 +731,40 @@
     }
 
     function restoreCoverPlaceholder(placeholder) {
-      if (!(placeholder instanceof HTMLElement)) return;
+      if (typeof HTMLElement !== "undefined" && !(placeholder instanceof HTMLElement)) return;
+      if (!placeholder) return;
 
-      placeholder.classList.remove("blog-card-cover-img");
-      placeholder.style.background = DEFAULT_COVER_GRADIENT;
+      const fallbackGradient = typeof siteUtils.sanitizeCoverBackground === "function"
+        ? siteUtils.sanitizeCoverBackground(placeholder.dataset?.coverGradient, DEFAULT_COVER_GRADIENT)
+        : DEFAULT_COVER_GRADIENT;
+      placeholder.classList.remove("blog-card-cover-img", "is-loading");
+      placeholder.style.background = fallbackGradient;
       placeholder.replaceChildren();
 
       const fallback = document.createElement("span");
       fallback.className = "blog-card-cover-fallback";
       fallback.setAttribute("aria-hidden", "true");
       placeholder.appendChild(fallback);
+    }
+
+    function markCoverImageLoaded(image) {
+      const placeholder = image?.closest?.(".blog-card-cover-placeholder.blog-card-cover-img");
+      if (!placeholder || !gridEl.contains(placeholder)) return;
+
+      placeholder.classList.remove("is-loading");
+    }
+
+    function syncRenderedCoverImages() {
+      gridEl.querySelectorAll?.(".blog-card-cover-img img")?.forEach((image) => {
+        if (!image.complete) return;
+        if (image.naturalWidth > 0) {
+          markCoverImageLoaded(image);
+          return;
+        }
+        const placeholder = image.closest?.(".blog-card-cover-placeholder.blog-card-cover-img");
+        image.remove?.();
+        restoreCoverPlaceholder(placeholder);
+      });
     }
 
     function buildPaginationPages(currentPageValue, totalPagesValue) {
@@ -970,53 +810,26 @@
 
     function renderPagination(data) {
       const totalPages = normalizeListingPage(data.totalPages);
-      const dataCurrentPage = normalizeListingPage(data.currentPage);
-      const currentPageValue = Math.min(dataCurrentPage, totalPages);
-      if (totalPages <= 1) {
-        paginationEl.innerHTML = "";
-        return;
-      }
+      const current = Math.min(normalizeListingPage(data.currentPage), totalPages);
+      if (totalPages <= 1) { paginationEl.innerHTML = ""; return; }
 
-      const pages = buildPaginationPages(currentPageValue, totalPages);
-      let html = renderPaginationNavButton({
-        direction: "previous",
-        page: Math.max(1, currentPageValue - 1),
-        disabled: currentPageValue <= 1,
-      });
-      let previousPage = 0;
-
+      const pages = buildPaginationPages(current, totalPages);
+      let html = renderPaginationNavButton({ direction: "previous", page: Math.max(1, current - 1), disabled: current <= 1 });
+      let prev = 0;
       for (const page of pages) {
-        if (previousPage > 0 && page - previousPage > 1) {
-          html += '<span class="pagination-ellipsis" aria-hidden="true">&hellip;</span>';
-        }
-        html += renderPaginationPageButton(page, currentPageValue);
-        previousPage = page;
+        if (prev > 0 && page - prev > 1) html += '<span class="pagination-ellipsis" aria-hidden="true">&hellip;</span>';
+        html += renderPaginationPageButton(page, current);
+        prev = page;
       }
-
-      html += renderPaginationNavButton({
-        direction: "next",
-        page: Math.min(totalPages, currentPageValue + 1),
-        disabled: currentPageValue >= totalPages,
-      });
+      html += renderPaginationNavButton({ direction: "next", page: Math.min(totalPages, current + 1), disabled: current >= totalPages });
       paginationEl.innerHTML = html;
     }
 
     async function loadCurrentPageData(signal) {
       if (!isBookmarkView()) {
-        return notionApi.queryPosts({
-          category: currentCategory,
-          search: currentSearch,
-          page: currentPage,
-        }, { signal });
+        return notionApi.queryPosts({ category: currentCategory, search: currentSearch, page: currentPage }, { signal });
       }
-
-      return buildBookmarkPageData({
-        bookmarkManager,
-        search: currentSearch,
-        page: currentPage,
-        pageSize,
-        onBeforeRead: scheduleBookmarkMetadataHydration,
-      });
+      return buildBookmarkPageData({ bookmarkManager, search: currentSearch, page: currentPage, pageSize, onBeforeRead: scheduleBookmarkMetadataHydration });
     }
 
     async function renderPosts({ didRetryOutOfRange = false } = {}) {
@@ -1054,9 +867,20 @@
         emptyEl.style.display = "none";
         preloadCoverImages(data.results);
         const priorityCoverIndex = data.results.findIndex((post) => resolveSafeCoverImage(post));
+        const eagerCoverLimit = getEagerCoverCount();
+        const eagerCoverIndexes = new Set();
+        data.results.forEach((post, index) => {
+          if (eagerCoverIndexes.size < eagerCoverLimit && resolveSafeCoverImage(post)) {
+            eagerCoverIndexes.add(index);
+          }
+        });
         gridEl.innerHTML = data.results
-          .map((post, index) => renderCard(post, index === priorityCoverIndex))
+          .map((post, index) => renderCard(post, {
+            eager: eagerCoverIndexes.has(index),
+            highPriority: index === priorityCoverIndex,
+          }))
           .join("");
+        syncRenderedCoverImages();
         renderPagination(data);
         setGridBusy(false);
         announceStatus(buildResultsAnnouncement(data));
@@ -1160,6 +984,14 @@
       applyListingState(nextState, HISTORY_MODE_PUSH);
     }
 
+    function applyBookmarkButtonState(button, bookmarked, postTitle) {
+      const action = bookmarked ? "取消收藏" : "收藏";
+      button.classList.toggle("bookmarked", bookmarked);
+      button.title = action;
+      button.setAttribute("aria-pressed", bookmarked ? "true" : "false");
+      button.setAttribute("aria-label", `${action}文章：${postTitle}`);
+    }
+
     function handleGridClick(event) {
       const button = event.target.closest(".card-bookmark-btn");
       if (!button || !gridEl.contains(button)) return;
@@ -1180,21 +1012,15 @@
         announceStatus(`收藏失败，请稍后重试：${postTitle}。`);
         return;
       }
-      const bookmarkAriaLabel = `${nowBookmarked ? "取消收藏" : "收藏"}文章：${postTitle}`;
 
-      button.classList.toggle("bookmarked", nowBookmarked);
-      button.title = nowBookmarked ? "取消收藏" : "收藏";
-      button.setAttribute("aria-pressed", nowBookmarked ? "true" : "false");
-      button.setAttribute("aria-label", bookmarkAriaLabel);
+      applyBookmarkButtonState(button, nowBookmarked, postTitle);
       button.classList.remove("bounce");
       void button.offsetWidth;
       button.classList.add("bounce");
       announceStatus(nowBookmarked ? `已收藏文章：${postTitle}。` : `已取消收藏文章：${postTitle}。`);
 
       if (!nowBookmarked && isBookmarkView()) {
-        // Delay the re-render so the bounce animation (260ms) finishes before
-        // the card is removed from the grid; otherwise users see a jarring
-        // cut while their finger is still on the button.
+        // Delay re-render so the 260ms bounce animation finishes before card removal.
         clearBookmarkRemovalTimer();
         bookmarkRemovalTimer = window.setTimeout(() => {
           bookmarkRemovalTimer = null;
@@ -1206,15 +1032,7 @@
     function syncBookmarkButton(button) {
       const postId = button.dataset.bookmarkId;
       if (!postId) return;
-
-      const isBookmarked = bookmarkManager.isBookmarked(postId);
-      const postTitle = button.dataset.bookmarkTitle || "Untitled";
-      const bookmarkAriaLabel = `${isBookmarked ? "取消收藏" : "收藏"}文章：${postTitle}`;
-
-      button.classList.toggle("bookmarked", isBookmarked);
-      button.title = isBookmarked ? "取消收藏" : "收藏";
-      button.setAttribute("aria-pressed", isBookmarked ? "true" : "false");
-      button.setAttribute("aria-label", bookmarkAriaLabel);
+      applyBookmarkButtonState(button, bookmarkManager.isBookmarked(postId), button.dataset.bookmarkTitle || "Untitled");
     }
 
     function syncRenderedBookmarkButtons() {
@@ -1234,14 +1052,21 @@
       syncRenderedBookmarkButtons();
     }
 
+    function isGridCoverImage(node) {
+      if (typeof HTMLImageElement !== "undefined" && !(node instanceof HTMLImageElement)) return false;
+      return !node?.tagName || String(node.tagName).toUpperCase() === "IMG";
+    }
+
+    function handleGridMediaLoad(event) {
+      if (isGridCoverImage(event.target)) markCoverImageLoaded(event.target);
+    }
+
     function handleGridMediaError(event) {
       const image = event.target;
-      if (!(image instanceof HTMLImageElement)) return;
-
-      const placeholder = image.closest(".blog-card-cover-placeholder.blog-card-cover-img");
+      if (!isGridCoverImage(image)) return;
+      const placeholder = image.closest?.(".blog-card-cover-placeholder.blog-card-cover-img");
       if (!placeholder || !gridEl.contains(placeholder)) return;
-
-      image.remove();
+      image.remove?.();
       restoreCoverPlaceholder(placeholder);
     }
 
@@ -1249,14 +1074,8 @@
       const button = event.target.closest("[data-empty-action]");
       if (!button || !emptyEl.contains(button)) return;
       if (button.dataset.emptyAction === "overview") {
-        const didChange = applyListingState({
-          category: ALL_CATEGORY,
-          search: "",
-          page: 1,
-        }, HISTORY_MODE_PUSH);
-        if (!didChange) {
-          const overviewUrl = new URL(window.location.pathname, window.location.origin).href;
-          window.location.assign?.(overviewUrl);
+        if (!applyListingState({ category: ALL_CATEGORY, search: "", page: 1 }, HISTORY_MODE_PUSH)) {
+          window.location.assign?.(new URL(window.location.pathname, window.location.origin).href);
         }
         return;
       }
@@ -1265,51 +1084,28 @@
 
     function bindBookmarkHashNavigation() {
       hashChangeHandler = () => {
-        const nextBookmarkState = parseBookmarkListingHash(window.location.hash);
-
-        if (nextBookmarkState.active) {
-          const didChange =
-            currentCategory !== BOOKMARK_CATEGORY ||
-            currentSearch !== normalizeListingSearch(nextBookmarkState.search) ||
-            currentPage !== normalizeListingPage(nextBookmarkState.page, 1);
-
+        const next = parseBookmarkListingHash(window.location.hash);
+        if (next.active) {
+          const nextSearch = normalizeListingSearch(next.search);
+          const nextPage = normalizeListingPage(next.page, 1);
+          const didChange = currentCategory !== BOOKMARK_CATEGORY || currentSearch !== nextSearch || currentPage !== nextPage;
           currentCategory = BOOKMARK_CATEGORY;
-          currentSearch = normalizeListingSearch(nextBookmarkState.search);
-          currentPage = normalizeListingPage(nextBookmarkState.page, 1);
-
-          if ((window.location.hash || "") !== nextBookmarkState.normalizedHash) {
-            syncListingUrl(HISTORY_MODE_REPLACE);
-          }
-
-          if (!didChange) {
-            return;
-          }
-
-          searchInput.value = currentSearch;
-          updatePageUI();
-          renderFilters();
-          renderPosts();
-          return;
+          currentSearch = nextSearch;
+          currentPage = nextPage;
+          if ((window.location.hash || "") !== next.normalizedHash) syncListingUrl(HISTORY_MODE_REPLACE);
+          if (!didChange) return;
+        } else {
+          if (!isBookmarkView()) return;
+          if (!hasRemoteSource) { syncListingUrl(HISTORY_MODE_REPLACE); return; }
+          currentCategory = ALL_CATEGORY;
+          currentSearch = "";
+          currentPage = 1;
         }
-
-        if (!isBookmarkView()) {
-          return;
-        }
-
-        if (!hasRemoteSource) {
-          syncListingUrl(HISTORY_MODE_REPLACE);
-          return;
-        }
-
-        currentCategory = ALL_CATEGORY;
-        currentSearch = "";
-        currentPage = 1;
         searchInput.value = currentSearch;
         updatePageUI();
         renderFilters();
         renderPosts();
       };
-
       window.addEventListener("hashchange", hashChangeHandler);
     }
 
@@ -1327,6 +1123,7 @@
     searchInput.addEventListener("input", handleSearchInput);
     paginationEl.addEventListener("click", handlePaginationClick);
     gridEl.addEventListener("click", handleGridClick);
+    gridEl.addEventListener("load", handleGridMediaLoad, true);
     gridEl.addEventListener("error", handleGridMediaError, true);
     emptyEl.addEventListener("click", handleEmptyStateClick);
     topActionsEl?.addEventListener("click", handleTopActionsClick);
@@ -1349,6 +1146,7 @@
       searchInput.removeEventListener("input", handleSearchInput);
       paginationEl.removeEventListener("click", handlePaginationClick);
       gridEl.removeEventListener("click", handleGridClick);
+      gridEl.removeEventListener("load", handleGridMediaLoad, true);
       gridEl.removeEventListener("error", handleGridMediaError, true);
       emptyEl.removeEventListener("click", handleEmptyStateClick);
       topActionsEl?.removeEventListener("click", handleTopActionsClick);

@@ -775,9 +775,10 @@ expectNotIncludes(blogHtml, 'style="font-size: 0.85rem;"', "blog.html should not
 expectNotIncludes(blogPageJs, 'style="font-size: 0.85rem;"', "blog page renderer should not duplicate empty-state hint typography inline");
 expectNotIncludes(postPageCss, "body[data-page=\"post\"] .fab-bookmark", "post-page CSS should not override bookmark visibility that JavaScript owns");
 expectNotIncludes(postPageCss, "display: none !important", "post-page CSS should avoid forcing bookmark controls against JavaScript state");
-expectIncludes(blogPageJs, "PRIORITY_COVER_IMAGE_COUNT = 1", "blog cards should preload at most one valid LCP cover candidate");
+expectIncludes(blogPageJs, "PRIORITY_COVER_IMAGE_COUNT = 1", "blog cards should assign high fetchpriority to at most one valid LCP cover candidate");
+expectIncludes(blogPageJs, "EAGER_COVER_IMAGE_COUNT = 3", "blog cards should eager-load the first desktop row of visible cover images");
 expectIncludes(blogPageJs, "findIndex((post) => resolveSafeCoverImage(post))", "blog cards should select the first real cover rather than prioritizing placeholders");
-expectIncludes(blogPageJs, "renderCard(post, index === priorityCoverIndex)", "blog cards should give eager/high priority to exactly one real cover candidate");
+expectIncludes(blogPageJs, "highPriority: index === priorityCoverIndex", "blog cards should give high fetchpriority to exactly one real cover candidate");
 expectIncludes(blogPageJs, "mobileDeviceQuery.matches", "blog cards should gate mobile image policy through the shared mobile query");
 expectIncludes(blogPageJs, "resolveSafeCoverImage(post)", "blog cards should use display-safe cover URLs instead of share-image fallbacks");
 expectIncludes(blogPageJs, 'loading="${coverLoading}"', "blog cards should keep lazy loading off the first visible covers");
