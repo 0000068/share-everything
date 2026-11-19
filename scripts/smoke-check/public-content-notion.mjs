@@ -40,6 +40,32 @@ assert.equal(
 );
 assert.equal(
   publicContentHelpers.getPublicContentErrorStatus({
+    status: 503,
+    code: "single_flight_busy",
+    retryAfter: "1",
+  }),
+  503,
+  "public content helper should preserve local single-flight capacity overload as HTTP 503",
+);
+assert.equal(
+  publicContentHelpers.getPublicPostErrorStatus({
+    status: 503,
+    code: "single_flight_busy",
+    retryAfter: "1",
+  }),
+  503,
+  "public post helper should preserve local single-flight capacity overload as HTTP 503",
+);
+assert.equal(
+  publicContentHelpers.getPublicContentErrorStatus({
+    status: 503,
+    code: "notion_api_error",
+  }),
+  502,
+  "public content helper should keep mapping upstream Notion 503 errors to HTTP 502",
+);
+assert.equal(
+  publicContentHelpers.getPublicContentErrorStatus({
     status: 404,
     code: "public_page_out_of_range",
   }),

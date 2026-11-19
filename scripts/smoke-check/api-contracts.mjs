@@ -1,3 +1,6 @@
+import path from "node:path";
+import * as parse5 from "parse5";
+
 export async function runApiContractChecks(context) {
   const {
     assert,
@@ -280,4 +283,112 @@ export async function runApiContractChecks(context) {
     1,
     "non-canonical post-data query variants should not reach Notion",
   );
+
+  const busyError = Object.assign(new Error("Too many concurrent content queries"), {
+    status: 503,
+    code: "single_flight_busy",
+    retryAfter: "1",
+  });
+  const silentConsole = { ...console, error() {}, warn() {} };
+  const busyPublicContent = loadCommonJsModule("server/public-content.js", [], {
+    console: silentConsole,
+  });
+  const busyHtmlEscape = loadCommonJsModule("server/html-escape.js");
+  const busySecurityPolicy = loadCommonJsModule("server/security-policy.js");
+  const busySharedContent = loadCommonJsModule("js/notion-content-shared.js");
+  const busyPostsDataHandler = loadCommonJsModule("api/posts-data.js", [], {
+    require(specifier) {
+      if (specifier === "../server/notion-server") {
+        return {
+          ALL_CATEGORY: "\u5168\u90e8",
+          PUBLIC_CATEGORY_QUERY_MAX_LENGTH: 128,
+          PUBLIC_SEARCH_QUERY_MAX_LENGTH: 256,
+          async queryPublicPosts() {
+            throw busyError;
+          },
+        };
+      }
+      if (specifier === "../server/public-content") return busyPublicContent;
+      if (specifier === "../server/canonical-query") return canonicalQueryHelpers;
+      if (specifier === "../server/request-lifecycle") return requestLifecycleHelpers;
+      throw new Error(`Unexpected api/posts-data.js dependency in busy test: ${specifier}`);
+    },
+  });
+  const busyPostDataHandler = loadCommonJsModule("api/post-data.js", [], {
+    require(specifier) {
+      if (specifier === "../server/notion-server") {
+        return {
+          async fetchPublicPost() {
+            throw busyError;
+          },
+        };
+      }
+      if (specifier === "../server/public-content") return busyPublicContent;
+      if (specifier === "../server/canonical-query") return canonicalQueryHelpers;
+      if (specifier === "../server/request-lifecycle") return requestLifecycleHelpers;
+      throw new Error(`Unexpected api/post-data.js dependency in busy test: ${specifier}`);
+    },
+  });
+  const busySitemapHandler = loadCommonJsModule("api/sitemap.js", [], {
+    require(specifier) {
+      if (specifier === "../server/notion-server") {
+        return {
+          buildPostUrl: (id) => `https://example.com/posts/${id}`,
+          getSiteOrigin: () => "https://example.com",
+          async queryPublicPages() {
+            throw busyError;
+          },
+        };
+      }
+      if (specifier === "../server/public-content") return busyPublicContent;
+      if (specifier === "../server/request-lifecycle") return requestLifecycleHelpers;
+      throw new Error(`Unexpected api/sitemap.js dependency in busy test: ${specifier}`);
+    },
+  });
+  const busyPostSsrHandler = loadCommonJsModule("api/post.js", [], {
+    __parse5ForSmokeCheck: parse5,
+    console: silentConsole,
+    require(specifier) {
+      if (specifier === "node:path") return path;
+      if (specifier === "node:fs/promises") {
+        return {
+          async readFile() {
+            return '<!doctype html><html><head><title>Post</title></head><body><div id="postSkeleton"></div><div id="postContent"></div><div id="postEmpty"><p></p><a data-empty-link href="/blog.html">Back</a></div></body></html>';
+          },
+        };
+      }
+      if (specifier === "../server/notion-server") {
+        return {
+          buildPostPath: (id) => `/posts/${id}`,
+          buildPostUrl: (id) => `https://example.com/posts/${id}`,
+          escapeHtml: (value) => String(value ?? ""),
+          async fetchPublicPost() {
+            throw busyError;
+          },
+          getSiteName: () => "Share Everything",
+          getSiteOrigin: () => "https://example.com",
+        };
+      }
+      if (specifier === "../js/notion-content-shared") return busySharedContent;
+      if (specifier === "../server/public-content") return busyPublicContent;
+      if (specifier === "../server/canonical-query") return canonicalQueryHelpers;
+      if (specifier === "../server/html-escape") return busyHtmlEscape;
+      if (specifier === "../server/security-policy") return busySecurityPolicy;
+      if (specifier === "../server/request-lifecycle") return requestLifecycleHelpers;
+      throw new Error(`Unexpected api/post.js dependency in busy test: ${specifier}`);
+    },
+  });
+
+  for (const [label, runBusyRequest] of [
+    ["posts-data", (res) => busyPostsDataHandler({ method: "GET", url: "/api/posts-data", query: {} }, res)],
+    ["post-data", (res) => busyPostDataHandler({ method: "GET", url: `/api/post-data?id=${canonicalPostId}`, query: { id: canonicalPostId } }, res)],
+    ["sitemap", (res) => busySitemapHandler({ method: "GET", url: "/sitemap.xml", query: {} }, res)],
+    ["post-ssr", (res) => busyPostSsrHandler({ method: "GET", url: `/posts/${canonicalPostId}`, query: { id: canonicalPostId } }, res)],
+  ]) {
+    const busyRes = createApiResponseRecorder();
+    await runBusyRequest(busyRes);
+    assert.equal(busyRes.statusCode, 503, `${label} should preserve single_flight_busy overload as HTTP 503`);
+    assert.equal(busyRes.getHeader("retry-after"), "1", `${label} should forward Retry-After on single_flight_busy`);
+    assert.equal(busyRes.getHeader("cache-control"), "no-store", `${label} should keep single_flight_busy responses uncacheable`);
+  }
 }

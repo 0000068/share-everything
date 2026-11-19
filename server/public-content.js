@@ -187,6 +187,10 @@ function getPublicContentErrorStatus(error) {
     return 429;
   }
 
+  if (status === 503 && error?.code === "single_flight_busy") {
+    return 503;
+  }
+
   if (status === 504 || error?.code === "notion_timeout_error") {
     return 504;
   }
