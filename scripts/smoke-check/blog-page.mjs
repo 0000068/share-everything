@@ -1755,4 +1755,85 @@ assert.equal(
   "blog page cleanup should cancel delayed bookmark renders",
 );
 
+async function renderBlogFailureGuidance(errorToThrow) {
+  const failurePages = new Map();
+  const failureEmptyEl = new FakeElement();
+  loadBrowserScript("js/blog-page.js", {
+    window: {
+      location: new URL("https://example.com/blog.html"),
+      history: { pushState() {}, replaceState() {} },
+      scrollTo: () => {},
+      ...listingContentGlobals,
+      NotionAPI: {
+        escapeHtml: (value) => String(value ?? ""),
+        getCategoryColor: () => ({ bg: "#000", color: "#fff", border: "#222" }),
+        getCategories: () => [{ name: allCategory, emoji: "📚" }],
+        getPageSize: () => 9,
+        queryPosts: async () => { throw errorToThrow; },
+      },
+      PageRuntime: {
+        register(pageId, pageModule) { failurePages.set(pageId, pageModule); },
+      },
+      SiteUtils: {
+        rememberBlogReturnUrl: () => {},
+        sanitizeCoverBackground: (value, fallback) => value || fallback,
+        resolveDisplayImageUrl: (value) => value,
+        sanitizeImageUrl: (value) => value,
+        buildPostPath: (postId) => `/posts/${postId}`,
+        buildBookmarkListingUrl: buildBookmarkListingUrlMock,
+        parseBookmarkListingHash: parseBookmarkListingHashMock,
+      },
+      updateSeoMeta: () => {},
+      UIEffects: { initBlogCardReveal: () => null },
+      requestAnimationFrame: () => 1,
+      cancelAnimationFrame: () => {},
+    },
+    document: {
+      getElementById(id) {
+        return {
+          blogFilters: new FakeElement(),
+          blogSearch: new FakeElement(),
+          blogGrid: new FakeElement(),
+          emptyState: failureEmptyEl,
+          pagination: new FakeElement(),
+          blogStatus: new FakeElement(),
+        }[id] || null;
+      },
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      createElement: () => new FakeElement(),
+    },
+    globals: {
+      console: { ...console, error() {} },
+    },
+  });
+  const cleanup = failurePages.get("blog")?.init?.();
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  cleanup?.();
+  return failureEmptyEl.innerHTML;
+}
+
+const redactedObjectNotFoundHtml = await renderBlogFailureGuidance(
+  Object.assign(new Error("HTTP 500"), { status: 500, notionCode: "object_not_found" }),
+);
+assert.ok(
+  redactedObjectNotFoundHtml.includes("NOTION_DATABASE_ID 无效"),
+  "blog page should surface database guidance when production returns HTTP 500 with notionCode object_not_found",
+);
+const genericServerErrorHtml = await renderBlogFailureGuidance(
+  Object.assign(new Error("HTTP 500"), { status: 500 }),
+);
+assert.ok(
+  genericServerErrorHtml.includes("内容服务暂时不可用，请稍后重试。"),
+  "blog page should surface generic service unavailability for HTTP 500 errors without object_not_found",
+);
+const databaseNotFound404Html = await renderBlogFailureGuidance(
+  Object.assign(new Error("Could not find database"), { status: 404, detail: "Could not find database" }),
+);
+assert.ok(
+  databaseNotFound404Html.includes("NOTION_DATABASE_ID 无效"),
+  "blog page should surface database guidance for HTTP 404 database lookup errors",
+);
+
 }

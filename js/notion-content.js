@@ -430,15 +430,105 @@
     return state.source.slice(start);
   }
 
+  function countPrecedingBackslashes(source, index) {
+    let count = 0;
+    for (let cursor = index - 1; cursor >= 0 && source[cursor] === "\\"; cursor -= 1) {
+      count += 1;
+    }
+    return count;
+  }
+
+  function skipRawBraceGroup(source, startIndex) {
+    let index = startIndex;
+    while (index < source.length && /\s/.test(source[index])) index += 1;
+    if (source[index] !== "{") return -1;
+    index += 1;
+    let depth = 1;
+    while (index < source.length) {
+      const character = source[index];
+      if (character === "\\") {
+        index += 2;
+        continue;
+      }
+      if (character === "{") depth += 1;
+      else if (character === "}") {
+        depth -= 1;
+        if (depth === 0) return index + 1;
+      }
+      index += 1;
+    }
+    return source.length;
+  }
+
+  function splitLatexAtTopLevel(source, delimiter) {
+    const text = String(source || "");
+    const parts = [];
+    let partStart = 0;
+    let braceDepth = 0;
+    let envDepth = 0;
+    let index = 0;
+
+    while (index < text.length) {
+      const character = text[index];
+      if (character === "\\") {
+        if (text[index + 1] === "\\") {
+          if (delimiter === "\\\\" && braceDepth === 0 && envDepth === 0) {
+            parts.push(text.slice(partStart, index));
+            index += 2;
+            partStart = index;
+            continue;
+          }
+          index += 2;
+          continue;
+        }
+
+        const cmdStart = index + 1;
+        let cmdEnd = cmdStart;
+        while (cmdEnd < text.length && isLatexLetter(text[cmdEnd])) cmdEnd += 1;
+        if (cmdEnd === cmdStart) {
+          index = Math.min(text.length, index + 2);
+          continue;
+        }
+
+        const command = text.slice(cmdStart, cmdEnd);
+        if (command === "begin" || command === "end") {
+          const groupEnd = skipRawBraceGroup(text, cmdEnd);
+          if (groupEnd !== -1) {
+            envDepth = command === "begin" ? envDepth + 1 : Math.max(0, envDepth - 1);
+            index = groupEnd;
+            continue;
+          }
+        }
+        index = cmdEnd;
+        continue;
+      }
+
+      if (character === "{") {
+        braceDepth += 1;
+      } else if (character === "}") {
+        braceDepth = Math.max(0, braceDepth - 1);
+      } else if (delimiter === "&" && character === "&" && braceDepth === 0 && envDepth === 0) {
+        parts.push(text.slice(partStart, index));
+        index += 1;
+        partStart = index;
+        continue;
+      }
+
+      index += 1;
+    }
+
+    parts.push(text.slice(partStart));
+    return parts;
+  }
+
   function splitLatexRows(source) {
-    return String(source || "")
-      .split(/\\\\/)
+    return splitLatexAtTopLevel(source, "\\\\")
       .map((row) => row.trim())
       .filter(Boolean);
   }
 
   function splitLatexCells(source) {
-    return String(source || "").split("&").map((cell) => cell.trim());
+    return splitLatexAtTopLevel(source, "&").map((cell) => cell.trim());
   }
 
   function wrapMathRow(html) {
@@ -514,6 +604,17 @@
     return wrapMathRow(html);
   }
 
+  function findUnescapedToken(source, token, startIndex) {
+    let cursor = startIndex;
+    while (cursor < source.length) {
+      const matchIndex = source.indexOf(token, cursor);
+      if (matchIndex === -1) return -1;
+      if (countPrecedingBackslashes(source, matchIndex) % 2 === 0) return matchIndex;
+      cursor = matchIndex + 1;
+    }
+    return -1;
+  }
+
   function findMatchingEnvironmentEnd(source, startIndex, environmentName) {
     const beginToken = `\\begin{${environmentName}}`;
     const endToken = `\\end{${environmentName}}`;
@@ -521,8 +622,8 @@
     let cursor = startIndex;
 
     while (cursor < source.length) {
-      const nextBegin = source.indexOf(beginToken, cursor);
-      const nextEnd = source.indexOf(endToken, cursor);
+      const nextBegin = findUnescapedToken(source, beginToken, cursor);
+      const nextEnd = findUnescapedToken(source, endToken, cursor);
       if (nextEnd === -1) return -1;
 
       if (nextBegin !== -1 && nextBegin < nextEnd) {
@@ -635,6 +736,10 @@
 
       if (command === "\\") {
         return '<mspace linebreak="newline"></mspace>';
+      }
+
+      if (command === "&") {
+        return createMathOperator("&");
       }
 
       return createMathIdentifier(command);

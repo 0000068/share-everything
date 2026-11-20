@@ -142,20 +142,23 @@ function resolveCoverPreload(post) {
 }
 
 function prewarmCoverImages(payload) {
-  if (!Array.isArray(payload?.results) || !document?.head?.appendChild || typeof document?.createElement !== "function") return;
+  if (!Array.isArray(payload?.results) || !document?.head?.appendChild || typeof document?.createElement !== "function") return [];
   const limit = window.navigator?.connection?.saveData ? 1 : EAGER_COVER_PRELOAD_COUNT;
-  const seen = new Set(
+  const existing = new Set(
     Array.from(document.head.querySelectorAll?.('link[data-blog-cover-preload="true"]') || [])
       .map((node) => node?.href || node?.getAttribute?.("href") || "")
       .filter(Boolean),
   );
+  const batchSeen = new Set();
+  const created = [];
   let count = 0;
   for (const post of payload.results) {
     if (count >= limit) break;
     const spec = resolveCoverPreload(post);
-    if (!spec || seen.has(spec.href)) continue;
-    seen.add(spec.href);
+    if (!spec || batchSeen.has(spec.href)) continue;
+    batchSeen.add(spec.href);
     const priority = count++ === 0 ? "high" : "auto";
+    if (existing.has(spec.href)) continue;
     const link = document.createElement("link");
     link.rel = "preload";
     link.as = "image";
@@ -171,7 +174,9 @@ function prewarmCoverImages(payload) {
     if (link.dataset) link.dataset.blogCoverPreload = "true";
     link.setAttribute?.("data-blog-cover-preload", "true");
     document.head.appendChild(link);
+    created.push(link);
   }
+  return created;
 }
 
 const bootstrapState = window.PageBootstrap || (window.PageBootstrap = {});
@@ -179,6 +184,7 @@ const bootstrapState = window.PageBootstrap || (window.PageBootstrap = {});
 function ensure(rawUrl = window.location.href, { signal } = {}) {
   const requestUrl = buildRequestUrl(rawUrl);
   if (!requestUrl) return null;
+  if (window.NotionAPI?.hasCachedPosts?.(requestUrl)) return null;
 
   const existing = bootstrapState.blogInitialData;
   if (
@@ -211,12 +217,21 @@ function ensure(rawUrl = window.location.href, { signal } = {}) {
   entry.promise.then((payload) => {
     entry.settled = true;
     abortBridge.cleanup();
-    if (!abortBridge.controller.signal.aborted) {
-      try {
-        prewarmCoverImages(payload);
-      } catch {
-        // Cover prewarming is a best-effort optimization and must not affect data delivery.
-      }
+    if (abortBridge.controller.signal.aborted || signal?.aborted) return;
+    let created = [];
+    try {
+      created = prewarmCoverImages(payload);
+    } catch {
+      return;
+    }
+    if (created.length > 0 && signal?.addEventListener) {
+      signal.addEventListener("abort", () => {
+        if (entry.consumed) return;
+        created.forEach((link) => link.remove?.());
+        if (bootstrapState.blogInitialData === entry) {
+          bootstrapState.blogInitialData = null;
+        }
+      }, { once: true });
     }
   }, () => {
     entry.settled = true;

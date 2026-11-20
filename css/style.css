@@ -523,103 +523,60 @@ body.has-cursor-glow .cursor-glow {
 }
 
 .btn-primary {
-  background: linear-gradient(
-    135deg,
-    rgba(120, 230, 255, 0.25),
-    rgba(100, 180, 255, 0.2)
-  );
+  --btn-tint-1: 120, 230, 255;
+  --btn-tint-2: 100, 180, 255;
   color: rgba(200, 245, 255, 0.95);
-  border: 1px solid rgba(120, 230, 255, 0.25);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow:
-    0 0 20px rgba(120, 230, 255, 0.12),
-    0 8px 32px rgba(0, 0, 0, 0.2),
-    inset 0 1px 1px rgba(255, 255, 255, 0.25),
-    inset 0 -1px 1px rgba(255, 255, 255, 0.05);
-}
-.btn-primary:hover {
-  transform: translateY(-2px) scale(1.03);
-  background: linear-gradient(
-    135deg,
-    rgba(120, 230, 255, 0.35),
-    rgba(100, 180, 255, 0.3)
-  );
-  border-color: rgba(120, 230, 255, 0.4);
-  box-shadow:
-    0 0 35px rgba(120, 230, 255, 0.2),
-    0 12px 40px rgba(0, 0, 0, 0.3),
-    inset 0 1px 1px rgba(255, 255, 255, 0.3),
-    inset 0 -1px 1px rgba(255, 255, 255, 0.08);
-}
-.btn-primary:active {
-  transform: translateY(0) scale(0.98);
 }
 
 .btn-home {
-  background: linear-gradient(
-    135deg,
-    rgba(200, 130, 255, 0.25),
-    rgba(170, 100, 255, 0.2)
-  );
+  --btn-tint-1: 200, 130, 255;
+  --btn-tint-2: 170, 100, 255;
   color: rgba(230, 200, 255, 0.95);
-  border: 1px solid rgba(200, 130, 255, 0.25);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow:
-    0 0 20px rgba(200, 130, 255, 0.12),
-    0 8px 32px rgba(0, 0, 0, 0.2),
-    inset 0 1px 1px rgba(255, 255, 255, 0.25),
-    inset 0 -1px 1px rgba(255, 255, 255, 0.05);
-}
-.btn-home:hover {
-  transform: translateY(-2px) scale(1.03);
-  background: linear-gradient(
-    135deg,
-    rgba(200, 130, 255, 0.35),
-    rgba(170, 100, 255, 0.3)
-  );
-  border-color: rgba(200, 130, 255, 0.4);
-  box-shadow:
-    0 0 35px rgba(200, 130, 255, 0.2),
-    0 12px 40px rgba(0, 0, 0, 0.3),
-    inset 0 1px 1px rgba(255, 255, 255, 0.3),
-    inset 0 -1px 1px rgba(255, 255, 255, 0.08);
-}
-.btn-home:active {
-  transform: translateY(0) scale(0.98);
 }
 
 .btn-wiki {
+  --btn-tint-1: 130, 230, 170;
+  --btn-tint-2: 100, 210, 150;
+  color: rgba(200, 255, 220, 0.95);
+}
+
+.btn-primary,
+.btn-home,
+.btn-wiki {
   background: linear-gradient(
     135deg,
-    rgba(130, 230, 170, 0.25),
-    rgba(100, 210, 150, 0.2)
+    rgba(var(--btn-tint-1), 0.25),
+    rgba(var(--btn-tint-2), 0.2)
   );
-  color: rgba(200, 255, 220, 0.95);
-  border: 1px solid rgba(130, 230, 170, 0.25);
+  border: 1px solid rgba(var(--btn-tint-1), 0.25);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   box-shadow:
-    0 0 20px rgba(130, 230, 170, 0.12),
+    0 0 20px rgba(var(--btn-tint-1), 0.12),
     0 8px 32px rgba(0, 0, 0, 0.2),
     inset 0 1px 1px rgba(255, 255, 255, 0.25),
     inset 0 -1px 1px rgba(255, 255, 255, 0.05);
 }
+
+.btn-primary:hover,
+.btn-home:hover,
 .btn-wiki:hover {
   transform: translateY(-2px) scale(1.03);
   background: linear-gradient(
     135deg,
-    rgba(130, 230, 170, 0.35),
-    rgba(100, 210, 150, 0.3)
+    rgba(var(--btn-tint-1), 0.35),
+    rgba(var(--btn-tint-2), 0.3)
   );
-  border-color: rgba(130, 230, 170, 0.4);
+  border-color: rgba(var(--btn-tint-1), 0.4);
   box-shadow:
-    0 0 35px rgba(130, 230, 170, 0.2),
+    0 0 35px rgba(var(--btn-tint-1), 0.2),
     0 12px 40px rgba(0, 0, 0, 0.3),
     inset 0 1px 1px rgba(255, 255, 255, 0.3),
     inset 0 -1px 1px rgba(255, 255, 255, 0.08);
 }
+
+.btn-primary:active,
+.btn-home:active,
 .btn-wiki:active {
   transform: translateY(0) scale(0.98);
 }
@@ -730,7 +687,7 @@ body.has-cursor-glow .cursor-glow {
 
   .ambient-background {
     background-color: #0b1021;
-    background-image: url("/assets/mobile-home-starry-bg.svg?v=20261119-v814-f0a64aa6e4d7");
+    background-image: url("/assets/mobile-home-starry-bg.svg?v=20261119-v814-30429e72ae45");
     background-position: center top;
     background-repeat: no-repeat;
     background-size: cover;
@@ -809,26 +766,15 @@ body.has-cursor-glow .cursor-glow {
     max-width: none;
   }
 
-  .hero-search input,
-  .blog-search input {
+  .hero-search input {
     background: rgba(255, 255, 255, 0.06);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.06),
       0 10px 28px rgba(0, 0, 0, 0.18);
-  }
-
-  .hero-search input {
     min-height: 44px;
     padding: 10px 58px 10px 16px;
     border-radius: 999px;
     font-size: 0.72rem;
-  }
-
-  .blog-search input {
-    min-height: 54px;
-    padding: 16px 50px 16px 20px;
-    border-radius: 22px;
-    font-size: 0.95rem;
   }
 
   .hero-search .search-icon {

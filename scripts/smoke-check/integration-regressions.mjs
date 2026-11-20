@@ -527,6 +527,159 @@ async function checkBootstrapDiagnostics() {
   await saveDataBootstrap.window.BlogBootstrap.ensure().promise;
   await Promise.resolve();
   assert.equal(saveDataLinks.length, 1, "blog bootstrap should restrict cover prewarming to 1 image under saveData");
+
+  const abortPrewarmLinks = [];
+  const abortController = new AbortController();
+  const abortBootstrap = loadBrowserScript("js/blog-bootstrap.js", {
+    window: {
+      location: new URL("https://example.com/blog.html"),
+      navigator: { connection: { saveData: false } },
+    },
+    document: {
+      head: {
+        appendChild(node) {
+          abortPrewarmLinks.push(node);
+          node.remove = () => {
+            const index = abortPrewarmLinks.indexOf(node);
+            if (index >= 0) abortPrewarmLinks.splice(index, 1);
+          };
+          return node;
+        },
+        querySelectorAll: () => abortPrewarmLinks,
+      },
+      body: { dataset: { page: "" } },
+      createElement: () => new FakeElement("link"),
+    },
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => "" },
+      json: async () => ({
+        results: [1, 2, 3].map((index) => ({
+          id: `${String(index).repeat(32)}`,
+          coverImage: `https://images.example.com/abort-${index}.png`,
+          coverImageSignature: prewarmSig,
+        })),
+      }),
+    }),
+  });
+  const abortEntry = abortBootstrap.window.BlogBootstrap.ensure("https://example.com/blog.html", {
+    signal: abortController.signal,
+  });
+  await abortEntry.promise;
+  await Promise.resolve();
+  assert.equal(abortPrewarmLinks.length, 3, "prewarm links should attach before navigation finishes");
+  abortController.abort();
+  assert.equal(
+    abortPrewarmLinks.length,
+    0,
+    "blog bootstrap should remove unconsumed cover preload links when an SPA navigation aborts after settlement",
+  );
+  assert.equal(
+    abortBootstrap.window.PageBootstrap.blogInitialData,
+    null,
+    "blog bootstrap should clear stale unconsumed entries on post-settlement abort",
+  );
+
+  const existingCoverUrl = `https://example.com/api/cover?format=webp&src=${encodeURIComponent("https://images.example.com/slot-1.png")}&sig=${prewarmSig}&w=640`;
+  const existingPreloadNode = new FakeElement("link");
+  existingPreloadNode.href = existingCoverUrl;
+  existingPreloadNode.fetchPriority = "high";
+  const slotPrewarmLinks = [existingPreloadNode];
+  const slotBootstrap = loadBrowserScript("js/blog-bootstrap.js", {
+    window: {
+      location: new URL("https://example.com/blog.html"),
+      navigator: { connection: { saveData: false } },
+    },
+    document: {
+      head: {
+        appendChild(node) { slotPrewarmLinks.push(node); return node; },
+        querySelectorAll: () => slotPrewarmLinks,
+      },
+      body: { dataset: { page: "" } },
+      createElement: () => new FakeElement("link"),
+    },
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => "" },
+      json: async () => ({
+        results: [1, 2, 3, 4].map((index) => ({
+          id: `${String(index).repeat(32)}`,
+          coverImage: `https://images.example.com/slot-${index}.png`,
+          coverImageSignature: prewarmSig,
+        })),
+      }),
+    }),
+  });
+  await slotBootstrap.window.BlogBootstrap.ensure().promise;
+  await Promise.resolve();
+  assert.equal(
+    slotPrewarmLinks.length,
+    3,
+    "existing cover preload links should count toward the 3-card prewarm cap instead of overflowing to a 4th card",
+  );
+  assert.equal(
+    slotPrewarmLinks[1].fetchPriority,
+    "auto",
+    "secondary prewarmed covers should stay at auto priority when the first cover is already preloaded",
+  );
+
+  const cachedBrowser = createContentBrowser();
+  let cachedFetchCalls = 0;
+  const cachedApiHarness = loadBrowserScript("js/notion-api.js", {
+    window: {
+      location: new URL("https://example.com/blog.html"),
+      NotionContentShared: cachedBrowser.NotionContentShared,
+      NotionContentUtils: cachedBrowser.NotionContentUtils,
+      NotionContentUrl: cachedBrowser.NotionContentUrl,
+    },
+    fetch: async () => {
+      cachedFetchCalls += 1;
+      return createJsonResponse({
+        results: [],
+        categories: [],
+        total: 0,
+        totalPages: 1,
+        currentPage: 1,
+      });
+    },
+  });
+  assert.equal(
+    cachedApiHarness.window.NotionAPI.hasCachedPosts("/api/posts-data"),
+    false,
+    "NotionAPI.hasCachedPosts should report false before the listing response is cached",
+  );
+  await cachedApiHarness.window.NotionAPI.queryPosts({});
+  assert.equal(
+    cachedApiHarness.window.NotionAPI.hasCachedPosts("/api/posts-data"),
+    true,
+    "NotionAPI.hasCachedPosts should report true while the listing response is warm in cache",
+  );
+  assert.equal(
+    cachedApiHarness.window.NotionAPI.hasCachedPosts("/api/posts-data?category=Tech"),
+    false,
+    "NotionAPI.hasCachedPosts should only match the exact cached query key",
+  );
+  let bootstrapFetchCalls = 0;
+  const skipBootstrap = loadBrowserScript("js/blog-bootstrap.js", {
+    window: {
+      location: new URL("https://example.com/blog.html"),
+      NotionAPI: cachedApiHarness.window.NotionAPI,
+    },
+    document: { body: { dataset: { page: "" } } },
+    fetch: async () => {
+      bootstrapFetchCalls += 1;
+      return createJsonResponse({ results: [] });
+    },
+  });
+  assert.equal(
+    skipBootstrap.window.BlogBootstrap.ensure("https://example.com/blog.html"),
+    null,
+    "blog bootstrap should skip prefetching when NotionAPI already holds a fresh cached response",
+  );
+  assert.equal(bootstrapFetchCalls, 0, "skipped bootstrap must not issue a redundant /api/posts-data fetch");
+  assert.equal(cachedFetchCalls, 1, "initial cache population should have issued only one network request");
 }
 
 export async function runIntegrationRegressionChecks() {

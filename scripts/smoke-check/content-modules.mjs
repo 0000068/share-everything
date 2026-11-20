@@ -303,6 +303,71 @@ export function runContentModuleChecks(context) {
     "post-math-fallback",
     "notion-content.js should carry nesting depth across nested LaTeX environments",
   );
+  const nestedBlockMatrixHtml = notionContentHelpers.renderMathExpression(
+    "\\begin{pmatrix}\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}&0\\\\0&1\\end{pmatrix}",
+    { display: true },
+  );
+  assert.equal(
+    (nestedBlockMatrixHtml.match(/<mtable>/g) || []).length,
+    2,
+    "notion-content.js should preserve inner rows and cells inside nested LaTeX matrices",
+  );
+  assert.equal(
+    nestedBlockMatrixHtml.includes("<mi>pmatrix</mi>") || nestedBlockMatrixHtml.includes("<mi>end</mi>"),
+    false,
+    "notion-content.js must not leak raw environment tokens when splitting nested matrix rows or cells",
+  );
+  const mixedNestedMatrixHtml = notionContentHelpers.renderMathExpression(
+    "\\begin{pmatrix}\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}&0\\\\0&1\\end{pmatrix}",
+    { display: true },
+  );
+  assert.equal(
+    (mixedNestedMatrixHtml.match(/<mtable>/g) || []).length,
+    2,
+    "notion-content.js should support nesting distinct matrix environment types",
+  );
+  expectIncludes(
+    mixedNestedMatrixHtml,
+    "<mo>[</mo><mtable>",
+    "notion-content.js should render inner bmatrix delimiters inside outer pmatrix",
+  );
+  const escapedAmpMatrixHtml = notionContentHelpers.renderMathExpression(
+    "\\begin{pmatrix}a\\&b&c\\end{pmatrix}",
+    { display: true },
+  );
+  assert.equal(
+    (escapedAmpMatrixHtml.match(/<mtd>/g) || []).length,
+    2,
+    "notion-content.js should not split matrix cells on escaped \\&",
+  );
+  expectIncludes(
+    escapedAmpMatrixHtml,
+    "<mi>a</mi><mo>&amp;</mo><mi>b</mi>",
+    "notion-content.js should render escaped \\& as a MathML operator inside matrix cells",
+  );
+  const bracedAmpMatrixHtml = notionContentHelpers.renderMathExpression(
+    "\\begin{pmatrix}\\text{A & B}&c\\end{pmatrix}",
+    { display: true },
+  );
+  assert.equal(
+    (bracedAmpMatrixHtml.match(/<mtd>/g) || []).length,
+    2,
+    "notion-content.js should not split matrix cells on & inside braced groups",
+  );
+  expectIncludes(
+    bracedAmpMatrixHtml,
+    "<mtext>A &amp; B</mtext>",
+    "notion-content.js should preserve & inside \\text{...} within matrix cells",
+  );
+  const trailingBreakMatrixHtml = notionContentHelpers.renderMathExpression(
+    "\\begin{pmatrix}a\\\\\\end{pmatrix}",
+    { display: true },
+  );
+  assert.equal(
+    (trailingBreakMatrixHtml.match(/<mtr>/g) || []).length,
+    1,
+    "notion-content.js should match \\end{...} immediately following a row break \\\\",
+  );
   const articleHtml = notionArticleRendererHelpers.createPostArticleRenderer({
     DEFAULT_CATEGORY_COLOR: notionContentSharedHelpers.DEFAULT_CATEGORY_COLOR,
     escapeHtml: notionContentUtilsHelpers.escapeHtml,

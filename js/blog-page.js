@@ -280,7 +280,7 @@
       if (status === 401 || status === 403 || notionCode === "unauthorized" || notionCode === "restricted_resource") {
         return "Notion integration 暂无数据库访问权限，请确认已把集成邀请到该数据库。";
       }
-      if ((status === 404 || notionCode === "object_not_found") && (normalizedDetail.includes("database") || notionCode === "object_not_found")) {
+      if (notionCode === "object_not_found" || (status === 404 && normalizedDetail.includes("database"))) {
         return "NOTION_DATABASE_ID 无效，或当前 integration 无权访问这个数据库。";
       }
       if (status === 429 || notionCode === "rate_limited") {

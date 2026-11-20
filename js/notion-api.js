@@ -813,6 +813,15 @@
       };
     }
 
+    function hasCachedPosts(requestUrl) {
+      const suffix = typeof requestUrl === "string" && requestUrl.startsWith(CONFIG.postsEndpoint)
+        ? requestUrl.slice(CONFIG.postsEndpoint.length)
+        : null;
+      if (suffix === null || (suffix && !suffix.startsWith("?"))) return false;
+      const cached = postsResponseCache.get(`${POSTS_REQUEST_KEY_PREFIX}${suffix}`);
+      return Boolean(cached && Date.now() < cached.expiresAt);
+    }
+
     function readCachedPostsResponse(key) {
       const cached = postsResponseCache.get(key);
       if (!cached) return null;
@@ -878,6 +887,7 @@
 
     return {
       getCategories: () => categoryNavigationCache.map(cloneCategoryItem),
+      hasCachedPosts,
       queryPosts: fetchPostsRemote,
       getPost: fetchPageRemote,
       getPostSummary,
