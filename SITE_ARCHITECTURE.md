@@ -1,7 +1,7 @@
 # Share Everything Site Architecture
 
-> Version: v8.14
-> Updated: 2026-11-19
+> Version: v8.14.1
+> Updated: 2026-11-20
 
 ## 1. Overview
 
@@ -45,6 +45,10 @@ Notion Database
 ```
 
 ## 2. Release Highlights
+
+### Version v8.14.1 Highlights
+
+深度审计细节修复与关键资源体积优化（LaTeX 嵌套分块矩阵切分与 `\&` 运算符、SPA 缓存期内跳过冗余 bootstrap 请求、取消导航时清理封面预热链接、GPU 合成层封面微光骨架与样式去重）。See `CHANGELOG.md` and `RELEASE_CHANGESET.md` for changes and verification.
 
 ### Version v8.14 Highlights
 

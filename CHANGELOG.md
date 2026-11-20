@@ -2,6 +2,15 @@
 
 All notable changes to this project are tracked here.
 
+## 8.14.1 - 2026-11-20
+
+深度审计细节修复与关键资源体积优化
+
+- 修复 LaTeX 环境行列切分（`splitLatexRows` / `splitLatexCells`）与结束标记匹配：支持按 `{}` 与 `\begin{...}` / `\end{...}` 嵌套深度切分分块矩阵，正确保留转义 `\&`（渲染为 MathML 运算符 `<mo>&amp;</mo>`）、花括号内 `&` 以及紧邻 `\end{...}` 的末尾换行 `\\`。
+- `NotionAPI` 新增 `hasCachedPosts(requestUrl)`，`js/blog-bootstrap.js` 在 SPA 返回 `/blog.html` 且命中 20 秒本地缓存时直接跳过冗余 `/api/posts-data` 网络请求。
+- 加固 `js/blog-bootstrap.js` 封面预热生命周期：已有 `<head>` 预热链接正确计入 3 图上限避免优先级错位与溢出；SPA 导航在数据返回后、列表页接管前被取消或失败时自动移除未接管的 `<link rel="preload" data-blog-cover-preload="true">` 并清理过期 bootstrap 状态。
+- 化简 `js/blog-page.js` `describeLoadFailure` 冗余条件；将封面流光骨架 `coverShimmer` 升级为 GPU 合成层 `transform: translateX` 并仅对已显露卡片激活，避免视口外懒加载卡片持续重绘；移除 `css/style.css` 被覆盖的冗余 `.blog-search input` 移动端样式并提取按钮共用 CSS 变量，为 `blog.html` 回收关键资源体积预算。
+
 ## 8.14.0 - 2026-11-19
 
 首屏封面加载体验与冷转码优化
